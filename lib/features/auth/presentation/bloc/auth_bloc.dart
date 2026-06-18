@@ -27,18 +27,23 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   }
 
 Future<void> _onIniciarSesion(IniciarSesionEvent event, Emitter<AuthState> emit) async {
-  emit(AuthLoading()); // Activamos baliza de carga
+  emit(AuthLoading());
 
   final failureOrUser = await iniciarSesion(event.email, event.password);
 
-  failureOrUser.fold(
-    (failure) => emit(AuthError(_mapFailureToMessage(failure))),
+  // Manejo de la bifurcación (Either) con await estricto
+  await failureOrUser.fold(
+    (failure) async {
+      emit(AuthError(_mapFailureToMessage(failure)));
+    },
     (usuario) async {
-      // 1. Ejecutamos el registro del token de notificación primero
+      // 1. Esperamos obligatoriamente que el registro termine (sea exitoso o falle)
       await NotificationService.registrarToken(usuario.uid);
       
-      // 2. Una vez confirmado el registro, emitimos el estado de autenticación
-      emit(Authenticated(usuario));
+      // 2. Solo emitimos si el handler del evento no ha sido cerrado por el framework
+      if (!emit.isDone) {
+        emit(Authenticated(usuario));
+      }
     },
   );
 }

@@ -10,6 +10,7 @@ import 'injection_container.dart' as di;
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/tickets/presentation/bloc/ticket_bloc.dart';
 import 'features/auth/presentation/pages/login_page.dart';
+import 'core/services/notification_service.dart';
 
 void main() async {
   // Asegura que los motores gráficos estén listos antes de arrancar la nube
@@ -20,11 +21,15 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   
+  // ⚠️ ENCENDIDO DEL RECEPTOR DE TELEMETRÍA (FCM)
+  await NotificationService.inicializar();
+  
   // Energizamos la bornera principal de Inyección de Dependencias
   await di.init(); 
 
   runApp(const AquaspotApp());
 }
+
 
 class AquaspotApp extends StatelessWidget {
   const AquaspotApp({super.key});
