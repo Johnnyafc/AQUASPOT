@@ -1,0 +1,41 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "aquaspot-postventa-2026",
+          "appId": "1:699104329538:android:7d6482446806338b3bd2db",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "aquaspot-postventa-2026",
+          "configurations": {
+            "android": "1:699104329538:android:7d6482446806338b3bd2db",
+            "ios": "1:699104329538:ios:4ac8ffaea7a895d33bd2db",
+            "web": "1:699104329538:web:3988b4982e523a923bd2db"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run lint",
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ]
+    }
+  ]
+}
