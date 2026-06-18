@@ -46,11 +46,10 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         throw ServerFailure('Fallo catastrófico en la autenticación del motor.');
       }
 
-      // 2. Buscamos el nivel de acceso en la base de datos usando el UID
+      // 2. Buscamos el perfil de seguridad en Firestore usando el UID
       final docSnapshot = await firestore.collection('usuarios').doc(user.uid).get();
 
       if (!docSnapshot.exists) {
-        // El usuario existe en Auth pero no tiene rol asignado en Firestore. Bloqueo de seguridad.
         await firebaseAuth.signOut(); 
         throw ServerFailure('Operador sin perfil de seguridad asignado en el sistema.');
       }
@@ -63,10 +62,15 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         throw ServerFailure('Nivel de acceso corrupto o no reconocido.');
       }
 
-      // 3. Emitimos la tarjeta de identificación válida
+      // 3. Extraemos el nombre registrado en la base de datos
+      // Nota: Si el campo en Firestore se llama distinto (ej: 'Nombre'), ajusta la llave aquí.
+      final String nombreCapturado = data['nombre'] ?? 'Operario Desconocido';
+
+      // 4. Emitimos la tarjeta de identificación válida con los 4 parámetros requeridos
       return UsuarioEntity(
         uid: user.uid,
         email: user.email!,
+        nombre: nombreCapturado, // ✅ Parámetro ahora integrado
         rol: rol,
       );
       

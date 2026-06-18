@@ -8,6 +8,8 @@ import '../bloc/ticket_event.dart';
 import '../bloc/ticket_state.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/entities/ticket_enums.dart';
+import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
+import '../../../../features/auth/presentation/bloc/auth_state.dart';
 
 class CreacionTicketPage extends StatefulWidget {
   const CreacionTicketPage({super.key});
@@ -37,12 +39,39 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
     super.dispose();
   }
 
+  void _limpiarFormulario() {
+    // Forzamos el cierre de cualquier teclado o focus activo
+    FocusScope.of(context).unfocus();
+    
+    _clienteController.clear();
+    _campamentoController.clear();
+    _nombreContactoController.clear();
+    _telefonoController.clear();
+    _fallaController.clear();
+    
+    setState(() {
+      _selectedSede = null;
+      _selectedEquipo = null;
+    });
+    
+    _formKey.currentState?.reset();
+  }
+
   void _submitForm() {
     if (!_formKey.currentState!.validate()) return;
     
-    final nuevoTicket = TicketEntity(
-      id: 'TEMP-${DateTime.now().millisecondsSinceEpoch}',
-      estadoActual: EstadoTicket.values.first,
+    final authState = context.read<AuthBloc>().state;
+    String nombreOperario = 'SISTEMA';
+    String rolOperario = 'DESCONOCIDO';
+    
+    if (authState is Authenticated) {
+      nombreOperario = authState.usuario.nombre; 
+      rolOperario = authState.usuario.rol.name.toUpperCase();
+    }
+
+    final ticketBorrador = TicketEntity(
+      id: '',
+      estadoActual: EstadoTicket.creado,
       sede: _selectedSede!,
       clienteId: _clienteController.text,
       campamento: _campamentoController.text,
@@ -50,16 +79,20 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
       telefonoContacto: _telefonoController.text,
       equipo: _selectedEquipo!,
       fallaReportada: _fallaController.text,
-      historialEventos: const [],
+      historialEventos: const [], 
     );
 
-    context.read<TicketBloc>().add(CrearTicketEvent(nuevoTicket));
+    context.read<TicketBloc>().add(CrearTicketEvent(
+      ticket: ticketBorrador,
+      nombreUsuario: nombreOperario,
+      rolUsuario: rolOperario,
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F2F5), // Color tipo feed de red social
+      backgroundColor: const Color(0xFFF0F2F5),
       appBar: AppBar(
         title: const Text('Nuevo Ingreso', style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
@@ -72,13 +105,17 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.red));
           } else if (state is TicketOperationSuccess) {
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Registro Exitoso'), backgroundColor: Colors.green));
-             _formKey.currentState!.reset(); // Limpieza moderna
+            _limpiarFormulario(); 
+            
+            // ✅ MANIOBRA DE ENRUTAMIENTO: Regreso seguro al menú principal
+            if (!context.mounted) return; // Bloqueo de seguridad si la vista ya no existe
+            Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
           }
         },
         builder: (context, state) {
           return Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 600), // Ancho máximo tipo feed
+              constraints: const BoxConstraints(maxWidth: 600),
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16.0),
                 child: Card(
@@ -93,7 +130,6 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
                         children: [
                           const Text("Detalles del Servicio", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                           const Divider(height: 30),
-                          
                           _buildDropdownField<Sede>(
                             label: 'Sede',
                             icon: Icons.business,
@@ -106,7 +142,6 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
                           _buildTextField(_campamentoController, 'Campamento / Finca', Icons.map),
                           _buildTextField(_nombreContactoController, 'Contacto', Icons.phone_android),
                           _buildTextField(_telefonoController, 'Teléfono', Icons.phone, keyboard: TextInputType.phone),
-                          
                           const SizedBox(height: 16),
                           _buildDropdownField<TipoEquipo>(
                             label: 'Tipo de Equipo',
@@ -117,15 +152,16 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
                           ),
                           const SizedBox(height: 16),
                           _buildTextField(_fallaController, 'Falla Reportada', Icons.report_problem, maxLines: 3),
-                          
                           const SizedBox(height: 32),
                           SizedBox(
                             width: double.infinity,
                             height: 50,
                             child: ElevatedButton(
-                              onPressed: _submitForm,
+                              onPressed: state is TicketLoading ? null : _submitForm, // Pequeña protección extra contra doble pulsación
                               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF005A9C), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                              child: const Text('REGISTRAR INGRESO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              child: state is TicketLoading 
+                                  ? const CircularProgressIndicator(color: Colors.white) 
+                                  : const Text('REGISTRAR INGRESO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                             ),
                           )
                         ],
@@ -141,7 +177,6 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
     );
   }
 
-  // Helpers para mantener el código limpio (Patrón DRY)
   Widget _buildTextField(TextEditingController controller, String label, IconData icon, {TextInputType? keyboard, int maxLines = 1}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),

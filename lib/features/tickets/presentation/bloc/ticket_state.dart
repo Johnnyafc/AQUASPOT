@@ -48,3 +48,10 @@ class TicketError extends TicketState {
   @override
   List<Object?> get props => [message];
 }
+
+class TicketHistorialCargado extends TicketState {
+  final List<TicketEntity> tickets;
+  const TicketHistorialCargado({required this.tickets});
+  @override
+  List<Object?> get props => [tickets];
+}

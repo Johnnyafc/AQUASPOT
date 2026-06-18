@@ -16,11 +16,17 @@ class ObtenerClientesEvent extends TicketEvent {}
 // 2. Etapa 1: Comercial ingresa un equipo nuevo
 class CrearTicketEvent extends TicketEvent {
   final TicketEntity ticket;
+  final String nombreUsuario;
+  final String rolUsuario;
 
-  const CrearTicketEvent(this.ticket);
+  const CrearTicketEvent({
+    required this.ticket,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
 
   @override
-  List<Object> get props => [ticket]; // Crítico para que el BLoC diferencie los datos
+  List<Object> get props => [ticket, nombreUsuario, rolUsuario];
 }
 
 // 3. Etapa 2: Tyron en el taller emite su diagnóstico
@@ -42,3 +48,5 @@ class NotificarYGenerarActaEvent extends TicketEvent {
   @override
   List<Object> get props => [ticket];
 }
+
+class ObtenerHistorialTicketsEvent extends TicketEvent {}

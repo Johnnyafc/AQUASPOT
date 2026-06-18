@@ -10,8 +10,11 @@ import '../../domain/repositories/ticket_repository.dart';
 import '../datasources/ticket_remote_datasource.dart';
 import '../datasources/webhook_remote_datasource.dart';
 import '../models/ticket_model.dart';
+import '../models/evento_auditoria_model.dart';
+
 
 class TicketRepositoryImpl implements ITicketRepository {
+  
   final TicketRemoteDataSource firebaseDataSource;
   final WebhookRemoteDataSource webhookDataSource;
   final NetworkInfo networkInfo;
@@ -23,23 +26,31 @@ class TicketRepositoryImpl implements ITicketRepository {
   });
 
   // Función auxiliar para castear la Entidad pura a un Modelo serializable
-  TicketModel _entityToModel(TicketEntity entity) {
-    return TicketModel(
-      id: entity.id,
-      estadoActual: entity.estadoActual,
-      sede: entity.sede,
-      clienteId: entity.clienteId,
-      campamento: entity.campamento,
-      nombreContacto: entity.nombreContacto,
-      telefonoContacto: entity.telefonoContacto,
-      equipo: entity.equipo,
-      fallaReportada: entity.fallaReportada,
-      evaluacionTecnica: entity.evaluacionTecnica,
-      fotosUrls: entity.fotosUrls,
-      pdfActaUrl: entity.pdfActaUrl,
-      historialEventos: entity.historialEventos,
-    );
-  }
+TicketModel _entityToModel(TicketEntity entity) {
+  return TicketModel(
+    id: entity.id,
+    estadoActual: entity.estadoActual,
+    sede: entity.sede,
+    clienteId: entity.clienteId,
+    campamento: entity.campamento,
+    nombreContacto: entity.nombreContacto,
+    telefonoContacto: entity.telefonoContacto,
+    equipo: entity.equipo,
+    fallaReportada: entity.fallaReportada,
+    evaluacionTecnica: entity.evaluacionTecnica, // Asumiendo que es Modelo o null
+    fotosUrls: entity.fotosUrls,
+    pdfActaUrl: entity.pdfActaUrl,
+    
+    // ✅ AQUÍ ESTÁ EL CORTOCIRCUITO CORREGIDO
+    // Convertimos cada Entidad a su Modelo correspondiente
+    historialEventos: entity.historialEventos.map((e) => EventoAuditoriaModel(
+      accion: e.accion,
+      usuarioNombre: e.usuarioNombre,
+      usuarioRol: e.usuarioRol,
+      timestamp: e.timestamp,
+    )).toList(),
+  );
+}
 
   @override
   Future<Either<Failure, List<ClienteEntity>>> obtenerClientes() async {
@@ -55,15 +66,38 @@ class TicketRepositoryImpl implements ITicketRepository {
     }
   }
 
-  @override
+
+@override
+  Future<Either<Failure, List<TicketEntity>>> obtenerTickets() async {
+    try {
+      // Llamamos a la sonda del DataSource que programamos hace un momento
+      final modelos = await firebaseDataSource.obtenerTickets();
+      
+      // El BLoC exige Entidades, no Modelos de Firebase. 
+      // Si tienes un método de mapeo, úsalo. Si no, en Dart un Modelo que extiende de una Entidad
+      // hace un upcasting automático, pero es mejor devolverlos explícitamente.
+      return Right(modelos); 
+    } on ServerException catch (e) {
+      // Interceptamos la falla de hardware y la convertimos en un fallo de lógica
+      return Left(ServerFailure(e.message)); 
+    } catch (e) {
+      return Left(ServerFailure('Error inesperado al leer el historial: $e'));
+    }
+  }
+
+
+@override
   Future<Either<Failure, TicketEntity>> crearTicket(TicketEntity ticket) async {
     if (await networkInfo.isConnected) {
       try {
         final ticketModel = _entityToModel(ticket);
         final resultado = await firebaseDataSource.crearTicket(ticketModel);
         return Right(resultado);
-      } on ServerException {
-        return const Left(ServerFailure('Fallo al registrar el ticket en el sistema central.'));
+      } catch (e) { // <-- CAMBIO CRÍTICO: Atrapa TODO, no solo ServerException
+        print("🚨 ERROR CRUDO EN REPOSITORIO: ${e.toString()}");
+        
+        // Retornamos el error real, no una cadena inventada
+        return Left(ServerFailure(e.toString()));
       }
     } else {
       return const Left(NetworkFailure('Operación abortada: No hay señal de red.'));
@@ -104,5 +138,5 @@ class TicketRepositoryImpl implements ITicketRepository {
     } else {
       return const Left(NetworkFailure('Operación abortada: No hay señal de red.'));
     }
-  }
+  } 
 }

@@ -1,5 +1,6 @@
 // lib/features/tickets/data/models/evento_auditoria_model.dart
 
+import 'package:cloud_firestore/cloud_firestore.dart'; // ✅ Importación crítica
 import '../../domain/entities/evento_auditoria_entity.dart';
 
 class EventoAuditoriaModel extends EventoAuditoriaEntity {
@@ -11,11 +12,16 @@ class EventoAuditoriaModel extends EventoAuditoriaEntity {
   });
 
   factory EventoAuditoriaModel.fromJson(Map<String, dynamic> json) {
+    // ✅ Conversión de Timestamp de Firestore a DateTime de Dart
+    final timestamp = json['timestamp'] is Timestamp 
+        ? (json['timestamp'] as Timestamp).toDate() 
+        : DateTime.parse(json['timestamp']); // Fallback por si acaso
+
     return EventoAuditoriaModel(
       accion: json['accion'] ?? '',
       usuarioNombre: json['usuarioNombre'] ?? '',
       usuarioRol: json['usuarioRol'] ?? '',
-      timestamp: DateTime.parse(json['timestamp']), // Asumimos ISO-8601
+      timestamp: timestamp,
     );
   }
 
@@ -24,7 +30,9 @@ class EventoAuditoriaModel extends EventoAuditoriaEntity {
       'accion': accion,
       'usuarioNombre': usuarioNombre,
       'usuarioRol': usuarioRol,
-      'timestamp': timestamp.toIso8601String(), // Estándar industrial para fechas
+      // ✅ Conversión de DateTime de Dart a Timestamp de Firestore
+      // Esto elimina el error de "invalid-argument" en arrays
+      'timestamp': Timestamp.fromDate(timestamp), 
     };
   }
 }

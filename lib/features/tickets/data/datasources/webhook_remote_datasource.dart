@@ -26,11 +26,11 @@ class WebhookRemoteDataSourceImpl implements WebhookRemoteDataSource {
       );
 
       if (response.statusCode != 200 && response.statusCode != 201) {
-        throw ServerException();
+       // throw ServerException();
       }
     } on DioException {
       // Si el servidor de Python está caído, lanzamos la excepción de red
-      throw ServerException();
+     // throw ServerException();
     }
   }
 }

@@ -19,4 +19,7 @@ abstract class ITicketRepository {
   /// Este método es el que guardará el estado final en Firestore y además 
   /// disparará la petición HTTP a Python para escupir el PDF.
   Future<Either<Failure, TicketEntity>> notificarYGenerarActa(TicketEntity ticket);
+
+  Future<Either<Failure, List<TicketEntity>>> obtenerTickets();
+
 }

@@ -6,10 +6,11 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'injection_container.dart' as di;
 
-// Importamos los microcontroladores (BLoCs) y la nueva garita de seguridad
+// Importamos los microcontroladores (BLoCs) y pantallas
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/tickets/presentation/bloc/ticket_bloc.dart';
 import 'features/auth/presentation/pages/login_page.dart';
+import 'features/tickets/presentation/pages/main_menu_page.dart'; // ✅ El colector principal
 import 'core/services/notification_service.dart';
 
 void main() async {
@@ -30,7 +31,6 @@ void main() async {
   runApp(const AquaspotApp());
 }
 
-
 class AquaspotApp extends StatelessWidget {
   const AquaspotApp({super.key});
 
@@ -45,14 +45,19 @@ class AquaspotApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: 'Aquaspot Postventa',
-        debugShowCheckedModeBanner: false, // Quitamos la etiqueta de "Debug"
+        debugShowCheckedModeBanner: false, // Pantalla limpia
         theme: ThemeData(
           primaryColor: const Color(0xFF005A9C),
           colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF005A9C)),
           useMaterial3: true,
         ),
-        // La garita de seguridad es ahora el único punto de entrada
-        home: const LoginPage(), 
+        
+        // ✅ TABLA DE ENRUTAMIENTO INDUSTRIAL
+        initialRoute: '/login', // Punto de arranque por defecto (Garita)
+        routes: {
+          '/login': (context) => const LoginPage(), 
+          '/': (context) => const MainMenuPage(), // Destino de los saltos de éxito
+        },
       ),
     );
   }

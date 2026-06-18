@@ -5,8 +5,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
-import '../../domain/entities/usuario_entity.dart';
-import '../../../tickets/presentation/pages/main_menu_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -20,18 +18,13 @@ class _LoginPageState extends State<LoginPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  void _enrutarOperador(BuildContext context, UsuarioEntity usuario) {
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => MainMenuPage(operador: usuario),
-        transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
-      ),
-    );
+  // ✅ Rutina de enrutamiento estático limpia. Cero inyecciones.
+  void _enrutarOperador(BuildContext context) {
+    Navigator.of(context).pushReplacementNamed('/');
   }
 
   @override
   Widget build(BuildContext context) {
-    // Calculamos las dimensiones del panel
     final screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
@@ -43,17 +36,15 @@ class _LoginPageState extends State<LoginPage> {
             colors: [Color(0xFF003366), Color(0xFF005A9C)],
           ),
         ),
-        // LayoutBuilder permite adaptar el contenido según el ancho disponible
         child: LayoutBuilder(
           builder: (context, constraints) {
             return Center(
               child: SingleChildScrollView(
                 padding: EdgeInsets.symmetric(
-                  horizontal: screenWidth * 0.05, // Margen adaptativo del 5%
+                  horizontal: screenWidth * 0.05,
                   vertical: 24.0,
                 ),
                 child: ConstrainedBox(
-                  // Limitamos el ancho para que en tablets no se estire excesivamente
                   constraints: const BoxConstraints(maxWidth: 450), 
                   child: Card(
                     elevation: 12,
@@ -84,7 +75,7 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                             const SizedBox(height: 32),
                             
-                            // Campo Correo - Alto Contraste
+                            // Campo Correo
                             TextFormField(
                               controller: _emailController,
                               style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600),
@@ -107,7 +98,7 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                             const SizedBox(height: 16),
                             
-                            // Campo Código - Alto Contraste
+                            // Campo Código
                             TextFormField(
                               controller: _passwordController,
                               obscureText: true,
@@ -138,7 +129,8 @@ class _LoginPageState extends State<LoginPage> {
                                     SnackBar(content: Text(state.message), backgroundColor: Colors.redAccent),
                                   );
                                 } else if (state is Authenticated) {
-                                  _enrutarOperador(context, state.usuario);
+                                  // ✅ Aquí estaba el error en tu código. Llamada limpia sin inyectar parámetros.
+                                  _enrutarOperador(context);
                                 }
                               },
                               builder: (context, state) {

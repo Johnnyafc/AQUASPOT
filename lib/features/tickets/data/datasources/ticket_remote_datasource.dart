@@ -9,6 +9,9 @@ abstract class TicketRemoteDataSource {
   Future<List<ClienteModel>> obtenerClientes();
   Future<TicketModel> crearTicket(TicketModel ticket);
   Future<TicketModel> actualizarTicket(TicketModel ticket);
+  
+  // ✅ NUEVO: Sonda de extracción para el historial
+  Future<List<TicketModel>> obtenerTickets(); 
 }
 
 class TicketRemoteDataSourceImpl implements TicketRemoteDataSource {
@@ -21,58 +24,51 @@ class TicketRemoteDataSourceImpl implements TicketRemoteDataSource {
     try {
       final snapshot = await firestore.collection('clientes').get();
       return snapshot.docs.map((doc) {
-        // Inyectamos el ID del documento dentro del JSON para mapearlo
         final data = doc.data();
         data['id'] = doc.id;
         return ClienteModel.fromJson(data);
       }).toList();
     } catch (e) {
-      throw ServerException();
+      throw ServerException(e.toString());
     }
   }
 
   @override
   Future<TicketModel> crearTicket(TicketModel ticket) async {
     try {
-      final jsonTicket = ticket.toJson();
-
-      // INYECCIÓN DE SEGURIDAD: Usar el reloj atómico de Google, no el del celular.
-      final eventos = List<dynamic>.from(jsonTicket['historialEventos']);
-      if (eventos.isNotEmpty) {
-        eventos.last['timestamp'] = FieldValue.serverTimestamp();
-        jsonTicket['historialEventos'] = eventos;
-      }
-
-      // Creamos el documento
-      final docRef = await firestore.collection('tickets').add(jsonTicket);
-      
-      // Actualizamos el documento para que guarde su propio ID alfanumérico
-      await docRef.update({'id': docRef.id});
-
+      final docRef = firestore.collection('tickets').doc(ticket.id);
+      await docRef.set(ticket.toJson());
       return ticket;
     } catch (e) {
-      throw ServerException();
+      print("🚨 ERROR CRUDO DE FIREBASE (ESCRITURA): $e");
+      throw ServerException(e.toString());
     }
   }
 
   @override
   Future<TicketModel> actualizarTicket(TicketModel ticket) async {
     try {
-      final jsonTicket = ticket.toJson();
-
-      // INYECCIÓN DE SEGURIDAD
-      final eventos = List<dynamic>.from(jsonTicket['historialEventos']);
-      if (eventos.isNotEmpty) {
-        eventos.last['timestamp'] = FieldValue.serverTimestamp();
-        jsonTicket['historialEventos'] = eventos;
-      }
-
-      // Actualizamos usando update() para no machacar campos enteros
-      await firestore.collection('tickets').doc(ticket.id).update(jsonTicket);
-      
+      await firestore.collection('tickets').doc(ticket.id).update(ticket.toJson());
       return ticket;
     } catch (e) {
-      throw ServerException();
+      print("🚨 ERROR CRUDO DE FIREBASE (ACTUALIZACIÓN): $e");
+      throw ServerException(e.toString());
+    }
+  }
+
+  // ✅ NUEVO: Implementación de la lectura de historial
+  @override
+  Future<List<TicketModel>> obtenerTickets() async {
+    try {
+      // Extraemos la colección completa. A nivel industrial luego puedes meter un .orderBy()
+      final snapshot = await firestore.collection('tickets').get(); 
+      
+      return snapshot.docs.map((doc) {
+        return TicketModel.fromJson(doc.data());
+      }).toList();
+    } catch (e) {
+      print("🚨 ERROR CRUDO DE FIREBASE (LECTURA HISTORIAL): $e");
+      throw ServerException(e.toString());
     }
   }
 }

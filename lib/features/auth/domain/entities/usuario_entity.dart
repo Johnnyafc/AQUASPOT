@@ -13,14 +13,16 @@ enum RolUsuario {
 class UsuarioEntity extends Equatable {
   final String uid;
   final String email;
+  final String nombre;
   final RolUsuario rol;
 
   const UsuarioEntity({
     required this.uid,
     required this.email,
+    required this.nombre,
     required this.rol,
   });
 
   @override
-  List<Object?> get props => [uid, email, rol];
+List<Object?> get props => [uid, email, nombre, rol];
 }

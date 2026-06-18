@@ -1,3 +1,5 @@
+// lib/injection_container.dart
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -15,6 +17,8 @@ import 'features/tickets/domain/usecases/aprobar_evaluacion_usecase.dart';
 import 'features/tickets/domain/usecases/crear_ticket_usecase.dart';
 import 'features/tickets/domain/usecases/notificar_y_generar_acta_usecase.dart';
 import 'features/tickets/domain/usecases/obtener_clientes_usecase.dart';
+// ✅ NUEVA CONEXIÓN: Importación del puente de lectura
+import 'features/tickets/domain/usecases/obtener_tickets_usecase.dart'; 
 import 'features/tickets/presentation/bloc/ticket_bloc.dart';
 
 // --- FEATURE: AUTH ---
@@ -37,6 +41,8 @@ Future<void> init() async {
         crearTicket: sl(),
         aprobarEvaluacion: sl(),
         notificarYGenerarActa: sl(),
+        // ✅ NUEVA CONEXIÓN: Energizamos el canal de lectura en el BLoC
+        obtenerTickets: sl(), 
       ));
   
   // Auth
@@ -53,6 +59,8 @@ Future<void> init() async {
   sl.registerLazySingleton(() => CrearTicketUseCase(sl()));
   sl.registerLazySingleton(() => AprobarEvaluacionUseCase(sl()));
   sl.registerLazySingleton(() => NotificarYGenerarActaUseCase(sl()));
+  // ✅ NUEVA CONEXIÓN: Registramos el Caso de Uso en el bus
+  sl.registerLazySingleton(() => ObtenerTicketsUseCase(sl())); 
   
   // Auth
   sl.registerLazySingleton(() => IniciarSesionUseCase(sl()));
