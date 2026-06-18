@@ -87,6 +87,20 @@ TicketModel _entityToModel(TicketEntity entity) {
 
 
 @override
+Future<Either<Failure, TicketEntity>> actualizarEvaluacion(TicketEntity ticket) async {
+  try {
+    // Convertimos la entidad a modelo para poder usar el toJson()
+    final ticketModel = TicketModel.fromEntity(ticket); 
+    await firebaseDataSource.actualizarTicket(ticketModel);
+    return Right(ticket); // Retornamos la entidad actualizada al BLoC
+  } catch (e) {
+    return Left(ServerFailure('No se pudo guardar la evaluación.'));
+  }
+}
+
+
+
+@override
   Future<Either<Failure, TicketEntity>> crearTicket(TicketEntity ticket) async {
     if (await networkInfo.isConnected) {
       try {

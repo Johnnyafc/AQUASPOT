@@ -21,6 +21,14 @@ class EvaluacionTecnicaModel extends EvaluacionTecnicaEntity {
     );
   }
 
+  factory EvaluacionTecnicaModel.fromEntity(EvaluacionTecnicaEntity entity) {
+    return EvaluacionTecnicaModel(
+      serieEquipo: entity.serieEquipo,
+      diagnostico: entity.diagnostico,
+      prioridad: entity.prioridad,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'serieEquipo': serieEquipo,

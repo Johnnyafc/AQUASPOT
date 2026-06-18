@@ -44,6 +44,39 @@ class TicketEntity extends Equatable {
     required this.historialEventos,
   });
 
+
+  TicketEntity copyWith({
+    String? id,
+    EstadoTicket? estadoActual,
+    Sede? sede,
+    String? clienteId,
+    String? campamento,
+    String? nombreContacto,
+    String? telefonoContacto,
+    TipoEquipo? equipo,
+    String? fallaReportada,
+    EvaluacionTecnicaEntity? evaluacionTecnica,
+    List<String>? fotosUrls,
+    String? pdfActaUrl,
+    List<EventoAuditoriaEntity>? historialEventos,
+  }) {
+    return TicketEntity(
+      id: id ?? this.id,
+      estadoActual: estadoActual ?? this.estadoActual,
+      sede: sede ?? this.sede,
+      clienteId: clienteId ?? this.clienteId,
+      campamento: campamento ?? this.campamento,
+      nombreContacto: nombreContacto ?? this.nombreContacto,
+      telefonoContacto: telefonoContacto ?? this.telefonoContacto,
+      equipo: equipo ?? this.equipo,
+      fallaReportada: fallaReportada ?? this.fallaReportada,
+      evaluacionTecnica: evaluacionTecnica ?? this.evaluacionTecnica,
+      fotosUrls: fotosUrls ?? this.fotosUrls,
+      pdfActaUrl: pdfActaUrl ?? this.pdfActaUrl,
+      historialEventos: historialEventos ?? this.historialEventos,
+    );
+  }
+
   @override
   List<Object?> get props => [
         id,

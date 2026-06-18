@@ -8,6 +8,7 @@ import '../../../../features/auth/presentation/bloc/auth_state.dart';
 import '../../../../features/auth/domain/entities/usuario_entity.dart';
 import 'creacion_ticket_page.dart';
 import 'historial_tickets_page.dart';
+import 'bandeja_evaluaciones_page.dart';
 
 class MainMenuPage extends StatefulWidget {
   const MainMenuPage({super.key});
@@ -133,7 +134,7 @@ class _InicioView extends StatelessWidget {
         title: 'Evaluaciones Técnicas',
         icon: Icons.handyman,
         color: Colors.orange,
-        onTap: () {},
+       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaEvaluacionesPage())),
       ));
     }
     return modules;

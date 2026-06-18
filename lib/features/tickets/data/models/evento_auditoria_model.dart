@@ -25,6 +25,15 @@ class EventoAuditoriaModel extends EventoAuditoriaEntity {
     );
   }
 
+  factory EventoAuditoriaModel.fromEntity(EventoAuditoriaEntity entity) {
+    return EventoAuditoriaModel(
+      accion: entity.accion,
+      usuarioNombre: entity.usuarioNombre,
+      usuarioRol: entity.usuarioRol,
+      timestamp: entity.timestamp,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'accion': accion,

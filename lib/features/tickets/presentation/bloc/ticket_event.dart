@@ -33,7 +33,7 @@ class CrearTicketEvent extends TicketEvent {
 class ActualizarEvaluacionEvent extends TicketEvent {
   final TicketEntity ticket;
 
-  const ActualizarEvaluacionEvent(this.ticket);
+const ActualizarEvaluacionEvent({required this.ticket});
 
   @override
   List<Object> get props => [ticket];

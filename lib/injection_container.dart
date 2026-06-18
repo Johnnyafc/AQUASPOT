@@ -17,7 +17,6 @@ import 'features/tickets/domain/usecases/aprobar_evaluacion_usecase.dart';
 import 'features/tickets/domain/usecases/crear_ticket_usecase.dart';
 import 'features/tickets/domain/usecases/notificar_y_generar_acta_usecase.dart';
 import 'features/tickets/domain/usecases/obtener_clientes_usecase.dart';
-// ✅ NUEVA CONEXIÓN: Importación del puente de lectura
 import 'features/tickets/domain/usecases/obtener_tickets_usecase.dart'; 
 import 'features/tickets/presentation/bloc/ticket_bloc.dart';
 
@@ -29,47 +28,35 @@ import 'features/auth/domain/usecases/cerrar_sesion_usecase.dart';
 import 'features/auth/domain/usecases/iniciar_sesion_usecase.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 
-final sl = GetIt.instance; // sl = Service Locator
+final sl = GetIt.instance;
 
 Future<void> init() async {
   // ===========================================================================
-  // 1. CAPA DE PRESENTACIÓN (El HMI)
+  // 1. EXTERNAL (Dependencias de Terceros)
   // ===========================================================================
-  // Tickets
-  sl.registerFactory(() => TicketBloc(
-        obtenerClientes: sl(),
-        crearTicket: sl(),
-        aprobarEvaluacion: sl(),
-        notificarYGenerarActa: sl(),
-        // ✅ NUEVA CONEXIÓN: Energizamos el canal de lectura en el BLoC
-        obtenerTickets: sl(), 
-      ));
-  
-  // Auth
-  sl.registerFactory(() => AuthBloc(
-        iniciarSesion: sl(),
-        cerrarSesion: sl(),
-      ));
+  final firestore = FirebaseFirestore.instance;
+  final firebaseAuth = FirebaseAuth.instance;
+
+  sl.registerLazySingleton(() => firestore);
+  sl.registerLazySingleton(() => firebaseAuth);
+  sl.registerLazySingleton(() => Dio());
+  sl.registerLazySingleton(() => InternetConnectionChecker.createInstance());
 
   // ===========================================================================
-  // 2. CAPA DE DOMINIO (El Cerebro)
+  // 2. CORE
   // ===========================================================================
-  // Tickets
-  sl.registerLazySingleton(() => ObtenerClientesUseCase(sl()));
-  sl.registerLazySingleton(() => CrearTicketUseCase(sl()));
-  sl.registerLazySingleton(() => AprobarEvaluacionUseCase(sl()));
-  sl.registerLazySingleton(() => NotificarYGenerarActaUseCase(sl()));
-  // ✅ NUEVA CONEXIÓN: Registramos el Caso de Uso en el bus
-  sl.registerLazySingleton(() => ObtenerTicketsUseCase(sl())); 
-  
-  // Auth
-  sl.registerLazySingleton(() => IniciarSesionUseCase(sl()));
-  sl.registerLazySingleton(() => CerrarSesionUseCase(sl()));
+  sl.registerLazySingleton<NetworkInfo>(() => NetworkInfoImpl(sl()));
 
   // ===========================================================================
-  // 3. CAPA DE DATOS (El Capataz y los Transductores)
+  // 3. CAPA DE DATOS (Repositories & DataSources)
   // ===========================================================================
   // Tickets
+  sl.registerLazySingleton<TicketRemoteDataSource>(
+    () => TicketRemoteDataSourceImpl(firestore: sl()),
+  );
+  sl.registerLazySingleton<WebhookRemoteDataSource>(
+    () => WebhookRemoteDataSourceImpl(dio: sl()),
+  );
   sl.registerLazySingleton<ITicketRepository>(
     () => TicketRepositoryImpl(
       firebaseDataSource: sl(),
@@ -77,14 +64,11 @@ Future<void> init() async {
       networkInfo: sl(),
     ),
   );
-  sl.registerLazySingleton<TicketRemoteDataSource>(
-    () => TicketRemoteDataSourceImpl(firestore: sl()),
-  );
-  sl.registerLazySingleton<WebhookRemoteDataSource>(
-    () => WebhookRemoteDataSourceImpl(dio: sl()),
-  );
 
   // Auth
+  sl.registerLazySingleton<AuthRemoteDataSource>(
+    () => AuthRemoteDataSourceImpl(firebaseAuth: sl(), firestore: sl()),
+  );
   sl.registerLazySingleton<AuthRepository>(
     () => AuthRepositoryImpl(
       remoteDataSource: sl(),
@@ -92,26 +76,34 @@ Future<void> init() async {
       firebaseAuth: sl(),
     ),
   );
-  sl.registerLazySingleton<AuthRemoteDataSource>(
-    () => AuthRemoteDataSourceImpl(
-      firebaseAuth: sl(),
-      firestore: sl(),
-    ),
-  );
 
   // ===========================================================================
-  // 4. CORE (Herramientas Compartidas)
+  // 4. CAPA DE DOMINIO (UseCases)
   // ===========================================================================
-  sl.registerLazySingleton<NetworkInfo>(() => NetworkInfoImpl(sl()));
+  // Tickets
+  sl.registerLazySingleton(() => ObtenerClientesUseCase(sl()));
+  sl.registerLazySingleton(() => CrearTicketUseCase(sl()));
+  sl.registerLazySingleton(() => AprobarEvaluacionUseCase(sl()));
+  sl.registerLazySingleton(() => NotificarYGenerarActaUseCase(sl()));
+  sl.registerLazySingleton(() => ObtenerTicketsUseCase(sl())); 
+  
+  // Auth
+  sl.registerLazySingleton(() => IniciarSesionUseCase(sl()));
+  sl.registerLazySingleton(() => CerrarSesionUseCase(sl()));
 
   // ===========================================================================
-  // 5. EXTERNAL (Dependencias de Terceros)
+  // 5. CAPA DE PRESENTACIÓN (Blocs) - REGISTRAR AL FINAL
   // ===========================================================================
-  final firestore = FirebaseFirestore.instance;
-  final firebaseAuth = FirebaseAuth.instance; // <- NUEVO SENSOR CABLEADO
-
-  sl.registerLazySingleton(() => firestore);
-  sl.registerLazySingleton(() => firebaseAuth);
-  sl.registerLazySingleton(() => Dio());
-  sl.registerLazySingleton(() => InternetConnectionChecker.createInstance());
+  sl.registerFactory(() => TicketBloc(
+        obtenerClientes: sl(),
+        crearTicket: sl(),
+        aprobarEvaluacion: sl(),
+        notificarYGenerarActa: sl(),
+        obtenerTickets: sl(), 
+      ));
+  
+  sl.registerFactory(() => AuthBloc(
+        iniciarSesion: sl(),
+        cerrarSesion: sl(),
+      ));
 }

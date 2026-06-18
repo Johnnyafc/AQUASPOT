@@ -54,7 +54,30 @@ class TicketModel extends TicketEntity {
     );
   }
 
-  Map<String, dynamic> toJson() {
+factory TicketModel.fromEntity(TicketEntity entity) {
+    return TicketModel(
+      id: entity.id,
+      estadoActual: entity.estadoActual,
+      sede: entity.sede,
+      clienteId: entity.clienteId,
+      campamento: entity.campamento,
+      nombreContacto: entity.nombreContacto,
+      telefonoContacto: entity.telefonoContacto,
+      equipo: entity.equipo,
+      fallaReportada: entity.fallaReportada,
+      evaluacionTecnica: entity.evaluacionTecnica != null
+          ? EvaluacionTecnicaModel.fromEntity(entity.evaluacionTecnica!)
+          : null,
+      fotosUrls: entity.fotosUrls,
+      pdfActaUrl: entity.pdfActaUrl,
+      historialEventos: entity.historialEventos
+          .map((e) => EventoAuditoriaModel.fromEntity(e))
+          .toList(),
+    );
+  }
+
+
+Map<String, dynamic> toJson() {
     return {
       'id': id,
       'estadoActual': estadoActual.name,
@@ -65,13 +88,18 @@ class TicketModel extends TicketEntity {
       'telefonoContacto': telefonoContacto,
       'equipo': equipo.name,
       'fallaReportada': fallaReportada,
+      
+      // ✅ CORRECTO: Convertimos la entidad a modelo antes de llamar a toJson()
       'evaluacionTecnica': evaluacionTecnica != null
-          ? (evaluacionTecnica as EvaluacionTecnicaModel).toJson()
+          ? EvaluacionTecnicaModel.fromEntity(evaluacionTecnica!).toJson()
           : null,
+          
       'fotosUrls': fotosUrls,
       'pdfActaUrl': pdfActaUrl,
+      
+      // ✅ CORRECTO: Mapeamos cada entidad del historial a su modelo correspondiente
       'historialEventos': historialEventos
-          .map((e) => (e as EventoAuditoriaModel).toJson())
+          .map((e) => EventoAuditoriaModel.fromEntity(e).toJson())
           .toList(),
     };
   }
