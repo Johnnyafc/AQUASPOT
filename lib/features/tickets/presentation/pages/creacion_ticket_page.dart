@@ -1,5 +1,6 @@
 // lib/features/tickets/presentation/pages/creacion_ticket_page.dart
 
+import 'dart:io'; // ✅ Requerido para el buffer de evidencias
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -81,12 +82,14 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
       fallaReportada: _fallaController.text,
       numeroSerie: null,
       historialEventos: const [], 
+      fotosUrls: const [], // ✅ Protegemos la inmutabilidad
     );
 
     context.read<TicketBloc>().add(CrearTicketEvent(
       ticket: ticketBorrador,
       nombreUsuario: nombreOperario,
       rolUsuario: rolOperario,
+      evidencias: const [], // ✅ Buffer vacío para no romper el contrato del BLoC
     ));
   }
 
@@ -104,7 +107,7 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
         listener: (context, state) {
           if (state is TicketError) {
              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.red));
-          } else if (state is TicketOperationSuccess) {
+          } else if (state is TicketOperationSuccess) { // ✅ Cubrimos ambas variantes de éxito
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Registro Exitoso'), backgroundColor: Colors.green));
             _limpiarFormulario(); 
             

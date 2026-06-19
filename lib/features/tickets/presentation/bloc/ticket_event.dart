@@ -2,6 +2,7 @@
 
 import 'package:equatable/equatable.dart';
 import '../../domain/entities/ticket_entity.dart';
+import 'dart:io';
 
 abstract class TicketEvent extends Equatable {
   const TicketEvent();
@@ -10,18 +11,30 @@ abstract class TicketEvent extends Equatable {
   List<Object> get props => [];
 }
 
+class SubirEvidenciaEvent extends TicketEvent {
+  final File file;
+  final String ticketId;
+
+  const SubirEvidenciaEvent({required this.file, required this.ticketId});
+
+  @override
+  List<Object> get props => [file, ticketId];
+}
+
 // 1. Pulsador de Arranque: Carga inicial de datos del ERP
 class ObtenerClientesEvent extends TicketEvent {}
 
 // 2. Etapa 1: Comercial ingresa un equipo nuevo
 class CrearTicketEvent extends TicketEvent {
   final TicketEntity ticket;
+  final List<File> evidencias;
   final String nombreUsuario;
   final String rolUsuario;
 
   const CrearTicketEvent({
     required this.ticket,
     required this.nombreUsuario,
+    required this.evidencias,
     required this.rolUsuario,
   });
 
@@ -58,14 +71,17 @@ class ConfirmarRecepcionEvent extends TicketEvent {
   final String nombreUsuario;
   final String rolUsuario;
   final String notasRecepcion;
+  final List<File> evidencias; // ✅ NUEVO: Puerto para la telemetría visual
 
   const ConfirmarRecepcionEvent({
     required this.ticket,
     required this.nombreUsuario,
     required this.rolUsuario,
     this.notasRecepcion = '',
+    this.evidencias = const [], // Valor por defecto vacío para no quebrar otras partes
   });
 
   @override
-  List<Object> get props => [ticket, nombreUsuario, rolUsuario, notasRecepcion];
+  // No olvides agregarlo a las props para que Equatable detecte los cambios
+  List<Object> get props => [ticket, nombreUsuario, rolUsuario, notasRecepcion, evidencias]; 
 }

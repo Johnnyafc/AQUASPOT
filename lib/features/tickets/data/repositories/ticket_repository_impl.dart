@@ -11,15 +11,20 @@ import '../datasources/ticket_remote_datasource.dart';
 import '../datasources/webhook_remote_datasource.dart';
 import '../models/ticket_model.dart';
 import '../models/evento_auditoria_model.dart';
+import '../datasources/storage_remote_datasource.dart';
+import 'dart:io';
+
 
 class TicketRepositoryImpl implements ITicketRepository {
   final TicketRemoteDataSource firebaseDataSource;
   final WebhookRemoteDataSource webhookDataSource;
+  final StorageRemoteDataSource storageDataSource;
   final NetworkInfo networkInfo;
 
   TicketRepositoryImpl({
     required this.firebaseDataSource,
     required this.webhookDataSource,
+    required this.storageDataSource,
     required this.networkInfo,
   });
 
@@ -79,6 +84,29 @@ class TicketRepositoryImpl implements ITicketRepository {
       return Left(ServerFailure('Error inesperado al leer el historial SCADA: $e'));
     }
   }
+
+
+  @override
+  Future<Either<Failure, String>> subirEvidencia(File file, String ticketId) async {
+    // 1. Verificación de enlace de red (telemetría)
+    if (await networkInfo.isConnected) {
+      try {
+        // 2. Disparamos la subida a través del DataSource
+        final urlDescarga = await storageDataSource.subirEvidencia(file, ticketId);
+        return Right(urlDescarga); // Éxito: Retornamos la URL
+      } on ServerException catch (e) {
+        // Fallo en Firebase
+        return Left(ServerFailure(e.message ?? 'Error en la transmisión de datos al bucket.'));
+      } catch (e) {
+        // Fallo crítico no esperado
+        return Left(ServerFailure('Fallo catastrófico del sistema de archivos: $e'));
+      }
+    } else {
+      // Sin internet (Campamento off-grid)
+      return const Left(NetworkFailure('Operación abortada: No hay conexión a internet para subir archivos pesados.'));
+    }
+  }
+
 
   @override
   Future<Either<Failure, TicketEntity>> crearTicket(TicketEntity ticket) async {

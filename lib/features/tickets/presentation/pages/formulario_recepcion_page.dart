@@ -1,9 +1,15 @@
 // lib/features/tickets/presentation/pages/formulario_recepcion_page.dart
 
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:image_picker/image_picker.dart';
+
 import '../../domain/entities/ticket_entity.dart';
+import '../../domain/entities/ticket_enums.dart'; // ✅ AÑADIDO: Import del enum para la máquina de estados
 import '../bloc/ticket_bloc.dart';
+import '../bloc/ticket_event.dart';
+import '../bloc/ticket_state.dart';
 
 class FormularioRecepcionPage extends StatefulWidget {
   final TicketEntity ticket;
@@ -22,10 +28,85 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
   
   String _tipoRequerimiento = 'Mantenimiento'; 
 
+  // Buffer local en la memoria de esta instancia
+  final List<File> _archivosEvidencia = [];
+
   @override
   void dispose() {
     _descripcionController.dispose();
     super.dispose();
+  }
+
+  Widget _buildCameraPlaceholder() {
+    return Column(
+      children: [
+        InkWell(
+          onTap: () => _mostrarOpcionesCaptura(context),
+          child: Container(
+            height: 80,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.teal.shade200, style: BorderStyle.solid),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.add_a_photo_outlined, color: Colors.teal),
+                SizedBox(width: 12),
+                Text('Añadir Foto o Video', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+        ),
+        if (_archivosEvidencia.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 90,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _archivosEvidencia.length,
+              itemBuilder: (context, index) {
+                final file = _archivosEvidencia[index];
+                final esVideo = file.path.endsWith('.mp4') || file.path.endsWith('.mov');
+
+                return Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  width: 90,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      esVideo 
+                        ? const Icon(Icons.video_file, color: Colors.teal, size: 40)
+                        : ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.file(file, fit: BoxFit.cover),
+                          ),
+                      Positioned(
+                        top: 2,
+                        right: 2,
+                        child: GestureDetector(
+                          onTap: () => setState(() => _archivosEvidencia.removeAt(index)),
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                            child: const Icon(Icons.close, color: Colors.white, size: 14),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ]
+      ],
+    );
   }
 
   @override
@@ -36,116 +117,95 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
       ),
-      body: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionTitle('1. Datos Heredados (Solo Lectura)'),
-              // Todo esto ya viene pre-cargado desde la fase de Requerimiento
-              _buildReadOnlyField('Cliente / Razón Social', widget.ticket.clienteId, Icons.business),
-              _buildReadOnlyField('Contacto / Quien Entrega', widget.ticket.nombreContacto, Icons.person),
-              _buildReadOnlyField('Teléfono', widget.ticket.telefonoContacto ?? 'N/A', Icons.phone),
-              _buildReadOnlyField('Tipo de Equipo', widget.ticket.equipo.name.toUpperCase(), Icons.precision_manufacturing),
-              
-              // LA SERIE PASA A SER DE SOLO LECTURA PARA VALIDACIÓN VISUAL
-              _buildReadOnlyField('Número de Serie', widget.ticket.numeroSerie ?? 'Serie no registrada', Icons.qr_code), // Cambia .id por .numeroSerie si lo tienes en otra variable
-              
-              _buildReadOnlyField('Falla Reportada', widget.ticket.fallaReportada, Icons.report_problem, lines: 2),
-              
-              const Divider(height: 32, thickness: 2),
+      body: BlocConsumer<TicketBloc, TicketState>(
+        listener: (context, state) {
+          if (state is TicketError) {
+             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.red));
+          } else if (state is TicketOperationSuccess ) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Recepción exitosa y evidencias subidas'), backgroundColor: Colors.green));
+            if (!context.mounted) return;
+            Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+          }
+        },
+        builder: (context, state) {
+          return Form(
+            key: _formKey,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionTitle('1. Datos Heredados (Solo Lectura)'),
+                  _buildReadOnlyField('Cliente / Razón Social', widget.ticket.clienteId, Icons.business),
+                  _buildReadOnlyField('Contacto / Quien Entrega', widget.ticket.nombreContacto, Icons.person),
+                  _buildReadOnlyField('Teléfono', widget.ticket.telefonoContacto ?? 'N/A', Icons.phone),
+                  _buildReadOnlyField('Tipo de Equipo', widget.ticket.equipo.name.toUpperCase(), Icons.precision_manufacturing),
+                  _buildReadOnlyField('Número de Serie', widget.ticket.numeroSerie ?? 'Serie no registrada', Icons.qr_code),
+                  _buildReadOnlyField('Falla Reportada', widget.ticket.fallaReportada, Icons.report_problem, lines: 2),
+                  
+                  const Divider(height: 32, thickness: 2),
 
-              _buildSectionTitle('2. Datos de Ingreso Físico'),
-              
-              DropdownButtonFormField<String>(
-                value: _tipoRequerimiento,
-                decoration: InputDecoration(
-                  labelText: 'Tipo de Requerimiento',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  prefixIcon: const Icon(Icons.build_circle_outlined),
-                ),
-                items: ['Garantía', 'Mantenimiento'].map((String value) {
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(value),
-                  );
-                }).toList(),
-                onChanged: (newValue) {
-                  setState(() {
-                    _tipoRequerimiento = newValue!;
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-
-              _buildInputField(
-                label: 'Descripción / Notas de Recepción',
-                controller: _descripcionController,
-                icon: Icons.description_outlined,
-                lines: 3,
-                hint: 'Ej: Equipo llega con carcasa rayada, sin cables de alimentación...',
-              ),
-
-              const Divider(height: 32, thickness: 2),
-
-              _buildSectionTitle('3. Evidencia Fotográfica'),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300, style: BorderStyle.solid),
-                ),
-                child: Column(
-                  children: [
-                    const Icon(Icons.camera_alt_outlined, size: 40, color: Colors.grey),
-                    const SizedBox(height: 8),
-                    const Text('Adjunte fotos del estado actual del equipo', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
-                    const SizedBox(height: 12),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Módulo de cámara en construcción')),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        foregroundColor: Colors.teal,
-                        backgroundColor: Colors.teal.shade50,
-                        elevation: 0,
-                      ),
-                      icon: const Icon(Icons.add_a_photo),
-                      label: const Text('CAPTURAR FOTO'),
-                    )
-                  ],
-                ),
-              ),
-
-              const Divider(height: 32, thickness: 2),
-
-              _buildSectionTitle('4. Registro de Sistema'),
-              _buildReadOnlyField('Timestamp de Ingreso', DateTime.now().toString().substring(0, 16), Icons.access_time),
-
-              const SizedBox(height: 32),
-              
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  _buildSectionTitle('2. Datos de Ingreso Físico'),
+                  DropdownButtonFormField<String>(
+                    value: _tipoRequerimiento,
+                    decoration: InputDecoration(
+                      labelText: 'Tipo de Requerimiento',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      prefixIcon: const Icon(Icons.build_circle_outlined),
+                    ),
+                    items: ['Garantía', 'Mantenimiento'].map((String value) {
+                      return DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(value),
+                      );
+                    }).toList(),
+                    onChanged: (newValue) {
+                      setState(() {
+                        _tipoRequerimiento = newValue!;
+                      });
+                    },
                   ),
-                  onPressed: _procesarRecepcion,
-                  child: const Text('CONFIRMAR RECEPCIÓN', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
+                  const SizedBox(height: 16),
+                  _buildInputField(
+                    label: 'Descripción / Notas de Recepción',
+                    controller: _descripcionController,
+                    icon: Icons.description_outlined,
+                    lines: 3,
+                    hint: 'Ej: Equipo llega con carcasa rayada, sin cables de alimentación...',
+                  ),
+
+                  const Divider(height: 32, thickness: 2),
+
+                  _buildSectionTitle('3. Evidencia Fotográfica'),
+                  _buildCameraPlaceholder(),
+
+                  const Divider(height: 32, thickness: 2),
+
+                  _buildSectionTitle('4. Registro de Sistema'),
+                  _buildReadOnlyField('Timestamp de Ingreso', DateTime.now().toString().substring(0, 16), Icons.access_time),
+
+                  const SizedBox(height: 32),
+                  
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: state is TicketLoading ? null : _procesarRecepcion,
+                      child: state is TicketLoading 
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text('CONFIRMAR RECEPCIÓN', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
               ),
-              const SizedBox(height: 24),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -202,11 +262,99 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
   }
 
   // --- Lógica de Control ---
-  void _procesarRecepcion() {
+void _procesarRecepcion() {
     if (!_formKey.currentState!.validate()) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Procesando recepción y actualizando estado...')),
+    
+    // Mutamos el estado al siguiente nivel de la cadena productiva
+    final ticketActualizado = TicketEntity(
+      id: widget.ticket.id,
+      estadoActual: EstadoTicket.recepcionFisica, // ✅ Avanzamos la fase
+      sede: widget.ticket.sede,
+      clienteId: widget.ticket.clienteId,
+      campamento: widget.ticket.campamento,
+      nombreContacto: widget.ticket.nombreContacto,
+      telefonoContacto: widget.ticket.telefonoContacto,
+      equipo: widget.ticket.equipo,
+      fallaReportada: '${widget.ticket.fallaReportada}\n[RECEPCIÓN]: ${_descripcionController.text}',
+      numeroSerie: widget.ticket.numeroSerie,
+      historialEventos: widget.ticket.historialEventos, 
+      fotosUrls: widget.ticket.fotosUrls, // Mantenemos las fotos previas
     );
-    Navigator.pop(context); 
+
+    // ✅ DISPARO FINAL USANDO EL EVENTO CORRECTO
+    context.read<TicketBloc>().add(ConfirmarRecepcionEvent(
+      ticket: ticketActualizado,
+      nombreUsuario: 'SISTEMA', 
+      rolUsuario: 'TÉCNICO',
+      notasRecepcion: _descripcionController.text, // Pasamos la nota
+      evidencias: _archivosEvidencia, // ✅ Mandamos las fotos físicas al BLoC
+    ));
+  }
+
+  void _mostrarOpcionesCaptura(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: Colors.teal),
+              title: const Text('Tomar Foto'),
+              onTap: () {
+                Navigator.pop(context);
+                _capturarMedio(ImageSource.camera, esVideo: false);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.videocam, color: Colors.teal),
+              title: const Text('Grabar Video'),
+              onTap: () {
+                Navigator.pop(context);
+                _capturarMedio(ImageSource.camera, esVideo: true);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Colors.grey),
+              title: const Text('Seleccionar de Galería'),
+              onTap: () {
+                Navigator.pop(context);
+                _capturarMedio(ImageSource.gallery, esVideo: false);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _capturarMedio(ImageSource source, {required bool esVideo}) async {
+    final ImagePicker picker = ImagePicker();
+    XFile? archivo;
+
+    try {
+      if (esVideo) {
+        archivo = await picker.pickVideo(
+          source: source,
+          maxDuration: const Duration(seconds: 30), 
+        );
+      } else {
+        archivo = await picker.pickImage(
+          source: source,
+          imageQuality: 70, 
+        );
+      }
+
+      if (archivo != null) {
+        setState(() {
+          _archivosEvidencia.add(File(archivo!.path));
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al acceder al hardware: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 }

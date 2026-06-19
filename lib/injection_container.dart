@@ -16,10 +16,14 @@ import 'features/tickets/domain/repositories/ticket_repository.dart';
 // ✅ CAMBIO: Importamos el nuevo caso de uso unificado (Eliminado el de aprobar_evaluacion)
 import 'features/tickets/domain/usecases/ActualizarTicketUseCase.dart';
 import 'features/tickets/domain/usecases/crear_ticket_usecase.dart';
+import 'features/tickets/domain/usecases/subir_evidencia_usecase.dart';
 import 'features/tickets/domain/usecases/notificar_y_generar_acta_usecase.dart';
 import 'features/tickets/domain/usecases/obtener_clientes_usecase.dart';
 import 'features/tickets/domain/usecases/obtener_tickets_usecase.dart'; 
 import 'features/tickets/presentation/bloc/ticket_bloc.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'features/tickets/data/datasources/storage_remote_datasource.dart';
+import 'features/tickets/data/datasources/storage_remote_datasource_impl.dart';
 
 // --- FEATURE: AUTH ---
 import 'features/auth/data/datasources/auth_remote_datasource.dart';
@@ -42,6 +46,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => firebaseAuth);
   sl.registerLazySingleton(() => Dio());
   sl.registerLazySingleton(() => InternetConnectionChecker.createInstance());
+  sl.registerLazySingleton(() => FirebaseStorage.instance);
 
   // ===========================================================================
   // 2. CORE
@@ -62,6 +67,7 @@ Future<void> init() async {
     () => TicketRepositoryImpl(
       firebaseDataSource: sl(),
       webhookDataSource: sl(),
+      storageDataSource: sl(),
       networkInfo: sl(),
     ),
   );
@@ -77,6 +83,9 @@ Future<void> init() async {
       firebaseAuth: sl(),
     ),
   );
+  sl.registerLazySingleton<StorageRemoteDataSource>(
+  () => StorageRemoteDataSourceImpl(storage: sl<FirebaseStorage>()),
+);
 
   // ===========================================================================
   // 4. CAPA DE DOMINIO (UseCases)
@@ -92,7 +101,9 @@ Future<void> init() async {
   // Auth
   sl.registerLazySingleton(() => IniciarSesionUseCase(sl()));
   sl.registerLazySingleton(() => CerrarSesionUseCase(sl()));
+  
 
+  sl.registerLazySingleton(() => SubirEvidenciaUseCase(sl()));
   // ===========================================================================
   // 5. CAPA DE PRESENTACIÓN (Blocs) - REGISTRAR AL FINAL
   // ===========================================================================
@@ -102,7 +113,8 @@ Future<void> init() async {
         // ✅ CAMBIO: Inyectamos el nuevo caso de uso al BLoC
         actualizarTicket: sl(),
         notificarYGenerarActa: sl(),
-        obtenerTickets: sl(), 
+        obtenerTickets: sl(),
+        subirEvidenciaUseCase: sl(), 
       ));
   
   sl.registerFactory(() => AuthBloc(

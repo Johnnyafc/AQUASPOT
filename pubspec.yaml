@@ -44,6 +44,8 @@ dependencies:
   dio: ^5.9.2
   internet_connection_checker: ^3.0.1
   firebase_messaging: ^16.4.0
+  firebase_storage: ^13.4.3
+  image_picker: ^1.2.2
 
 dev_dependencies:
   flutter_test:

@@ -55,3 +55,12 @@ class TicketHistorialCargado extends TicketState {
   @override
   List<Object?> get props => [tickets];
 }
+
+
+class TicketEvidenciaSubida extends TicketState {
+  final String url;
+  const TicketEvidenciaSubida({required this.url});
+
+  @override
+  List<Object> get props => [url];
+}

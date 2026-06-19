@@ -16,4 +16,5 @@ abstract class ITicketRepository {
   
   Future<Either<Failure, TicketEntity>> notificarYGenerarActa(TicketEntity ticket);
   // Añadir en ITicketRepository
+  Future<Either<Failure, String>> subirEvidencia(File file, String ticketId);
 }

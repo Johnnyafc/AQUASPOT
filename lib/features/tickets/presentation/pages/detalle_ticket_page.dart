@@ -26,7 +26,16 @@ class DetalleTicketPage extends StatelessWidget {
             const Text("Datos del Requerimiento", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
             const SizedBox(height: 12),
             _buildDataCard(),
+            
             const SizedBox(height: 24),
+            
+            // ✅ NUEVO MÓDULO VISUAL: Visualización de telemetría (fotos)
+            const Text("Evidencia Fotográfica", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
+            const SizedBox(height: 12),
+            _buildEvidenciasCard(),
+
+            const SizedBox(height: 24),
+            
             const Text("Trazabilidad y Auditoría", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
             const SizedBox(height: 12),
             _buildTimelineCard(),
@@ -54,7 +63,9 @@ class DetalleTicketPage extends StatelessWidget {
             _buildDatoRow('Campamento:', ticket.campamento),
             _buildDatoRow('Contacto:', '${ticket.nombreContacto} (${ticket.telefonoContacto})'),
             const Divider(),
-            const Text('Falla Reportada:', style: TextStyle(color: Colors.grey, fontSize: 12)),
+            _buildDatoRow('Número de Serie:', ticket.numeroSerie ?? 'No Registrado'),
+            const Divider(),
+            const Text('Falla Reportada e Inspección:', style: TextStyle(color: Colors.grey, fontSize: 12)),
             const SizedBox(height: 4),
             Text(ticket.fallaReportada, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
           ],
@@ -63,15 +74,73 @@ class DetalleTicketPage extends StatelessWidget {
     );
   }
 
+  // ✅ COMPONENTE DE RENDERIZADO DE IMÁGENES
+  Widget _buildEvidenciasCard() {
+    if (ticket.fotosUrls.isEmpty) {
+      return Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: const Padding(
+          padding: EdgeInsets.all(20),
+          child: Center(
+            child: Text('Sin evidencia fotográfica.', style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: SizedBox(
+          height: 120, // Altura del rack de imágenes
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: ticket.fotosUrls.length,
+            itemBuilder: (context, index) {
+              return Container(
+                margin: const EdgeInsets.only(right: 12),
+                width: 120,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    ticket.fotosUrls[index],
+                    fit: BoxFit.cover,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return const Center(child: CircularProgressIndicator(color: Colors.teal));
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Center(child: Icon(Icons.broken_image, color: Colors.grey));
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildTimelineCard() {
+    // Ordenamos para que el evento más reciente salga arriba (Opcional pero recomendado en industria)
+    final eventosOrdenados = List.from(ticket.historialEventos)
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
-          children: ticket.historialEventos.map((evento) {
-            // Formateo rápido de fecha tipo SCADA (YYYY-MM-DD HH:MM)
+          children: eventosOrdenados.map((evento) {
             final fechaStr = evento.timestamp.toString().substring(0, 16);
             
             return Padding(
