@@ -16,8 +16,9 @@ class TicketModel extends TicketEntity {
     required super.telefonoContacto,
     required super.equipo,
     required super.fallaReportada,
+    super.numeroSerie, // ✅ CONSTRUCTOR: Parámetro aceptado
     super.evaluacionTecnica,
-    super.fotosUrls,
+    super.fotosUrls = const [],
     super.pdfActaUrl,
     required super.historialEventos,
   });
@@ -42,6 +43,8 @@ class TicketModel extends TicketEntity {
         orElse: () => TipoEquipo.maquina,
       ),
       fallaReportada: json['fallaReportada'] ?? '',
+      numeroSerie: json['numeroSerie'] ?? 
+                   (json['evaluacionTecnica'] != null ? json['evaluacionTecnica']['serieEquipo'] : null),// ✅ LECTURA: Recuperamos el dato del JSON de Firebase
       evaluacionTecnica: json['evaluacionTecnica'] != null
           ? EvaluacionTecnicaModel.fromJson(json['evaluacionTecnica'])
           : null,
@@ -54,7 +57,7 @@ class TicketModel extends TicketEntity {
     );
   }
 
-factory TicketModel.fromEntity(TicketEntity entity) {
+  factory TicketModel.fromEntity(TicketEntity entity) {
     return TicketModel(
       id: entity.id,
       estadoActual: entity.estadoActual,
@@ -65,6 +68,7 @@ factory TicketModel.fromEntity(TicketEntity entity) {
       telefonoContacto: entity.telefonoContacto,
       equipo: entity.equipo,
       fallaReportada: entity.fallaReportada,
+      numeroSerie: entity.numeroSerie, // ✅ MAPEO: De la entidad abstracta al modelo concreto
       evaluacionTecnica: entity.evaluacionTecnica != null
           ? EvaluacionTecnicaModel.fromEntity(entity.evaluacionTecnica!)
           : null,
@@ -76,8 +80,7 @@ factory TicketModel.fromEntity(TicketEntity entity) {
     );
   }
 
-
-Map<String, dynamic> toJson() {
+  Map<String, dynamic> toJson() {
     return {
       'id': id,
       'estadoActual': estadoActual.name,
@@ -88,8 +91,8 @@ Map<String, dynamic> toJson() {
       'telefonoContacto': telefonoContacto,
       'equipo': equipo.name,
       'fallaReportada': fallaReportada,
+      'numeroSerie': numeroSerie, // ✅ ESCRITURA: Empaquetamos el dato para enviarlo a Firebase
       
-      // ✅ CORRECTO: Convertimos la entidad a modelo antes de llamar a toJson()
       'evaluacionTecnica': evaluacionTecnica != null
           ? EvaluacionTecnicaModel.fromEntity(evaluacionTecnica!).toJson()
           : null,
@@ -97,7 +100,6 @@ Map<String, dynamic> toJson() {
       'fotosUrls': fotosUrls,
       'pdfActaUrl': pdfActaUrl,
       
-      // ✅ CORRECTO: Mapeamos cada entidad del historial a su modelo correspondiente
       'historialEventos': historialEventos
           .map((e) => EventoAuditoriaModel.fromEntity(e).toJson())
           .toList(),

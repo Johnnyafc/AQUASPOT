@@ -26,6 +26,7 @@ class UsuarioModel extends UsuarioEntity {
       case 'requerimiento': return RolUsuario.requerimiento;
       case 'tecnico': return RolUsuario.tecnico;
       case 'supervisor': return RolUsuario.supervisor;
+      case 'recepcion': return RolUsuario.recepcion;
       default: return RolUsuario.desconocido;
     }
   }

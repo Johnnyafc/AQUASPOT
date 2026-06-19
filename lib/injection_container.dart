@@ -13,7 +13,8 @@ import 'features/tickets/data/datasources/ticket_remote_datasource.dart';
 import 'features/tickets/data/datasources/webhook_remote_datasource.dart';
 import 'features/tickets/data/repositories/ticket_repository_impl.dart';
 import 'features/tickets/domain/repositories/ticket_repository.dart';
-import 'features/tickets/domain/usecases/aprobar_evaluacion_usecase.dart';
+// ✅ CAMBIO: Importamos el nuevo caso de uso unificado (Eliminado el de aprobar_evaluacion)
+import 'features/tickets/domain/usecases/ActualizarTicketUseCase.dart';
 import 'features/tickets/domain/usecases/crear_ticket_usecase.dart';
 import 'features/tickets/domain/usecases/notificar_y_generar_acta_usecase.dart';
 import 'features/tickets/domain/usecases/obtener_clientes_usecase.dart';
@@ -83,7 +84,8 @@ Future<void> init() async {
   // Tickets
   sl.registerLazySingleton(() => ObtenerClientesUseCase(sl()));
   sl.registerLazySingleton(() => CrearTicketUseCase(sl()));
-  sl.registerLazySingleton(() => AprobarEvaluacionUseCase(sl()));
+  // ✅ CAMBIO: Registramos el actuador universal
+  sl.registerLazySingleton(() => ActualizarTicketUseCase(sl()));
   sl.registerLazySingleton(() => NotificarYGenerarActaUseCase(sl()));
   sl.registerLazySingleton(() => ObtenerTicketsUseCase(sl())); 
   
@@ -97,7 +99,8 @@ Future<void> init() async {
   sl.registerFactory(() => TicketBloc(
         obtenerClientes: sl(),
         crearTicket: sl(),
-        aprobarEvaluacion: sl(),
+        // ✅ CAMBIO: Inyectamos el nuevo caso de uso al BLoC
+        actualizarTicket: sl(),
         notificarYGenerarActa: sl(),
         obtenerTickets: sl(), 
       ));

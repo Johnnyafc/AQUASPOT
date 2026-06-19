@@ -5,12 +5,12 @@ import '../../../../core/errors/failures.dart';
 import '../entities/ticket_entity.dart';
 import '../repositories/ticket_repository.dart';
 
-class AprobarEvaluacionUseCase {
+class ActualizarTicketUseCase {
   final ITicketRepository repository;
 
-  AprobarEvaluacionUseCase(this.repository);
+  ActualizarTicketUseCase(this.repository);
 
   Future<Either<Failure, TicketEntity>> call(TicketEntity ticket) async {
-    return await repository.actualizarEvaluacionTecnica(ticket);
+    return await repository.actualizarTicket(ticket);
   }
 }

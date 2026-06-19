@@ -17,6 +17,7 @@ class TicketEntity extends Equatable {
   final String telefonoContacto;
   final TipoEquipo equipo;
   final String fallaReportada;
+  final String? numeroSerie;
   
   // Etapa 2 (Opcional al inicio)
   final EvaluacionTecnicaEntity? evaluacionTecnica;
@@ -38,12 +39,12 @@ class TicketEntity extends Equatable {
     required this.telefonoContacto,
     required this.equipo,
     required this.fallaReportada,
+    required this.numeroSerie,
     this.evaluacionTecnica,
     this.fotosUrls = const [],
     this.pdfActaUrl,
     required this.historialEventos,
   });
-
 
   TicketEntity copyWith({
     String? id,
@@ -55,6 +56,7 @@ class TicketEntity extends Equatable {
     String? telefonoContacto,
     TipoEquipo? equipo,
     String? fallaReportada,
+    String? numeroSerie, // <-- CORRECCIÓN: Agregado como parámetro
     EvaluacionTecnicaEntity? evaluacionTecnica,
     List<String>? fotosUrls,
     String? pdfActaUrl,
@@ -70,6 +72,7 @@ class TicketEntity extends Equatable {
       telefonoContacto: telefonoContacto ?? this.telefonoContacto,
       equipo: equipo ?? this.equipo,
       fallaReportada: fallaReportada ?? this.fallaReportada,
+      numeroSerie: numeroSerie ?? this.numeroSerie, // <-- CORRECCIÓN: Asignación en el clon
       evaluacionTecnica: evaluacionTecnica ?? this.evaluacionTecnica,
       fotosUrls: fotosUrls ?? this.fotosUrls,
       pdfActaUrl: pdfActaUrl ?? this.pdfActaUrl,
@@ -88,6 +91,7 @@ class TicketEntity extends Equatable {
         telefonoContacto,
         equipo,
         fallaReportada,
+        numeroSerie, // <-- CORRECCIÓN: Agregado al radar de Equatable
         evaluacionTecnica,
         fotosUrls,
         pdfActaUrl,

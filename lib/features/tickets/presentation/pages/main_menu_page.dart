@@ -9,6 +9,7 @@ import '../../../../features/auth/domain/entities/usuario_entity.dart';
 import 'creacion_ticket_page.dart';
 import 'historial_tickets_page.dart';
 import 'bandeja_evaluaciones_page.dart';
+import 'bandeja_recepcion_page.dart';
 
 class MainMenuPage extends StatefulWidget {
   const MainMenuPage({super.key});
@@ -126,6 +127,20 @@ class _InicioView extends StatelessWidget {
         icon: Icons.add_box,
         color: Colors.blue,
         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CreacionTicketPage())),
+      ));
+    }
+
+    // 2. MÓDULO DE RECEPCIÓN (Fase Beta - Restringido temporalmente)
+    // Cuando el comisionamiento termine, agregaremos el rol de 'recepcion' o 'requerimiento' aquí.
+    if (operador.rol == RolUsuario.supervisor || operador.rol == RolUsuario.recepcion ) {
+      modules.add(_buildCardOption(
+        title: 'Recepción Física',
+        icon: Icons.inventory_outlined, // Ícono industrial de inventario/recepción
+        color: Colors.teal, 
+        onTap: () {
+          // TODO: Descomentar cuando la vista BandejaRecepcionPage esté creada
+           Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaRecepcionPage()));
+        },
       ));
     }
 

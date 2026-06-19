@@ -6,7 +6,8 @@ import 'package:equatable/equatable.dart';
 enum RolUsuario { 
   requerimiento, 
   tecnico, 
-  supervisor, 
+  supervisor,
+  recepcion, 
   desconocido // Estado de fallo de seguridad
 }
 

@@ -79,6 +79,7 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
       telefonoContacto: _telefonoController.text,
       equipo: _selectedEquipo!,
       fallaReportada: _fallaController.text,
+      numeroSerie: null,
       historialEventos: const [], 
     );
 

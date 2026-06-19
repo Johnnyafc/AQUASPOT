@@ -50,3 +50,22 @@ class NotificarYGenerarActaEvent extends TicketEvent {
 }
 
 class ObtenerHistorialTicketsEvent extends TicketEvent {}
+
+// Añadir al final de lib/features/tickets/presentation/bloc/ticket_event.dart
+
+class ConfirmarRecepcionEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final String nombreUsuario;
+  final String rolUsuario;
+  final String notasRecepcion;
+
+  const ConfirmarRecepcionEvent({
+    required this.ticket,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+    this.notasRecepcion = '',
+  });
+
+  @override
+  List<Object> get props => [ticket, nombreUsuario, rolUsuario, notasRecepcion];
+}
