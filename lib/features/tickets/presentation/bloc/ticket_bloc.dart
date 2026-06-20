@@ -112,6 +112,7 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
     campamento: event.ticket.campamento,
     nombreContacto: event.ticket.nombreContacto,
     telefonoContacto: event.ticket.telefonoContacto,
+    emailContacto: event.ticket.emailContacto,
     equipo: event.ticket.equipo,
     fallaReportada: event.ticket.fallaReportada,
     numeroSerie: event.ticket.numeroSerie,

@@ -12,6 +12,7 @@ import '../../domain/entities/ticket_enums.dart';
 import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../../../features/auth/presentation/bloc/auth_state.dart';
 
+
 class CreacionTicketPage extends StatefulWidget {
   const CreacionTicketPage({super.key});
 
@@ -24,6 +25,7 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
   final _clienteController = TextEditingController();
   final _campamentoController = TextEditingController();
   final _nombreContactoController = TextEditingController();
+  final _emailController = TextEditingController();
   final _telefonoController = TextEditingController();
   final _fallaController = TextEditingController();
 
@@ -35,6 +37,7 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
     _clienteController.dispose();
     _campamentoController.dispose();
     _nombreContactoController.dispose();
+    _emailController.dispose();
     _telefonoController.dispose();
     _fallaController.dispose();
     super.dispose();
@@ -48,6 +51,7 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
     _campamentoController.clear();
     _nombreContactoController.clear();
     _telefonoController.clear();
+    _emailController.clear();
     _fallaController.clear();
     
     setState(() {
@@ -78,6 +82,7 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
       campamento: _campamentoController.text,
       nombreContacto: _nombreContactoController.text,
       telefonoContacto: _telefonoController.text,
+      emailContacto: _emailController.text,
       equipo: _selectedEquipo!,
       fallaReportada: _fallaController.text,
       numeroSerie: null,
@@ -144,7 +149,8 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
                           const SizedBox(height: 16),
                           _buildTextField(_clienteController, 'Razón Social / Cliente', Icons.person),
                           _buildTextField(_campamentoController, 'Campamento / Finca', Icons.map),
-                          _buildTextField(_nombreContactoController, 'Contacto', Icons.phone_android),
+                          _buildTextField(_nombreContactoController, 'Nombre contacto', Icons.phone_android),
+                          _buildTextField(_emailController, 'Correo electronico', Icons.email, keyboard: TextInputType.emailAddress),
                           _buildTextField(_telefonoController, 'Teléfono', Icons.phone, keyboard: TextInputType.phone),
                           const SizedBox(height: 16),
                           _buildDropdownField<TipoEquipo>(

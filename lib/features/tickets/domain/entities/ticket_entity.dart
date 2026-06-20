@@ -14,6 +14,7 @@ class TicketEntity extends Equatable {
   final String clienteId;
   final String campamento;
   final String nombreContacto;
+  final String emailContacto;
   final String telefonoContacto;
   final TipoEquipo equipo;
   final String fallaReportada;
@@ -36,6 +37,7 @@ class TicketEntity extends Equatable {
     required this.clienteId,
     required this.campamento,
     required this.nombreContacto,
+    required this.emailContacto,
     required this.telefonoContacto,
     required this.equipo,
     required this.fallaReportada,
@@ -53,6 +55,7 @@ class TicketEntity extends Equatable {
     String? clienteId,
     String? campamento,
     String? nombreContacto,
+    String? emailContacto,
     String? telefonoContacto,
     TipoEquipo? equipo,
     String? fallaReportada,
@@ -69,6 +72,7 @@ class TicketEntity extends Equatable {
       clienteId: clienteId ?? this.clienteId,
       campamento: campamento ?? this.campamento,
       nombreContacto: nombreContacto ?? this.nombreContacto,
+      emailContacto: emailContacto ?? this.emailContacto,
       telefonoContacto: telefonoContacto ?? this.telefonoContacto,
       equipo: equipo ?? this.equipo,
       fallaReportada: fallaReportada ?? this.fallaReportada,
@@ -88,6 +92,7 @@ class TicketEntity extends Equatable {
         clienteId,
         campamento,
         nombreContacto,
+        emailContacto,
         telefonoContacto,
         equipo,
         fallaReportada,

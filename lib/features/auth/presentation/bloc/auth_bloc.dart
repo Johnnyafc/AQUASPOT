@@ -48,7 +48,15 @@ Future<void> _onIniciarSesion(IniciarSesionEvent event, Emitter<AuthState> emit)
   );
 }
 
-  Future<void> _onCerrarSesion(CerrarSesionEvent event, Emitter<AuthState> emit) async {
+Future<void> _onCerrarSesion(CerrarSesionEvent event, Emitter<AuthState> emit) async {
+    // 1. PROTOCOLO DE DESENCLAVAMIENTO: Recuperamos el UID antes de destruir el estado
+    if (state is Authenticated) {
+      final operarioEnTurno = (state as Authenticated).usuario;
+      // Purga de token en Firestore y en la memoria del dispositivo
+      await NotificationService.eliminarToken(operarioEnTurno.uid); 
+    }
+
+    // 2. Iniciamos secuencia de apagado
     emit(AuthLoading());
     final failureOrSuccess = await cerrarSesion();
     

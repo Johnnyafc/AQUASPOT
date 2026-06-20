@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import '../../domain/entities/ticket_entity.dart';
+import 'full_photo_page.dart';
 
 class DetalleTicketPage extends StatelessWidget {
   final TicketEntity ticket;
@@ -75,32 +76,42 @@ class DetalleTicketPage extends StatelessWidget {
   }
 
   // ✅ COMPONENTE DE RENDERIZADO DE IMÁGENES
-  Widget _buildEvidenciasCard() {
-    if (ticket.fotosUrls.isEmpty) {
-      return Card(
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: const Padding(
-          padding: EdgeInsets.all(20),
-          child: Center(
-            child: Text('Sin evidencia fotográfica.', style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
-          ),
-        ),
-      );
-    }
-
+Widget _buildEvidenciasCard() {
+  if (ticket.fotosUrls.isEmpty) {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: SizedBox(
-          height: 120, // Altura del rack de imágenes
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: ticket.fotosUrls.length,
-            itemBuilder: (context, index) {
-              return Container(
+      child: const Padding(
+        padding: EdgeInsets.all(20),
+        child: Center(
+          child: Text('Sin evidencia fotográfica.', style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
+        ),
+      ),
+    );
+  }
+
+  return Card(
+    elevation: 2,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: SizedBox(
+        height: 120,
+        child: ListView.builder(
+          scrollDirection: Axis.horizontal,
+          itemCount: ticket.fotosUrls.length,
+          itemBuilder: (context, index) {
+            // ✅ ACTUADOR: Detecta el tap y navega al visor
+            return GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => FullPhotoPage(imageUrl: ticket.fotosUrls[index]),
+                  ),
+                );
+              },
+              child: Container(
                 margin: const EdgeInsets.only(right: 12),
                 width: 120,
                 decoration: BoxDecoration(
@@ -121,16 +132,17 @@ class DetalleTicketPage extends StatelessWidget {
                     },
                   ),
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          },
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildTimelineCard() {
-    // Ordenamos para que el evento más reciente salga arriba (Opcional pero recomendado en industria)
+    // Ordenamos la matriz para que el evento más reciente salga arriba (LIFO)
     final eventosOrdenados = List.from(ticket.historialEventos)
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
@@ -141,6 +153,7 @@ class DetalleTicketPage extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: eventosOrdenados.map((evento) {
+            // Formateo del timestamp tipo SCADA (YYYY-MM-DD HH:MM)
             final fechaStr = evento.timestamp.toString().substring(0, 16);
             
             return Padding(

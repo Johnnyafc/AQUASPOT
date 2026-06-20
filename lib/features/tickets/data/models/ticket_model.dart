@@ -14,6 +14,7 @@ class TicketModel extends TicketEntity {
     required super.campamento,
     required super.nombreContacto,
     required super.telefonoContacto,
+    required super.emailContacto,
     required super.equipo,
     required super.fallaReportada,
     super.numeroSerie, // ✅ CONSTRUCTOR: Parámetro aceptado
@@ -38,6 +39,7 @@ class TicketModel extends TicketEntity {
       campamento: json['campamento'] ?? '',
       nombreContacto: json['nombreContacto'] ?? '',
       telefonoContacto: json['telefonoContacto'] ?? '',
+      emailContacto: json['emailContacto'] ?? '',
       equipo: TipoEquipo.values.firstWhere(
         (e) => e.name == json['equipo'],
         orElse: () => TipoEquipo.maquina,
@@ -66,6 +68,7 @@ class TicketModel extends TicketEntity {
       campamento: entity.campamento,
       nombreContacto: entity.nombreContacto,
       telefonoContacto: entity.telefonoContacto,
+      emailContacto: entity.emailContacto,
       equipo: entity.equipo,
       fallaReportada: entity.fallaReportada,
       numeroSerie: entity.numeroSerie, // ✅ MAPEO: De la entidad abstracta al modelo concreto
@@ -89,6 +92,7 @@ class TicketModel extends TicketEntity {
       'campamento': campamento,
       'nombreContacto': nombreContacto,
       'telefonoContacto': telefonoContacto,
+      'emailContacto': emailContacto,
       'equipo': equipo.name,
       'fallaReportada': fallaReportada,
       'numeroSerie': numeroSerie, // ✅ ESCRITURA: Empaquetamos el dato para enviarlo a Firebase

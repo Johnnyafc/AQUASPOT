@@ -10,6 +10,9 @@ import '../../domain/entities/ticket_enums.dart'; // ✅ AÑADIDO: Import del en
 import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_event.dart';
 import '../bloc/ticket_state.dart';
+import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
+import '../../../../features/auth/presentation/bloc/auth_state.dart';
+import '../../domain/entities/evento_auditoria_entity.dart';
 
 class FormularioRecepcionPage extends StatefulWidget {
   final TicketEntity ticket;
@@ -264,33 +267,45 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
   // --- Lógica de Control ---
 void _procesarRecepcion() {
     if (!_formKey.currentState!.validate()) return;
+
+    // 1. Extraemos las credenciales (Identificación del Operario)
+    final authState = context.read<AuthBloc>().state;
+    String nombreOperador = 'SISTEMA';
+    String rolOperador = 'TÉCNICO';
+
+    if (authState is Authenticated) {
+      nombreOperador = authState.usuario.nombre;
+      rolOperador = authState.usuario.rol.name.toUpperCase();
+    }
     
-    // Mutamos el estado al siguiente nivel de la cadena productiva
+    // 2. Mutamos SOLO el estado y los datos físicos (CERO auditoría aquí)
     final ticketActualizado = TicketEntity(
       id: widget.ticket.id,
-      estadoActual: EstadoTicket.recepcionFisica, // ✅ Avanzamos la fase
+      estadoActual: EstadoTicket.recepcionFisica, // Avanzamos la fase
       sede: widget.ticket.sede,
       clienteId: widget.ticket.clienteId,
       campamento: widget.ticket.campamento,
       nombreContacto: widget.ticket.nombreContacto,
       telefonoContacto: widget.ticket.telefonoContacto,
+      emailContacto: widget.ticket.emailContacto,
       equipo: widget.ticket.equipo,
       fallaReportada: '${widget.ticket.fallaReportada}\n[RECEPCIÓN]: ${_descripcionController.text}',
       numeroSerie: widget.ticket.numeroSerie,
+      // PASAMOS LA LISTA TAL CUAL ESTABA. El BLoC le inyectará el nuevo evento.
       historialEventos: widget.ticket.historialEventos, 
-      fotosUrls: widget.ticket.fotosUrls, // Mantenemos las fotos previas
+      fotosUrls: widget.ticket.fotosUrls, 
     );
 
-    // ✅ DISPARO FINAL USANDO EL EVENTO CORRECTO
+    // 3. Disparo final al BLoC. Le pasamos el nombre y rol para que ÉL audite.
     context.read<TicketBloc>().add(ConfirmarRecepcionEvent(
       ticket: ticketActualizado,
-      nombreUsuario: 'SISTEMA', 
-      rolUsuario: 'TÉCNICO',
-      notasRecepcion: _descripcionController.text, // Pasamos la nota
-      evidencias: _archivosEvidencia, // ✅ Mandamos las fotos físicas al BLoC
+      nombreUsuario: nombreOperador, 
+      rolUsuario: rolOperador,
+      notasRecepcion: _descripcionController.text, 
+      evidencias: _archivosEvidencia,
     ));
   }
-
+  
   void _mostrarOpcionesCaptura(BuildContext context) {
     showModalBottomSheet(
       context: context,
