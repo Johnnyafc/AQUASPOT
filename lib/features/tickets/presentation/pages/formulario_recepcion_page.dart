@@ -13,6 +13,8 @@ import '../bloc/ticket_state.dart';
 import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../../../features/auth/presentation/bloc/auth_state.dart';
 import '../../domain/entities/evento_auditoria_entity.dart';
+import '../../../../core/services/pdf_service.dart';
+import 'package:printing/printing.dart';
 
 class FormularioRecepcionPage extends StatefulWidget {
   final TicketEntity ticket;
@@ -120,16 +122,49 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
       ),
-      body: BlocConsumer<TicketBloc, TicketState>(
-        listener: (context, state) {
-          if (state is TicketError) {
-             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.red));
-          } else if (state is TicketOperationSuccess ) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Recepción exitosa y evidencias subidas'), backgroundColor: Colors.green));
-            if (!context.mounted) return;
-            Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
-          }
-        },
+body: BlocConsumer<TicketBloc, TicketState>(
+listener: (context, state) async {
+  debugPrint("📡 [PUNTO B]: El BLoC ha emitido un nuevo estado: $state");
+
+  if (state is TicketError) {
+    debugPrint("❌ [PUNTO B]: El BLoC devolvió un error: ${state.message}");
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(state.message), backgroundColor: Colors.red)
+    );
+  } else if (state is TicketOperationSuccess) {
+    debugPrint("🎉 [PUNTO B]: ¡ÉXITO! Estado TicketOperationSuccess recibido. Entrando al bloque del PDF.");
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Recepción exitosa, generando acta...'), backgroundColor: Colors.teal)
+    );
+
+    try {
+      debugPrint("⚙️ [PUNTO C]: Invocando PdfService...");
+      final pdfService = PdfService();
+      
+      final pdfBytes = await pdfService.generateActaRecepcion(
+        ticket: widget.ticket,
+        tipoRequerimiento: _tipoRequerimiento,
+        descripcion: _descripcionController.text,
+      );
+      
+      debugPrint("📄 [PUNTO C]: Bytes del PDF generados con éxito (${pdfBytes.length} bytes). Lanzando Printing.layoutPdf...");
+
+      await Printing.layoutPdf(
+        onLayout: (format) async => pdfBytes,
+        name: 'Acta_Recepcion_${widget.ticket.id}.pdf',
+      );
+      
+      debugPrint("✅ [PUNTO C]: Printing.layoutPdf ejecutado sin excepciones.");
+    } catch (e, stacktrace) {
+      debugPrint("💥 CRITICAL [PUNTO C]: La generación o renderizado del PDF colapsó de forma nativa: $e");
+      debugPrint("$stacktrace");
+    }
+
+    if (!context.mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+  }
+},
         builder: (context, state) {
           return Form(
             key: _formKey,
@@ -266,8 +301,9 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
 
   // --- Lógica de Control ---
 void _procesarRecepcion() {
+  debugPrint("⚙️ [PUNTO A]: Pulsado el botón Confirmar Recepción");
     if (!_formKey.currentState!.validate()) return;
-
+debugPrint("❌ [PUNTO A]: El formulario NO es válido. Revisa los campos requeridos.");
     // 1. Extraemos las credenciales (Identificación del Operario)
     final authState = context.read<AuthBloc>().state;
     String nombreOperador = 'SISTEMA';
