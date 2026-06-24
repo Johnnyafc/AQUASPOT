@@ -20,6 +20,7 @@ class TicketEntity extends Equatable {
   final String fallaReportada;
   final String? numeroSerie;
   
+  
   // Etapa 2 (Opcional al inicio)
   final EvaluacionTecnicaEntity? evaluacionTecnica;
   

@@ -15,6 +15,8 @@ import '../../../../features/auth/presentation/bloc/auth_state.dart';
 import '../../domain/entities/evento_auditoria_entity.dart';
 import '../../../../core/services/pdf_service.dart';
 import 'package:printing/printing.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'dart:typed_data';
 
 class FormularioRecepcionPage extends StatefulWidget {
   final TicketEntity ticket;
@@ -146,6 +148,7 @@ listener: (context, state) async {
         ticket: widget.ticket,
         tipoRequerimiento: _tipoRequerimiento,
         descripcion: _descripcionController.text,
+        evidencias: _archivosEvidencia,
       );
       
       debugPrint("📄 [PUNTO C]: Bytes del PDF generados con éxito (${pdfBytes.length} bytes). Lanzando Printing.layoutPdf...");
@@ -275,6 +278,39 @@ listener: (context, state) async {
     );
   }
 
+
+// ⚙️ FILTRO DE COMPRESIÓN INDUSTRIAL
+  Future<File?> _comprimirImagen(File file) async {
+    final filePath = file.absolute.path;
+    
+    // Generamos una nueva ruta temporal para el archivo comprimido
+    final outPath = filePath.replaceAll(
+      RegExp(r'\.(png|jpg|jpeg)$', caseSensitive: false), 
+      '_comprimido.jpg'
+    );
+
+    // Ejecutamos la reducción de resolución y calidad
+    final XFile? result = await FlutterImageCompress.compressAndGetFile(
+      file.absolute.path,
+      outPath,
+      quality: 60,        // 60% es el punto dulce entre legibilidad y peso
+      minWidth: 1024,     // Limitamos a 1 Megapíxel aprox. No necesitamos 4K para un acta.
+      minHeight: 1024,
+      format: CompressFormat.jpeg, // Forzamos formato estándar
+    );
+
+    if (result == null) return null;
+
+    final compressedFile = File(result.path);
+    
+    // Telemetría para depuración (opcional, para que veas la magia)
+    debugPrint("📉 Tamaño Original: ${(file.lengthSync() / 1024).toStringAsFixed(2)} KB");
+    debugPrint("📉 Tamaño Comprimido: ${(compressedFile.lengthSync() / 1024).toStringAsFixed(2)} KB");
+
+    return compressedFile;
+  }
+
+
   Widget _buildInputField({
     required String label, 
     required TextEditingController controller, 
@@ -300,11 +336,10 @@ listener: (context, state) async {
   }
 
   // --- Lógica de Control ---
-void _procesarRecepcion() {
-  debugPrint("⚙️ [PUNTO A]: Pulsado el botón Confirmar Recepción");
+Future<void> _procesarRecepcion() async {
+    // 1. Validaciones de la HMI
     if (!_formKey.currentState!.validate()) return;
-debugPrint("❌ [PUNTO A]: El formulario NO es válido. Revisa los campos requeridos.");
-    // 1. Extraemos las credenciales (Identificación del Operario)
+
     final authState = context.read<AuthBloc>().state;
     String nombreOperador = 'SISTEMA';
     String rolOperador = 'TÉCNICO';
@@ -314,32 +349,68 @@ debugPrint("❌ [PUNTO A]: El formulario NO es válido. Revisa los campos requer
       rolOperador = authState.usuario.rol.name.toUpperCase();
     }
     
-    // 2. Mutamos SOLO el estado y los datos físicos (CERO auditoría aquí)
-    final ticketActualizado = TicketEntity(
-      id: widget.ticket.id,
-      estadoActual: EstadoTicket.recepcionFisica, // Avanzamos la fase
-      sede: widget.ticket.sede,
-      clienteId: widget.ticket.clienteId,
-      campamento: widget.ticket.campamento,
-      nombreContacto: widget.ticket.nombreContacto,
-      telefonoContacto: widget.ticket.telefonoContacto,
-      emailContacto: widget.ticket.emailContacto,
-      equipo: widget.ticket.equipo,
-      fallaReportada: '${widget.ticket.fallaReportada}\n[RECEPCIÓN]: ${_descripcionController.text}',
-      numeroSerie: widget.ticket.numeroSerie,
-      // PASAMOS LA LISTA TAL CUAL ESTABA. El BLoC le inyectará el nuevo evento.
-      historialEventos: widget.ticket.historialEventos, 
-      fotosUrls: widget.ticket.fotosUrls, 
+    // Feedback visual para evitar doble toque
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.teal)),
     );
 
-    // 3. Disparo final al BLoC. Le pasamos el nombre y rol para que ÉL audite.
-    context.read<TicketBloc>().add(ConfirmarRecepcionEvent(
-      ticket: ticketActualizado,
-      nombreUsuario: nombreOperador, 
-      rolUsuario: rolOperador,
-      notasRecepcion: _descripcionController.text, 
-      evidencias: _archivosEvidencia,
-    ));
+    try {
+      // ========================================================
+      // ⚙️ 2. ZONA DE FABRICACIÓN (Scope local)
+      // ========================================================
+      final pdfService = PdfService();
+      
+      // Declaramos la variable AQUÍ adentro
+      final bytesGenerados = await pdfService.generateActaRecepcion(
+        ticket: widget.ticket,
+        tipoRequerimiento: _tipoRequerimiento,
+        descripcion: _descripcionController.text,
+        evidencias: _archivosEvidencia,
+      );
+
+      final ticketActualizado = TicketEntity(
+        id: widget.ticket.id,
+        estadoActual: EstadoTicket.recepcionFisica, 
+        sede: widget.ticket.sede,
+        clienteId: widget.ticket.clienteId,
+        campamento: widget.ticket.campamento,
+        nombreContacto: widget.ticket.nombreContacto,
+        telefonoContacto: widget.ticket.telefonoContacto,
+        emailContacto: widget.ticket.emailContacto,
+        equipo: widget.ticket.equipo,
+        fallaReportada: '${widget.ticket.fallaReportada}\n[RECEPCIÓN]: ${_descripcionController.text}',
+        numeroSerie: widget.ticket.numeroSerie,
+        historialEventos: widget.ticket.historialEventos, 
+        fotosUrls: widget.ticket.fotosUrls, 
+      );
+
+      if (context.mounted) {
+        Navigator.pop(context); // Retiramos el loading
+
+        // ========================================================
+        // 🚀 3. DISPARO AL BLoC (Dentro del mismo Scope)
+        // ========================================================
+        // Como seguimos dentro del 'try', bytesGenerados existe y está viva.
+        context.read<TicketBloc>().add(ConfirmarRecepcionEvent(
+          ticket: ticketActualizado,
+          nombreUsuario: nombreOperador, 
+          rolUsuario: rolOperador,
+          notasRecepcion: _descripcionController.text,
+          evidencias: _archivosEvidencia,
+          pdfBytes: bytesGenerados, // ✅ Conexión sólida y sin fugas
+        ));
+      }
+    } catch (e) {
+      // Si el PDF falla, caemos aquí
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al empaquetar PDF: $e'), backgroundColor: Colors.red)
+        );
+      }
+    }
   }
   
   void _mostrarOpcionesCaptura(BuildContext context) {
@@ -380,7 +451,7 @@ debugPrint("❌ [PUNTO A]: El formulario NO es válido. Revisa los campos requer
     );
   }
 
-  Future<void> _capturarMedio(ImageSource source, {required bool esVideo}) async {
+Future<void> _capturarMedio(ImageSource source, {required bool esVideo}) async {
     final ImagePicker picker = ImagePicker();
     XFile? archivo;
 
@@ -393,19 +464,35 @@ debugPrint("❌ [PUNTO A]: El formulario NO es válido. Revisa los campos requer
       } else {
         archivo = await picker.pickImage(
           source: source,
-          imageQuality: 70, 
+          // Ya no dependemos del quality del picker, pero lo dejamos como pre-filtro
+          imageQuality: 85, 
         );
       }
 
       if (archivo != null) {
-        setState(() {
-          _archivosEvidencia.add(File(archivo!.path));
-        });
+        if (esVideo) {
+          // Los videos no van al PDF, pasan directo a la lista para el BLoC/Storage
+          setState(() {
+            _archivosEvidencia.add(File(archivo!.path));
+          });
+        } else {
+          // ⚙️ ENRUTAMOS LA IMAGEN AL COMPRESOR ANTES DE GUARDARLA
+          File originalFile = File(archivo.path);
+          File? compressedFile = await _comprimirImagen(originalFile);
+
+          if (compressedFile != null) {
+            setState(() {
+              _archivosEvidencia.add(compressedFile);
+            });
+          }
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al acceder al hardware: $e'), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error hardware cámara: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 }

@@ -13,6 +13,7 @@ import '../models/ticket_model.dart';
 import '../models/evento_auditoria_model.dart';
 import '../datasources/storage_remote_datasource.dart';
 import 'dart:io';
+import 'dart:typed_data';
 
 
 class TicketRepositoryImpl implements ITicketRepository {
@@ -83,6 +84,17 @@ class TicketRepositoryImpl implements ITicketRepository {
       return Left(ServerFailure(e.message)); 
     } catch (e) {
       return Left(ServerFailure('Error inesperado al leer el historial SCADA: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, String>> subirActaPdfStorage(String ticketId, Uint8List pdfBytes) async {
+    try {
+      // remoteDataSource es la instancia que ya tienes inyectada en tu clase
+      final url = await firebaseDataSource.subirActaPdfStorage(ticketId, pdfBytes);
+      return Right(url);
+    } catch (e) {
+      return Left(ServerFailure("Hubo un error en subir el pdf"));
     }
   }
 

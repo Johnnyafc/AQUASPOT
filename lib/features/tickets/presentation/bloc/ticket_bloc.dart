@@ -11,6 +11,7 @@ import '../../domain/usecases/subir_evidencia_usecase.dart';
 import '../../domain/entities/evento_auditoria_entity.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/entities/ticket_enums.dart'; 
+import '../../domain/usecases/subir_acta_pdf_usecase.dart';
 import 'ticket_event.dart';
 import 'ticket_state.dart';
 
@@ -21,6 +22,7 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
   final ObtenerTicketsUseCase obtenerTickets; 
   final ActualizarTicketUseCase actualizarTicket;
   final SubirEvidenciaUseCase subirEvidenciaUseCase; 
+  final SubirActaPdfUseCase subirActaPdfUseCase;
 
   TicketBloc({
     required this.obtenerClientes,
@@ -28,7 +30,8 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     required this.notificarYGenerarActa,
     required this.obtenerTickets,
     required this.actualizarTicket,
-    required this.subirEvidenciaUseCase, 
+    required this.subirEvidenciaUseCase,
+    required this.subirActaPdfUseCase, 
   }) : super(TicketInitial()) {
     on<ObtenerClientesEvent>(_onObtenerClientes);
     on<CrearTicketEvent>(_onCrearTicket);
@@ -186,10 +189,9 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
 
   List<String> urlsNuevas = [];
 
-  // 1. FASE DE TRANSMISIÓN: Subida secuencial de evidencias al bucket
+  // 1. FASE DE TRANSMISIÓN 1: Subida de evidencias (Fotos)
   if (event.evidencias.isNotEmpty) {
     for (final file in event.evidencias) {
-      // ✅ Usamos el ID del ticket original para guardarlo en su carpeta correcta
       final uploadResult = await subirEvidenciaUseCase(file, event.ticket.id);
       
       bool tieneFalla = false;
@@ -203,38 +205,57 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
         (url) => urlsNuevas.add(url),
       );
 
-      // PARADA DE EMERGENCIA: Si falla una foto, abortamos la actualización
       if (tieneFalla) {
-        emit(TicketError(message: mensajeFalla));
+        emit(TicketError(message: "Falla al subir fotos: $mensajeFalla"));
         return; 
       }
     }
   }
 
-  // 2. ENSAMBLAJE: Fusionamos las URLs que ya tenía el ticket con las nuevas
-final List<String> urlsTotales = [...event.ticket.fotosUrls, ...urlsNuevas];
+  // ⚙️ 2. FASE DE TRANSMISIÓN 2: Subida del Acta PDF
+  final pdfUploadResult = await subirActaPdfUseCase(event.ticket.id, event.pdfBytes);
   
-  // ✅ CREAMOS EL REGISTRO DE AUDITORÍA
+  String urlPdfFinal = '';
+  bool falloPdf = false;
+  String mensajeFalloPdf = '';
+
+  pdfUploadResult.fold(
+    (failure) {
+      falloPdf = true;
+      mensajeFalloPdf = _mapFailureToMessage(failure);
+    },
+    (url) => urlPdfFinal = url,
+  );
+
+  // PARADA DE EMERGENCIA: Si no hay PDF, no podemos confirmar la recepción
+  if (falloPdf) {
+    emit(TicketError(message: "Falla al guardar el documento PDF: $mensajeFalloPdf"));
+    return;
+  }
+
+  // 3. ENSAMBLAJE: Fusionamos las URLs y creamos la auditoría
+  final List<String> urlsTotales = [...event.ticket.fotosUrls, ...urlsNuevas];
+  
   final eventoRecepcion = EventoAuditoriaEntity(
-    accion: 'RECEPCIÓN FÍSICA Y CAPTURA DE EVIDENCIA',
+    accion: 'RECEPCIÓN FÍSICA Y EMISIÓN DE ACTA',
     usuarioNombre: event.nombreUsuario,
     usuarioRol: event.rolUsuario,
     timestamp: DateTime.now(),
   );
 
+  // ✅ INYECCIÓN DE DATOS AL TICKET
   final ticketListoParaActualizar = event.ticket.copyWith(
     fotosUrls: urlsTotales,
-    // ✅ AÑADIMOS EL EVENTO AL LOG HISTÓRICO
+    pdfActaUrl: urlPdfFinal, // 🚀 AQUÍ ESTÁ EL ESLABÓN PERDIDO. La URL se guarda en Firestore.
     historialEventos: [...event.ticket.historialEventos, eventoRecepcion], 
   );
 
-  // 3. PERSISTENCIA: Ejecutamos la sobrescritura en Firestore
-  // ✅ Usamos actualizarTicket en lugar de crearTicket
+  // 4. PERSISTENCIA: Sobrescritura en Firestore
   final dbResult = await actualizarTicket(ticketListoParaActualizar); 
   
   dbResult.fold(
     (failure) => emit(TicketError(message: _mapFailureToMessage(failure))),
-    (ticketActualizado) => emit(TicketOperationSuccess(message: 'Recepción confirmada y evidencias subidas con éxito')), 
+    (ticketActualizado) => emit(TicketOperationSuccess(message: 'Recepción confirmada. Acta y fotos procesadas con éxito.')), 
   );
 }
 }

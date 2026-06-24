@@ -1,8 +1,29 @@
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
+import * as nodemailer from "nodemailer";
+import * as logger from "firebase-functions/logger";
 
 admin.initializeApp();
 
+// ============================================================================
+// ⚙️ MOTOR SMTP CORPORATIVO (Inicializado fuera para reusar la conexión TCP)
+// ============================================================================
+const transporter = nodemailer.createTransport({
+  host: "smtp.office365.com", // ⚠️ REEMPLAZAR con el host de tu correo (OVH, Microsoft, Workspace)
+  port: 587,
+  secure: false, // false para 587, true para 465
+  auth: {
+    user: "soporte@tuempresa.com", // ⚠️ REEMPLAZAR con tu cuenta real
+    pass: "tu_contraseña_aqui"     // ⚠️ REEMPLAZAR con tu clave corporativa
+  },
+  tls: {
+    ciphers: 'SSLv3' 
+  }
+});
+
+// ============================================================================
+// 📱 MÓDULO 1: ALARMA A SUPERVISORES (PUSH)
+// ============================================================================
 export const notificarSupervisor = onDocumentCreated(
   "tickets/{ticketId}",
   async (event) => {
@@ -41,6 +62,9 @@ export const notificarSupervisor = onDocumentCreated(
   }
 );
 
+// ============================================================================
+// 📱 MÓDULO 2: NOTIFICACIÓN A TÉCNICOS (PUSH)
+// ============================================================================
 export const notificarRecepcion = onDocumentUpdated(
   "tickets/{ticketId}",
   async (event) => {
@@ -58,7 +82,7 @@ export const notificarRecepcion = onDocumentUpdated(
       
       const receptores = await admin.firestore()
         .collection("usuarios")
-        .where("rol", "==", "recepcion") // Asegúrate que este sea el string exacto en tu BD
+        .where("rol", "==", "recepcion") 
         .get();
 
       const mensajes: Promise<any>[] = [];
@@ -85,3 +109,65 @@ export const notificarRecepcion = onDocumentUpdated(
   }
 );
 
+// ============================================================================
+// ✉️ MÓDULO 3: ACTA DE RECEPCIÓN AL CLIENTE (EMAIL SMTP)
+// ============================================================================
+export const enviarCorreoActaCliente = onDocumentUpdated(
+  "tickets/{ticketId}",
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+
+    const docBefore = snap.before.data();
+    const docAfter = snap.after.data();
+
+    const estadoAnterior = docBefore.estadoActual;
+    const estadoNuevo = docAfter.estadoActual;
+    const urlPdf = docAfter.pdfActaUrl;
+    const emailCliente = docAfter.emailContacto;
+    const nombreContacto = docAfter.nombreContacto || "Cliente";
+
+    // Compuerta Lógica: Solo disparamos cuando el equipo ingresa físicamente al laboratorio
+    if (estadoNuevo === "recepcionFisica" && estadoAnterior !== "recepcionFisica") {
+      
+      if (!urlPdf || !emailCliente) {
+        logger.warn(`[Ticket ${event.params.ticketId}] Operación abortada: Falta PDF o correo del cliente.`);
+        return;
+      }
+
+      logger.info(`Iniciando telemetría SMTP para ticket ${event.params.ticketId} hacia ${emailCliente}`);
+
+      const mailOptions = {
+        from: '"Soporte Técnico Aquaspot" <jhonnyflores2806@gmail.com>', // ⚠️ DEBE COINCIDIR CON EL CORREO EN AUTH
+        to: emailCliente,
+        subject: `Acuse de Recepción Técnica - Ticket #${event.params.ticketId}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: auto; border: 1px solid #ddd; border-radius: 8px;">
+              <div style="background-color: #008080; padding: 20px; text-align: center;">
+                  <h2 style="color: white; margin: 0;">Confirmación de Ingreso</h2>
+              </div>
+              <div style="padding: 30px;">
+                  <p>Estimado/a <strong>${nombreContacto}</strong>,</p>
+                  <p>Le notificamos de manera oficial que su equipo ha sido ingresado a nuestro laboratorio para su inspección.</p>
+                  <p>Puede descargar su acta de recepción (con registro fotográfico) en el siguiente enlace seguro:</p>
+                  <div style="text-align: center; margin: 40px 0;">
+                      <a href="${urlPdf}" style="background-color: #008080; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                          📄 Descargar Acta PDF
+                      </a>
+                  </div>
+                  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+                  <p style="font-size: 12px; color: #777; text-align: center;">Atentamente,<br>Ingeniería Aquaspot</p>
+              </div>
+          </div>
+        `,
+      };
+
+      try {
+        await transporter.sendMail(mailOptions);
+        logger.info(`✅ Acta del ticket ${event.params.ticketId} despachada exitosamente al cliente.`);
+      } catch (error) {
+        logger.error("💥 Falla crítica en el actuador de correo SMTP:", error);
+      }
+    }
+  }
+);

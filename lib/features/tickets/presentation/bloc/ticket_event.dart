@@ -3,6 +3,7 @@
 import 'package:equatable/equatable.dart';
 import '../../domain/entities/ticket_entity.dart';
 import 'dart:io';
+import 'dart:typed_data';
 
 abstract class TicketEvent extends Equatable {
   const TicketEvent();
@@ -72,11 +73,13 @@ class ConfirmarRecepcionEvent extends TicketEvent {
   final String rolUsuario;
   final String notasRecepcion;
   final List<File> evidencias; // ✅ NUEVO: Puerto para la telemetría visual
+  final Uint8List pdfBytes;
 
   const ConfirmarRecepcionEvent({
     required this.ticket,
     required this.nombreUsuario,
     required this.rolUsuario,
+    required this.pdfBytes,
     this.notasRecepcion = '',
     this.evidencias = const [], // Valor por defecto vacío para no quebrar otras partes
   });

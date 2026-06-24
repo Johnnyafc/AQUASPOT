@@ -5,6 +5,7 @@ import '../../../../core/errors/failures.dart';
 import '../entities/cliente_entity.dart';
 import '../entities/ticket_entity.dart';
 import 'dart:io';
+import 'dart:typed_data';
 
 abstract class ITicketRepository {
   Future<Either<Failure, List<ClienteEntity>>> obtenerClientes();
@@ -15,6 +16,8 @@ abstract class ITicketRepository {
   Future<Either<Failure, TicketEntity>> actualizarTicket(TicketEntity ticket);
   
   Future<Either<Failure, TicketEntity>> notificarYGenerarActa(TicketEntity ticket);
+  // Añade esta línea dentro de tu abstract class TicketRepository:
+Future<Either<Failure, String>> subirActaPdfStorage(String ticketId, Uint8List pdfBytes);
   // Añadir en ITicketRepository
   Future<Either<Failure, String>> subirEvidencia(File file, String ticketId);
 }

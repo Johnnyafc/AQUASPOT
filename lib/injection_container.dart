@@ -5,25 +5,27 @@ import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get_it/get_it.dart';
 import 'package:internet_connection_checker/internet_connection_checker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 import 'core/network/network_info.dart';
 
 // --- FEATURE: TICKETS ---
 import 'features/tickets/data/datasources/ticket_remote_datasource.dart';
 import 'features/tickets/data/datasources/webhook_remote_datasource.dart';
+import 'features/tickets/data/datasources/storage_remote_datasource.dart';
+import 'features/tickets/data/datasources/storage_remote_datasource_impl.dart';
 import 'features/tickets/data/repositories/ticket_repository_impl.dart';
 import 'features/tickets/domain/repositories/ticket_repository.dart';
-// ✅ CAMBIO: Importamos el nuevo caso de uso unificado (Eliminado el de aprobar_evaluacion)
+
 import 'features/tickets/domain/usecases/ActualizarTicketUseCase.dart';
 import 'features/tickets/domain/usecases/crear_ticket_usecase.dart';
 import 'features/tickets/domain/usecases/subir_evidencia_usecase.dart';
+// ⚙️ NUEVO: Importamos el inyector del PDF
+import 'features/tickets/domain/usecases/subir_acta_pdf_usecase.dart'; 
 import 'features/tickets/domain/usecases/notificar_y_generar_acta_usecase.dart';
 import 'features/tickets/domain/usecases/obtener_clientes_usecase.dart';
 import 'features/tickets/domain/usecases/obtener_tickets_usecase.dart'; 
 import 'features/tickets/presentation/bloc/ticket_bloc.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'features/tickets/data/datasources/storage_remote_datasource.dart';
-import 'features/tickets/data/datasources/storage_remote_datasource_impl.dart';
 
 // --- FEATURE: AUTH ---
 import 'features/auth/data/datasources/auth_remote_datasource.dart';
@@ -63,6 +65,9 @@ Future<void> init() async {
   sl.registerLazySingleton<WebhookRemoteDataSource>(
     () => WebhookRemoteDataSourceImpl(dio: sl()),
   );
+  sl.registerLazySingleton<StorageRemoteDataSource>(
+    () => StorageRemoteDataSourceImpl(storage: sl<FirebaseStorage>()),
+  );
   sl.registerLazySingleton<ITicketRepository>(
     () => TicketRepositoryImpl(
       firebaseDataSource: sl(),
@@ -83,9 +88,6 @@ Future<void> init() async {
       firebaseAuth: sl(),
     ),
   );
-  sl.registerLazySingleton<StorageRemoteDataSource>(
-  () => StorageRemoteDataSourceImpl(storage: sl<FirebaseStorage>()),
-);
 
   // ===========================================================================
   // 4. CAPA DE DOMINIO (UseCases)
@@ -93,28 +95,29 @@ Future<void> init() async {
   // Tickets
   sl.registerLazySingleton(() => ObtenerClientesUseCase(sl()));
   sl.registerLazySingleton(() => CrearTicketUseCase(sl()));
-  // ✅ CAMBIO: Registramos el actuador universal
   sl.registerLazySingleton(() => ActualizarTicketUseCase(sl()));
   sl.registerLazySingleton(() => NotificarYGenerarActaUseCase(sl()));
   sl.registerLazySingleton(() => ObtenerTicketsUseCase(sl())); 
+  sl.registerLazySingleton(() => SubirEvidenciaUseCase(sl()));
+  // ⚙️ NUEVO: Registramos el actuador del PDF en el bus de datos
+  sl.registerLazySingleton(() => SubirActaPdfUseCase(sl())); 
   
   // Auth
   sl.registerLazySingleton(() => IniciarSesionUseCase(sl()));
   sl.registerLazySingleton(() => CerrarSesionUseCase(sl()));
-  
 
-  sl.registerLazySingleton(() => SubirEvidenciaUseCase(sl()));
   // ===========================================================================
   // 5. CAPA DE PRESENTACIÓN (Blocs) - REGISTRAR AL FINAL
   // ===========================================================================
   sl.registerFactory(() => TicketBloc(
         obtenerClientes: sl(),
         crearTicket: sl(),
-        // ✅ CAMBIO: Inyectamos el nuevo caso de uso al BLoC
         actualizarTicket: sl(),
         notificarYGenerarActa: sl(),
         obtenerTickets: sl(),
-        subirEvidenciaUseCase: sl(), 
+        subirEvidenciaUseCase: sl(),
+        // ⚙️ NUEVO: Enganchamos el actuador al controlador principal
+        subirActaPdfUseCase: sl(), 
       ));
   
   sl.registerFactory(() => AuthBloc(
