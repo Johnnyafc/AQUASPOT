@@ -9,15 +9,12 @@ admin.initializeApp();
 // ⚙️ MOTOR SMTP CORPORATIVO (Inicializado fuera para reusar la conexión TCP)
 // ============================================================================
 const transporter = nodemailer.createTransport({
-  host: "smtp.office365.com", // ⚠️ REEMPLAZAR con el host de tu correo (OVH, Microsoft, Workspace)
-  port: 587,
-  secure: false, // false para 587, true para 465
+  host: 'smtp.zoho.com', // El host para cuentas corporativas de Zoho
+  port: 465,
+  secure: true, 
   auth: {
-    user: "soporte@tuempresa.com", // ⚠️ REEMPLAZAR con tu cuenta real
-    pass: "tu_contraseña_aqui"     // ⚠️ REEMPLAZAR con tu clave corporativa
-  },
-  tls: {
-    ciphers: 'SSLv3' 
+    user: "ingenieria2@aquaspot.ec", 
+    pass: "ugVJMxCLNejS"
   }
 });
 
@@ -138,7 +135,7 @@ export const enviarCorreoActaCliente = onDocumentUpdated(
       logger.info(`Iniciando telemetría SMTP para ticket ${event.params.ticketId} hacia ${emailCliente}`);
 
       const mailOptions = {
-        from: '"Soporte Técnico Aquaspot" <jhonnyflores2806@gmail.com>', // ⚠️ DEBE COINCIDIR CON EL CORREO EN AUTH
+        from: '"Soporte Técnico Aquaspot" <ingenieria2@aquaspot.ec>', // ⚠️ DEBE COINCIDIR CON EL CORREO EN AUTH
         to: emailCliente,
         subject: `Acuse de Recepción Técnica - Ticket #${event.params.ticketId}`,
         html: `
