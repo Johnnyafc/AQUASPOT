@@ -21,6 +21,7 @@ class TicketLoading extends TicketState {}
 class TicketLoaded extends TicketState {
   final List<TicketEntity> tickets; // Para la bandeja de Tyron y Medardo
   final List<ClienteEntity> clientes; // Para llenar el Dropdown de la Etapa 1
+  
 
   const TicketLoaded({this.tickets = const [], this.clientes = const []});
 

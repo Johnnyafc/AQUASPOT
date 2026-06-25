@@ -1,32 +1,24 @@
-// lib/features/tickets/domain/entities/cliente_entity.dart
-
-import 'package:equatable/equatable.dart';
-import 'ticket_enums.dart';
-
-class ClienteEntity extends Equatable {
-  final String id; // ID que viene del ERP
-  final String nombreCliente;
-  final Sede sede;
-  final List<String> campamentos;
-  final String contactoPrincipal;
-  final String telefono;
+// domain/entities/cliente_entity.dart
+class ClienteEntity {
+  final String id;
+  final String camaronera;
+  final String celular;
+  final String direccion;
+  final String emailContacto;
+  final String estadoActual;
+  final DateTime? fechaRegistro; // ⚠️ Ojo, en Firestore es Timestamp, en Dart es DateTime
+  final String nombreContacto;
+  final String subSector;
 
   const ClienteEntity({
     required this.id,
-    required this.nombreCliente,
-    required this.sede,
-    required this.campamentos,
-    required this.contactoPrincipal,
-    required this.telefono,
+    required this.camaronera,
+    required this.celular,
+    required this.direccion,
+    required this.emailContacto,
+    required this.estadoActual,
+    this.fechaRegistro,
+    required this.nombreContacto,
+    required this.subSector,
   });
-
-  @override
-  List<Object?> get props => [
-        id,
-        nombreCliente,
-        sede,
-        campamentos,
-        contactoPrincipal,
-        telefono,
-      ];
 }

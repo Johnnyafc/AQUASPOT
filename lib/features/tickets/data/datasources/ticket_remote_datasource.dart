@@ -22,15 +22,19 @@ class TicketRemoteDataSourceImpl implements TicketRemoteDataSource {
 
   TicketRemoteDataSourceImpl({required this.firestore});
 
-  @override
-  Future<List<ClienteModel>> obtenerClientes() async {
+
+ Future<List<ClienteModel>> obtenerClientes() async {
     try {
+      // ⚙️ VÁLVULA ABIERTA: Extrae toda la colección sin filtros
       final snapshot = await firestore.collection('clientes').get();
+
       return snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return ClienteModel.fromJson(data);
+        // ⚙️ INYECCIÓN LIMPIA: Pasamos la data pura y el ID como argumentos separados
+        return ClienteModel.fromJson(doc.data(), doc.id);
       }).toList();
+      
+    } on FirebaseException catch (e) {
+      throw ServerException(e.message ?? 'Fallo de conexión con Firestore');
     } catch (e) {
       throw ServerException(e.toString());
     }

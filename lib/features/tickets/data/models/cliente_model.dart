@@ -1,41 +1,35 @@
 // lib/features/tickets/data/models/cliente_model.dart
 
 import '../../domain/entities/cliente_entity.dart';
-import '../../domain/entities/ticket_enums.dart';
+// data/models/cliente_model.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ClienteModel extends ClienteEntity {
   const ClienteModel({
     required super.id,
-    required super.nombreCliente,
-    required super.sede,
-    required super.campamentos,
-    required super.contactoPrincipal,
-    required super.telefono,
+    required super.camaronera,
+    required super.celular,
+    required super.direccion,
+    required super.emailContacto,
+    required super.estadoActual,
+    super.fechaRegistro,
+    required super.nombreContacto,
+    required super.subSector,
   });
 
-  factory ClienteModel.fromJson(Map<String, dynamic> json) {
+  factory ClienteModel.fromJson(Map<String, dynamic> json, String documentId) {
     return ClienteModel(
-      id: json['id'] ?? '',
-      nombreCliente: json['nombreCliente'] ?? '',
-      // Mapeo seguro del String al Enum
-      sede: Sede.values.firstWhere(
-        (e) => e.name == json['sede'],
-        orElse: () => Sede.guayaquil,
-      ),
-      campamentos: List<String>.from(json['campamentos'] ?? []),
-      contactoPrincipal: json['contactoPrincipal'] ?? '',
-      telefono: json['telefono'] ?? '',
+      id: documentId,
+      camaronera: json['camaronera'] ?? '',
+      // Filtramos la basura del '.0' que dejó el script de Python al leer Excel
+      celular: (json['celular'] ?? '').toString().replaceAll('.0', ''), 
+      direccion: json['direccion'] ?? '',
+      emailContacto: json['emailContacto'] ?? '',
+      estadoActual: json['estadoActual'] ?? 'inactivo',
+      // Conversión industrial de Timestamp a DateTime
+      fechaRegistro: (json['fechaRegistro'] as Timestamp?)?.toDate(), 
+      nombreContacto: json['nombreContacto'] ?? '',
+      subSector: json['subSector'] ?? '',
     );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'nombreCliente': nombreCliente,
-      'sede': sede.name,
-      'campamentos': campamentos,
-      'contactoPrincipal': contactoPrincipal,
-      'telefono': telefono,
-    };
   }
 }
