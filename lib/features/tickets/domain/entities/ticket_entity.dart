@@ -19,6 +19,7 @@ class TicketEntity extends Equatable {
   final TipoEquipo equipo;
   final String fallaReportada;
   final String? numeroSerie;
+  final String? equipoDetalle;
   
   
   // Etapa 2 (Opcional al inicio)
@@ -40,6 +41,7 @@ class TicketEntity extends Equatable {
     required this.nombreContacto,
     required this.emailContacto,
     required this.telefonoContacto,
+    required this.equipoDetalle,
     required this.equipo,
     required this.fallaReportada,
     required this.numeroSerie,
@@ -58,6 +60,7 @@ class TicketEntity extends Equatable {
     String? nombreContacto,
     String? emailContacto,
     String? telefonoContacto,
+    String? equipoDetalle,
     TipoEquipo? equipo,
     String? fallaReportada,
     String? numeroSerie, // <-- CORRECCIÓN: Agregado como parámetro
@@ -75,6 +78,7 @@ class TicketEntity extends Equatable {
       nombreContacto: nombreContacto ?? this.nombreContacto,
       emailContacto: emailContacto ?? this.emailContacto,
       telefonoContacto: telefonoContacto ?? this.telefonoContacto,
+      equipoDetalle: equipoDetalle ?? this.equipoDetalle,
       equipo: equipo ?? this.equipo,
       fallaReportada: fallaReportada ?? this.fallaReportada,
       numeroSerie: numeroSerie ?? this.numeroSerie, // <-- CORRECCIÓN: Asignación en el clon
@@ -96,6 +100,7 @@ class TicketEntity extends Equatable {
         emailContacto,
         telefonoContacto,
         equipo,
+        equipoDetalle,
         fallaReportada,
         numeroSerie, // <-- CORRECCIÓN: Agregado al radar de Equatable
         evaluacionTecnica,

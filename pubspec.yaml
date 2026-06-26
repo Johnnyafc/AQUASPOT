@@ -38,7 +38,7 @@ dependencies:
   equatable: ^2.0.8
   get_it: ^9.2.1
   dartz: ^0.10.1
-  firebase_core: ^4.10.0
+  firebase_core: ^4.11.0
   cloud_firestore: ^6.6.0
   firebase_auth: ^6.5.3
   dio: ^5.9.2

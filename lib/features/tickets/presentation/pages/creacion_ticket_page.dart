@@ -22,6 +22,7 @@ class CreacionTicketPage extends StatefulWidget {
 }
 
 class _CreacionTicketPageState extends State<CreacionTicketPage> {
+  final TextEditingController _customEquipoController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   final _clienteController = TextEditingController();
   final _campamentoController = TextEditingController();
@@ -44,6 +45,7 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
   @override
   void dispose() {
     _clienteController.dispose();
+    _customEquipoController.dispose();
     _campamentoController.dispose();
     _nombreContactoController.dispose();
     _emailController.dispose();
@@ -73,54 +75,67 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
   }
 
 void _submitForm() {
-    if (!_formKey.currentState!.validate()) return;
+  if (!_formKey.currentState!.validate()) return;
 
-    // 🛑 COMPUERTA DE SEGURIDAD: Verificar que seleccionó un cliente de la lista
-    if (_selectedClienteId == null || _selectedClienteId!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('⚠️ Debe seleccionar una Camaronera de la lista sugerida.')),
-      );
-      return;
-    }
-    
-    final authState = context.read<AuthBloc>().state;
-    String nombreOperario = 'SISTEMA';
-    String rolOperario = 'DESCONOCIDO';
-    
-    if (authState is Authenticated) {
-      nombreOperario = authState.usuario.nombre; 
-      rolOperario = authState.usuario.rol.name.toUpperCase();
-    }
-
-    final ticketBorrador = TicketEntity(
-      id: '',
-      estadoActual: EstadoTicket.creado,
-      sede: _selectedSede!,
-      clienteId: _selectedClienteId!, // 🚀 USAMOS EL ID REAL, NO EL TEXTO
-      campamento: _campamentoController.text,
-      nombreContacto: _nombreContactoController.text,
-      telefonoContacto: _telefonoController.text,
-      emailContacto: _emailController.text,
-      equipo: _selectedEquipo!,
-      fallaReportada: _fallaController.text,
-      numeroSerie: null,
-      historialEventos: const [], 
-      fotosUrls: const [],
+  // 🛑 COMPUERTA DE SEGURIDAD: Verificar que seleccionó un cliente de la lista
+  if (_selectedClienteId == null || _selectedClienteId!.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('⚠️ Debe seleccionar una Camaronera de la lista sugerida.')),
     );
-
-    context.read<TicketBloc>().add(CrearTicketEvent(
-      ticket: ticketBorrador,
-      nombreUsuario: nombreOperario,
-      rolUsuario: rolOperario,
-      evidencias: const [],
-    ));
+    return;
   }
+  
+  final authState = context.read<AuthBloc>().state;
+  String nombreOperario = 'SISTEMA';
+  String rolOperario = 'DESCONOCIDO';
+  
+  if (authState is Authenticated) {
+    nombreOperario = authState.usuario.nombre; 
+    rolOperario = authState.usuario.rol.name.toUpperCase();
+  }
+
+  // ==========================================================
+  // ✅ RECOLECCIÓN DEL BY-PASS (No dejes cables sueltos)
+  // ==========================================================
+  final String? detalleDelEquipo = (_selectedEquipo == TipoEquipo.Otros) 
+      ? _customEquipoController.text.trim() 
+      : null;
+
+  final ticketBorrador = TicketEntity(
+    id: '',
+    estadoActual: EstadoTicket.creado,
+    sede: _selectedSede!,
+    clienteId: _selectedClienteId!, 
+    campamento: _campamentoController.text,
+    nombreContacto: _nombreContactoController.text,
+    telefonoContacto: _telefonoController.text,
+    emailContacto: _emailController.text,
+    
+    // ✅ Mandamos el enum base...
+    equipo: _selectedEquipo!, 
+    // ✅ ...Y mandamos la telemetría específica si existe. 
+    // (Asegúrate de agregar este campo en tu TicketEntity y TicketModel)
+    equipoDetalle: detalleDelEquipo, 
+    
+    fallaReportada: _fallaController.text,
+    numeroSerie: null,
+    historialEventos: const [], 
+    fotosUrls: const [],
+  );
+
+  context.read<TicketBloc>().add(CrearTicketEvent(
+    ticket: ticketBorrador,
+    nombreUsuario: nombreOperario,
+    rolUsuario: rolOperario,
+    evidencias: const [],
+  ));
+}
 @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF0F2F5),
       appBar: AppBar(
-        title: const Text('Nuevo Ingreso', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Nuevo Requerimiento', style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
@@ -230,8 +245,48 @@ void _submitForm() {
                             icon: Icons.precision_manufacturing,
                             items: TipoEquipo.values,
                             value: _selectedEquipo,
-                            onChanged: (val) => setState(() => _selectedEquipo = val),
+                            onChanged: (val) {
+                              setState(() {
+                                // 1. Actualizas el estado del selector
+                                _selectedEquipo = val;
+                                
+                                // 2. ✅ MODIFICACIÓN CRÍTICA: Purgar el buffer si ya no es "Otros"
+                                if (val != TipoEquipo.Otros) {
+                                  _customEquipoController.clear(); 
+                                }
+                              });
+                            },
                           ),
+                          
+                          // ==========================================================
+                          // ✅ VÁLVULA CONDICIONAL DINÁMICA (El By-Pass que omitiste)
+                          // ==========================================================
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOut,
+                            child: _selectedEquipo == TipoEquipo.Otros
+                                ? Padding(
+                                    padding: const EdgeInsets.only(top: 16.0),
+                                    child: TextFormField(
+                                      controller: _customEquipoController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Especifique dispositivo no listado, ej motor hidraulico, chute, etc.',
+                                        prefixIcon: Icon(Icons.edit_note),
+                                        border: OutlineInputBorder(),
+                                      ),
+                                      validator: (value) {
+                                        if (_selectedEquipo == TipoEquipo.Otros && 
+                                            (value == null || value.trim().isEmpty)) {
+                                          return 'Error: Debe especificar el equipo manualmente.';
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                          // ==========================================================
+
                           const SizedBox(height: 16),
                           
                           _buildTextField(_fallaController, 'Falla Reportada', Icons.report_problem, maxLines: 3),
@@ -260,7 +315,7 @@ void _submitForm() {
       ),
     );
   }
-
+  
   Widget _buildTextField(TextEditingController controller, String label, IconData icon, {TextInputType? keyboard, int maxLines = 1}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),

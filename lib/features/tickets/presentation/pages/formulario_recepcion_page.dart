@@ -380,6 +380,7 @@ Future<void> _procesarRecepcion() async {
         telefonoContacto: widget.ticket.telefonoContacto,
         emailContacto: widget.ticket.emailContacto,
         equipo: widget.ticket.equipo,
+        equipoDetalle: widget.ticket.equipoDetalle,
         fallaReportada: '${widget.ticket.fallaReportada}\n[RECEPCIÓN]: ${_descripcionController.text}',
         numeroSerie: widget.ticket.numeroSerie,
         historialEventos: widget.ticket.historialEventos, 

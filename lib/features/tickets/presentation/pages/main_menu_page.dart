@@ -123,7 +123,7 @@ class _InicioView extends StatelessWidget {
     
     if (operador.rol == RolUsuario.requerimiento || operador.rol == RolUsuario.supervisor) {
       modules.add(_buildCardOption(
-        title: 'Ingreso de Equipo',
+        title: 'Ingreso de requerimiento',
         icon: Icons.add_box,
         color: Colors.blue,
         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CreacionTicketPage())),
@@ -143,7 +143,7 @@ class _InicioView extends StatelessWidget {
         },
       ));
     }
-
+/*
     if (operador.rol == RolUsuario.tecnico || operador.rol == RolUsuario.supervisor) {
       modules.add(_buildCardOption(
         title: 'Evaluaciones Técnicas',
@@ -151,9 +151,9 @@ class _InicioView extends StatelessWidget {
         color: Colors.orange,
        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaEvaluacionesPage())),
       ));
-    }
+    }*/
     return modules;
-  }
+  } 
 
   Widget _buildCardOption({required String title, required IconData icon, required Color color, required VoidCallback onTap}) {
     return Card(

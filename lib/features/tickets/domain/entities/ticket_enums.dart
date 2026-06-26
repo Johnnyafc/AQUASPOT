@@ -2,7 +2,7 @@
 
 enum Sede { guayaquil, machala }
 
-enum TipoEquipo { caracol, maquina, contador }
+enum TipoEquipo { Caracol, Cosechadora_premium,Cosechadora_standart,Cosechadora_elevacion, Contador, Otros}
 
 enum Prioridad { baja, media, alta }
 

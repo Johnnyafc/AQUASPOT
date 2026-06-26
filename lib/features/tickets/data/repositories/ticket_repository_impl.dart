@@ -41,6 +41,7 @@ class TicketRepositoryImpl implements ITicketRepository {
       telefonoContacto: entity.telefonoContacto,
       emailContacto: entity.emailContacto,
       equipo: entity.equipo,
+      equipoDetalle: entity.equipoDetalle,
       fallaReportada: entity.fallaReportada,
       numeroSerie: entity.numeroSerie, // ✅ AHORA SÍ: El número de serie viaja a Firebase
       evaluacionTecnica: entity.evaluacionTecnica, 
