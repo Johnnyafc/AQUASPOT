@@ -118,6 +118,7 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
     emailContacto: event.ticket.emailContacto,
     equipo: event.ticket.equipo,
     equipoDetalle: event.ticket.equipoDetalle,
+    accesoriosRecibidos:event.ticket.accesoriosRecibidos,
     fallaReportada: event.ticket.fallaReportada,
     numeroSerie: event.ticket.numeroSerie,
     historialEventos: [eventoAuditoria],
@@ -161,16 +162,17 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
     );
   }
 
-  Future<void> _onObtenerHistorialTickets(ObtenerHistorialTicketsEvent event, Emitter<TicketState> emit) async {
-    emit(TicketLoading());
-    
-    final failureOrTickets = await obtenerTickets();
-    
-    failureOrTickets.fold(
-      (failure) => emit(TicketError(message: _mapFailureToMessage(failure))),
-      (tickets) => emit(TicketHistorialCargado(tickets: tickets)),
-    );
-  }
+Future<void> _onObtenerHistorialTickets(ObtenerHistorialTicketsEvent event, Emitter<TicketState> emit) async {
+  emit(TicketLoading());
+  
+  // ⚙️ AQUÍ ESTABA LA FUGA: Debes pasar el evento.segmento al repositorio
+  final failureOrTickets = await obtenerTickets(segmentoUsuario: event.segmento);
+  
+  failureOrTickets.fold(
+    (failure) => emit(TicketError(message: _mapFailureToMessage(failure))),
+    (tickets) => emit(TicketHistorialCargado(tickets: tickets)),
+  );
+}
 
 Future<void> _onSubirEvidencia(SubirEvidenciaEvent event, Emitter<TicketState> emit) async {
     emit(TicketLoading()); // Mostramos un loader en la UI

@@ -17,6 +17,8 @@ import '../../../../core/services/pdf_service.dart';
 import 'package:printing/printing.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io' show File;
 
 class FormularioRecepcionPage extends StatefulWidget {
   final TicketEntity ticket;
@@ -32,15 +34,57 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
   
   // Controlador ÚNICO para la inspección física activa en recepción
   final _descripcionController = TextEditingController(); 
+  late TextEditingController _serieController;
+  late TextEditingController _fallaController;
+  Prioridad _prioridad = Prioridad.media;
   
   String _tipoRequerimiento = 'Mantenimiento'; 
 
   // Buffer local en la memoria de esta instancia
-  final List<File> _archivosEvidencia = [];
+  final List<XFile> _archivosEvidencia = [];
+  Map<String, bool> _accesoriosSeleccionados = {};
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-cargamos la data del cliente, lista para ser confirmada o editada
+    _serieController = TextEditingController(text: widget.ticket.numeroSerie ?? '');
+    _fallaController = TextEditingController(text: widget.ticket.fallaReportada);
+    if (_catalogoAccesorios.containsKey(widget.ticket.equipo)) {
+      for (var accesorio in _catalogoAccesorios[widget.ticket.equipo]!) {
+        _accesoriosSeleccionados[accesorio] = false; // Asumimos que no viene hasta que se marque
+      }
+    }
+  }
+
+  // =======================================================
+  // ⚙️ CATÁLOGO MAESTRO DE ACCESORIOS POR MÁQUINA
+  // =======================================================
+  final Map<TipoEquipo, List<String>> _catalogoAccesorios = {
+ TipoEquipo.Caracol: [
+    'Mangueras largas', 'Manguera interna', 'Serpentín', 'Chasis', 
+    'Carcasa', 'Tapa posterior', 'Tapa frontal', 'Motor hidráulico', 'Impulsor'
+  ],
+  TipoEquipo.Cosechadora_premium: [
+    'Sistema de corte', 'Banda transportadora', 'Sensor de humedad', 
+    'Tolva principal', 'Panel de control', 'Sistema hidráulico'
+  ],
+  TipoEquipo.Cosechadora_standart: [
+    'Cuchillas', 'Motor principal', 'Tolva', 'Filtros'
+  ],
+  TipoEquipo.Cosechadora_elevacion: [
+    'Sinfín de elevación', 'Motor', 'Estructura metálica', 'Correas'
+  ],
+  TipoEquipo.Contador: [
+    'Sensor óptico', 'Pantalla LCD', 'Fuente de poder', 'Cableado'
+  ],
+};
 
   @override
   void dispose() {
     _descripcionController.dispose();
+    _serieController.dispose();
+    _fallaController.dispose();
     super.dispose();
   }
 
@@ -58,10 +102,14 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(Icons.add_a_photo_outlined, color: Colors.teal),
-                SizedBox(width: 12),
-                Text('Añadir Foto o Video', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
+              children: [
+                // UX: Cambiamos el icono y texto si el supervisor está en la Laptop
+                Icon(kIsWeb ? Icons.upload_file : Icons.add_a_photo_outlined, color: Colors.teal),
+                const SizedBox(width: 12),
+                Text(
+                  kIsWeb ? 'Añadir Archivo o Evidencia' : 'Añadir Foto o Video', 
+                  style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold),
+                ),
               ],
             ),
           ),
@@ -74,8 +122,12 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
               scrollDirection: Axis.horizontal,
               itemCount: _archivosEvidencia.length,
               itemBuilder: (context, index) {
-                final file = _archivosEvidencia[index];
-                final esVideo = file.path.endsWith('.mp4') || file.path.endsWith('.mov');
+                // Ahora sabemos que file es estrictamente un XFile
+                final file = _archivosEvidencia[index]; 
+                
+                // 🛑 CORRECCIÓN LÓGICA: En web, el path es un Blob. Verificamos la extensión en el 'name'.
+                final nombreArchivo = file.name.toLowerCase();
+                final esVideo = nombreArchivo.endsWith('.mp4') || nombreArchivo.endsWith('.mov');
 
                 return Container(
                   margin: const EdgeInsets.only(right: 8),
@@ -91,7 +143,10 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
                         ? const Icon(Icons.video_file, color: Colors.teal, size: 40)
                         : ClipRRect(
                             borderRadius: BorderRadius.circular(8),
-                            child: Image.file(file, fit: BoxFit.cover),
+                            // 🚀 CORRECCIÓN ARQUITECTÓNICA: Renderizado seguro según el entorno
+                            child: kIsWeb 
+                                ? Image.network(file.path, fit: BoxFit.cover) // Web lee la Blob URL
+                                : Image.file(File(file.path), fit: BoxFit.cover), // Nativo lee el Disco
                           ),
                       Positioned(
                         top: 2,
@@ -116,6 +171,52 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
     );
   }
 
+  Widget _buildChecklistDinamico() {
+    // 1. SEGURIDAD DE CATÁLOGO: Acceso seguro al mapa
+    final listaAccesorios = _catalogoAccesorios[widget.ticket.equipo];
+    
+    // Si no hay lista para este equipo o el mapa es nulo, salimos suavemente
+    if (listaAccesorios == null || listaAccesorios.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // 2. CONSTRUCCIÓN SEGURA
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle('Inspección de Partes y Accesorios'),
+        Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            children: listaAccesorios.map((String pieza) {
+              // Acceso directo a _accesoriosSeleccionados
+              final isChecked = _accesoriosSeleccionados[pieza] ?? false;
+              
+              return CheckboxListTile(
+                title: Text(pieza, style: const TextStyle(fontWeight: FontWeight.w500)),
+                value: isChecked,
+                activeColor: Colors.teal,
+                controlAffinity: ListTileControlAffinity.leading,
+                dense: true,
+                onChanged: (bool? valor) {
+                  // Aquí es donde el setState disparaba el rebuild
+                  setState(() {
+                    _accesoriosSeleccionados[pieza] = valor ?? false;
+                  });
+                },
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -124,50 +225,30 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
       ),
-body: BlocConsumer<TicketBloc, TicketState>(
-listener: (context, state) async {
-  debugPrint("📡 [PUNTO B]: El BLoC ha emitido un nuevo estado: $state");
+      body: BlocConsumer<TicketBloc, TicketState>(
+        listener: (context, state) {
+          debugPrint("📡 [PUNTO B]: El BLoC ha emitido un nuevo estado: $state");
 
-  if (state is TicketError) {
-    debugPrint("❌ [PUNTO B]: El BLoC devolvió un error: ${state.message}");
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(state.message), backgroundColor: Colors.red)
-    );
-  } else if (state is TicketOperationSuccess) {
-    debugPrint("🎉 [PUNTO B]: ¡ÉXITO! Estado TicketOperationSuccess recibido. Entrando al bloque del PDF.");
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Recepción exitosa, generando acta...'), backgroundColor: Colors.teal)
-    );
+          if (state is TicketError) {
+            debugPrint("❌ [PUNTO B]: Error recibido: ${state.message}");
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(state.message), backgroundColor: Colors.red)
+            );
+          } else if (state is TicketOperationSuccess) {
+            debugPrint("🎉 [PUNTO B]: Operación Exitosa. Redirigiendo a bandeja principal.");
+            
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Acta registrada y respaldada en el sistema.'), 
+                backgroundColor: Colors.teal
+              )
+            );
 
-    try {
-      debugPrint("⚙️ [PUNTO C]: Invocando PdfService...");
-      final pdfService = PdfService();
-      
-      final pdfBytes = await pdfService.generateActaRecepcion(
-        ticket: widget.ticket,
-        tipoRequerimiento: _tipoRequerimiento,
-        descripcion: _descripcionController.text,
-        evidencias: _archivosEvidencia,
-      );
-      
-      debugPrint("📄 [PUNTO C]: Bytes del PDF generados con éxito (${pdfBytes.length} bytes). Lanzando Printing.layoutPdf...");
-
-      await Printing.layoutPdf(
-        onLayout: (format) async => pdfBytes,
-        name: 'Acta_Recepcion_${widget.ticket.id}.pdf',
-      );
-      
-      debugPrint("✅ [PUNTO C]: Printing.layoutPdf ejecutado sin excepciones.");
-    } catch (e, stacktrace) {
-      debugPrint("💥 CRITICAL [PUNTO C]: La generación o renderizado del PDF colapsó de forma nativa: $e");
-      debugPrint("$stacktrace");
-    }
-
-    if (!context.mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
-  }
-},
+            if (context.mounted) {
+              Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+            }
+          }
+        },
         builder: (context, state) {
           return Form(
             key: _formKey,
@@ -176,17 +257,72 @@ listener: (context, state) async {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildSectionTitle('1. Datos Heredados (Solo Lectura)'),
+                  // ==========================================
+                  // SECCIÓN 1: DATOS LOGÍSTICOS (Solo Lectura)
+                  // ==========================================
+                  _buildSectionTitle('1. Datos del Cliente'),
                   _buildReadOnlyField('Cliente / Razón Social', widget.ticket.clienteId, Icons.business),
-                  _buildReadOnlyField('Contacto / Quien Entrega', widget.ticket.nombreContacto, Icons.person),
-                  _buildReadOnlyField('Teléfono', widget.ticket.telefonoContacto ?? 'N/A', Icons.phone),
+                  _buildReadOnlyField('Contacto', widget.ticket.nombreContacto, Icons.person),
                   _buildReadOnlyField('Tipo de Equipo', widget.ticket.equipo.name.toUpperCase(), Icons.precision_manufacturing),
-                  _buildReadOnlyField('Número de Serie', widget.ticket.numeroSerie ?? 'Serie no registrada', Icons.qr_code),
-                  _buildReadOnlyField('Falla Reportada', widget.ticket.fallaReportada, Icons.report_problem, lines: 2),
                   
                   const Divider(height: 32, thickness: 2),
 
-                  _buildSectionTitle('2. Datos de Ingreso Físico'),
+                  // ==========================================
+                  // SECCIÓN 2: CONFIRMACIÓN TÉCNICA (Editables)
+                  // ==========================================
+                  _buildSectionTitle('2. Confirmación de equipo'),
+                  
+                  _buildInputField(
+                    label: 'Número de Serie Confirmado',
+                    controller: _serieController,
+                    icon: Icons.qr_code_scanner,
+                  ),
+                  _buildChecklistDinamico(),
+                  const SizedBox(height: 16),
+                  
+                  _buildInputField(
+                    label: 'Falla Reportada (Editable por técnico)',
+                    controller: _fallaController,
+                    icon: Icons.report_problem_outlined,
+                    lines: 2,
+                  ),
+
+                  const Divider(height: 32, thickness: 2),
+
+                  // ==========================================
+                  // SECCIÓN 3: PRIORIDAD OPERATIVA
+                  // ==========================================
+                  _buildSectionTitle('3. Nivel de Prioridad Inicial'),
+                  
+                  DropdownButtonFormField<Prioridad>(
+                    value: _prioridad,
+                    decoration: InputDecoration(
+                      labelText: 'Prioridad de Atención',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      prefixIcon: const Icon(Icons.flag_circle_outlined),
+                    ),
+                    items: Prioridad.values.map((Prioridad p) {
+                      return DropdownMenuItem<Prioridad>(
+                        value: p,
+                        child: Text(
+                          p.name.toUpperCase(),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (Prioridad? newValue) {
+                      setState(() {
+                        _prioridad = newValue!;
+                      });
+                    },
+                  ),
+
+                  const Divider(height: 32, thickness: 2),
+
+                  // ==========================================
+                  // SECCIÓN 4: INGRESO FÍSICO
+                  // ==========================================
+                  _buildSectionTitle('4. Datos de Ingreso Físico'),
                   DropdownButtonFormField<String>(
                     value: _tipoRequerimiento,
                     decoration: InputDecoration(
@@ -278,8 +414,7 @@ listener: (context, state) async {
     );
   }
 
-
-// ⚙️ FILTRO DE COMPRESIÓN INDUSTRIAL
+  // ⚙️ FILTRO DE COMPRESIÓN INDUSTRIAL
   Future<File?> _comprimirImagen(File file) async {
     final filePath = file.absolute.path;
     
@@ -310,7 +445,6 @@ listener: (context, state) async {
     return compressedFile;
   }
 
-
   Widget _buildInputField({
     required String label, 
     required TextEditingController controller, 
@@ -336,7 +470,7 @@ listener: (context, state) async {
   }
 
   // --- Lógica de Control ---
-Future<void> _procesarRecepcion() async {
+  Future<void> _procesarRecepcion() async {
     // 1. Validaciones de la HMI
     if (!_formKey.currentState!.validate()) return;
 
@@ -349,7 +483,7 @@ Future<void> _procesarRecepcion() async {
       rolOperador = authState.usuario.rol.name.toUpperCase();
     }
     
-    // Feedback visual para evitar doble toque
+    // Feedback visual (Bloqueo de HMI)
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -362,53 +496,51 @@ Future<void> _procesarRecepcion() async {
       // ========================================================
       final pdfService = PdfService();
       
-      // Declaramos la variable AQUÍ adentro
+      // ✅ CORRECCIÓN CLAVE AQUÍ: Ahora enviamos `accesoriosRecibidos` al clonar
+      final ticketActualizado = widget.ticket.copyWith(
+        estadoActual: EstadoTicket.recepcionFisica,
+        numeroSerie: _serieController.text.trim(), 
+        fallaReportada: _fallaController.text.trim(), 
+        accesoriosRecibidos: _accesoriosSeleccionados, // <-- El mapa actualizado pasa a la entidad
+      );
+
+      // ✅ Generamos el acta con la entidad ACTUALIZADA
       final bytesGenerados = await pdfService.generateActaRecepcion(
-        ticket: widget.ticket,
+        ticket: ticketActualizado, 
         tipoRequerimiento: _tipoRequerimiento,
-        descripcion: _descripcionController.text,
+        descripcion: _descripcionController.text.trim(),
         evidencias: _archivosEvidencia,
       );
 
-      final ticketActualizado = TicketEntity(
-        id: widget.ticket.id,
-        estadoActual: EstadoTicket.recepcionFisica, 
-        sede: widget.ticket.sede,
-        clienteId: widget.ticket.clienteId,
-        campamento: widget.ticket.campamento,
-        nombreContacto: widget.ticket.nombreContacto,
-        telefonoContacto: widget.ticket.telefonoContacto,
-        emailContacto: widget.ticket.emailContacto,
-        equipo: widget.ticket.equipo,
-        equipoDetalle: widget.ticket.equipoDetalle,
-        fallaReportada: '${widget.ticket.fallaReportada}\n[RECEPCIÓN]: ${_descripcionController.text}',
-        numeroSerie: widget.ticket.numeroSerie,
-        historialEventos: widget.ticket.historialEventos, 
-        fotosUrls: widget.ticket.fotosUrls, 
-      );
-
       if (context.mounted) {
-        Navigator.pop(context); // Retiramos el loading
+        Navigator.pop(context); // Retiramos la pantalla de carga
 
         // ========================================================
-        // 🚀 3. DISPARO AL BLoC (Dentro del mismo Scope)
+        // 🚀 3. DISPARO AL BLoC 
         // ========================================================
-        // Como seguimos dentro del 'try', bytesGenerados existe y está viva.
         context.read<TicketBloc>().add(ConfirmarRecepcionEvent(
-          ticket: ticketActualizado,
+          ticket: ticketActualizado, // Se envía a Firestore con la serie Y los accesorios
           nombreUsuario: nombreOperador, 
           rolUsuario: rolOperador,
-          notasRecepcion: _descripcionController.text,
+          notasRecepcion: _descripcionController.text.trim(),
           evidencias: _archivosEvidencia,
-          pdfBytes: bytesGenerados, // ✅ Conexión sólida y sin fugas
+          pdfBytes: bytesGenerados, 
         ));
+
+        // ========================================================
+        // 🖨️ 4. LANZAMIENTO DE PERIFÉRICOS
+        // ========================================================
+        await Printing.layoutPdf(
+          onLayout: (format) async => bytesGenerados,
+          name: 'Acta_Recepcion_${ticketActualizado.id}.pdf',
+        );
       }
-    } catch (e) {
-      // Si el PDF falla, caemos aquí
+    } catch (e, stacktrace) {
       if (context.mounted) {
-        Navigator.pop(context);
+        Navigator.pop(context); // Importante: quitar el loading si hay fallo crítico
+        debugPrint("💥 CRITICAL: Colapso en renderizado o ensamblaje: $e\n$stacktrace");
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al empaquetar PDF: $e'), backgroundColor: Colors.red)
+          SnackBar(content: Text('Falla de sistema en generación PDF: $e'), backgroundColor: Colors.red)
         );
       }
     }
@@ -452,7 +584,7 @@ Future<void> _procesarRecepcion() async {
     );
   }
 
-Future<void> _capturarMedio(ImageSource source, {required bool esVideo}) async {
+  Future<void> _capturarMedio(ImageSource source, {required bool esVideo}) async {
     final ImagePicker picker = ImagePicker();
     XFile? archivo;
 
@@ -465,33 +597,44 @@ Future<void> _capturarMedio(ImageSource source, {required bool esVideo}) async {
       } else {
         archivo = await picker.pickImage(
           source: source,
-          // Ya no dependemos del quality del picker, pero lo dejamos como pre-filtro
-          imageQuality: 85, 
+          // En Web el imageQuality suele fallar o ser ignorado, lo condicionamos
+          imageQuality: kIsWeb ? null : 85, 
         );
       }
 
       if (archivo != null) {
         if (esVideo) {
-          // Los videos no van al PDF, pasan directo a la lista para el BLoC/Storage
+          // 📹 VIDEOS: Pasan directo a la lista como XFile (sin compresión local)
           setState(() {
-            _archivosEvidencia.add(File(archivo!.path));
+            _archivosEvidencia.add(archivo!);
           });
         } else {
-          // ⚙️ ENRUTAMOS LA IMAGEN AL COMPRESOR ANTES DE GUARDARLA
-          File originalFile = File(archivo.path);
-          File? compressedFile = await _comprimirImagen(originalFile);
-
-          if (compressedFile != null) {
+          // 📸 IMÁGENES: Bifurcación de Arquitectura (Web vs Nativo)
+          
+          if (kIsWeb) {
+            // 🌐 ENTORNO WEB: El archivo ya está en RAM. 
+            // NO usamos dart:io File ni el compresor nativo.
             setState(() {
-              _archivosEvidencia.add(compressedFile);
+              _archivosEvidencia.add(archivo!);
             });
+          } else {
+            // 📱 ENTORNO NATIVO (Android/iOS): Usamos dart:io y comprimimos
+            File originalFile = File(archivo!.path);
+            File? compressedFile = await _comprimirImagen(originalFile);
+
+            if (compressedFile != null) {
+              setState(() {
+                // Lo empaquetamos de nuevo como XFile para mantener la consistencia en la lista
+                _archivosEvidencia.add(XFile(compressedFile.path));
+              });
+            }
           }
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error hardware cámara: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error en captura de medio: $e'), backgroundColor: Colors.red),
         );
       }
     }

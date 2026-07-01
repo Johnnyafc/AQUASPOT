@@ -1,7 +1,9 @@
 // lib/features/tickets/presentation/bloc/ticket_event.dart
 
 import 'package:equatable/equatable.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../domain/entities/ticket_entity.dart';
+import '../../../../core/enum/segmento_operativo.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -13,7 +15,7 @@ abstract class TicketEvent extends Equatable {
 }
 
 class SubirEvidenciaEvent extends TicketEvent {
-  final File file;
+  final XFile file;
   final String ticketId;
 
   const SubirEvidenciaEvent({required this.file, required this.ticketId});
@@ -28,7 +30,7 @@ class ObtenerClientesEvent extends TicketEvent {}
 // 2. Etapa 1: Comercial ingresa un equipo nuevo
 class CrearTicketEvent extends TicketEvent {
   final TicketEntity ticket;
-  final List<File> evidencias;
+  final List<XFile> evidencias;
   final String nombreUsuario;
   final String rolUsuario;
 
@@ -63,7 +65,15 @@ class NotificarYGenerarActaEvent extends TicketEvent {
   List<Object> get props => [ticket];
 }
 
-class ObtenerHistorialTicketsEvent extends TicketEvent {}
+class ObtenerHistorialTicketsEvent extends TicketEvent {
+
+  final SegmentoOperativo segmento;
+
+  const ObtenerHistorialTicketsEvent({required this.segmento});
+
+  @override
+  List<Object> get props => [segmento];
+}
 
 // Añadir al final de lib/features/tickets/presentation/bloc/ticket_event.dart
 
@@ -72,7 +82,7 @@ class ConfirmarRecepcionEvent extends TicketEvent {
   final String nombreUsuario;
   final String rolUsuario;
   final String notasRecepcion;
-  final List<File> evidencias; // ✅ NUEVO: Puerto para la telemetría visual
+  final List<XFile> evidencias; // ✅ NUEVO: Puerto para la telemetría visual
   final Uint8List pdfBytes;
 
   const ConfirmarRecepcionEvent({

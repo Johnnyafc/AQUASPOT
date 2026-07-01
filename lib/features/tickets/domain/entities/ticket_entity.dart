@@ -20,6 +20,7 @@ class TicketEntity extends Equatable {
   final String fallaReportada;
   final String? numeroSerie;
   final String? equipoDetalle;
+  final Map<String, bool>? accesoriosRecibidos;
   
   
   // Etapa 2 (Opcional al inicio)
@@ -42,6 +43,7 @@ class TicketEntity extends Equatable {
     required this.emailContacto,
     required this.telefonoContacto,
     required this.equipoDetalle,
+    required this.accesoriosRecibidos,
     required this.equipo,
     required this.fallaReportada,
     required this.numeroSerie,
@@ -64,6 +66,7 @@ class TicketEntity extends Equatable {
     TipoEquipo? equipo,
     String? fallaReportada,
     String? numeroSerie, // <-- CORRECCIÓN: Agregado como parámetro
+    Map<String, bool>? accesoriosRecibidos,
     EvaluacionTecnicaEntity? evaluacionTecnica,
     List<String>? fotosUrls,
     String? pdfActaUrl,
@@ -82,6 +85,7 @@ class TicketEntity extends Equatable {
       equipo: equipo ?? this.equipo,
       fallaReportada: fallaReportada ?? this.fallaReportada,
       numeroSerie: numeroSerie ?? this.numeroSerie, // <-- CORRECCIÓN: Asignación en el clon
+      accesoriosRecibidos: accesoriosRecibidos ?? this.accesoriosRecibidos,
       evaluacionTecnica: evaluacionTecnica ?? this.evaluacionTecnica,
       fotosUrls: fotosUrls ?? this.fotosUrls,
       pdfActaUrl: pdfActaUrl ?? this.pdfActaUrl,
@@ -103,6 +107,7 @@ class TicketEntity extends Equatable {
         equipoDetalle,
         fallaReportada,
         numeroSerie, // <-- CORRECCIÓN: Agregado al radar de Equatable
+        accesoriosRecibidos,
         evaluacionTecnica,
         fotosUrls,
         pdfActaUrl,

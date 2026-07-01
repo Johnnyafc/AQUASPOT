@@ -1,5 +1,6 @@
 // lib/features/auth/data/datasources/auth_remote_datasource.dart
 
+import 'package:aquaspot_postventa/core/enum/segmento_operativo.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/entities/usuario_entity.dart';
@@ -18,9 +19,12 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     required this.firestore,
   });
 
-  // Traductor de Strings de la base de datos al Enum estricto de nuestro sistema
+  // =====================================================================
+  // ⚙️ DECODIFICADORES DE SEÑALES (Mapeo de strings inseguros a Enums)
+  // =====================================================================
+  
   RolUsuario _mapearRol(String rolString) {
-    switch (rolString.toUpperCase()) {
+    switch (rolString.toUpperCase().trim()) {
       case 'REQUERIMIENTO':
         return RolUsuario.requerimiento;
       case 'TECNICO':
@@ -29,11 +33,34 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         return RolUsuario.supervisor;
       case 'RECEPCION':
         return RolUsuario.recepcion;
-      
       default:
         return RolUsuario.desconocido;
     }
   }
+
+  // ✅ NUEVO DECODIFICADOR: Lee el segmento de Firestore de forma segura
+  SegmentoOperativo _mapearSegmento(String? segmentoStr) {
+    if (segmentoStr == null || segmentoStr.trim().isEmpty) {
+      return SegmentoOperativo.ninguno; // Válvula de seguridad (Fail-Safe)
+    }
+
+    switch (segmentoStr.toLowerCase().trim()) {
+      case 'contador': 
+        return SegmentoOperativo.contador;
+      case 'cosechadora': 
+        return SegmentoOperativo.cosechadora;
+      case 'caracol': 
+        return SegmentoOperativo.caracol;
+      case 'general': 
+        return SegmentoOperativo.general;
+      default: 
+        return SegmentoOperativo.ninguno;
+    }
+  }
+
+  // =====================================================================
+  // 🚀 LÓGICA DE AUTENTICACIÓN
+  // =====================================================================
 
   @override
   Future<UsuarioEntity> iniciarSesion(String email, String password) async {
@@ -58,23 +85,26 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       }
 
       final data = docSnapshot.data()!;
+      
+      // 3. Extraemos y decodificamos los datos
       final rol = _mapearRol(data['rol'] ?? '');
+      // ✅ Pasamos la señal cruda por el decodificador de segmento
+      final segmento = _mapearSegmento(data['segmento'] as String?);
 
       if (rol == RolUsuario.desconocido) {
         await firebaseAuth.signOut();
         throw ServerFailure('Nivel de acceso corrupto o no reconocido.');
       }
 
-      // 3. Extraemos el nombre registrado en la base de datos
-      // Nota: Si el campo en Firestore se llama distinto (ej: 'Nombre'), ajusta la llave aquí.
       final String nombreCapturado = data['nombre'] ?? 'Operario Desconocido';
 
-      // 4. Emitimos la tarjeta de identificación válida con los 4 parámetros requeridos
+      // 4. Emitimos la tarjeta de identificación válida con los 5 parámetros obligatorios
       return UsuarioEntity(
         uid: user.uid,
         email: user.email!,
-        nombre: nombreCapturado, // ✅ Parámetro ahora integrado
+        nombre: nombreCapturado, 
         rol: rol,
+        segmento: segmento, // ✅ Cable de telemetría conectado correctamente
       );
       
     } on FirebaseAuthException catch (e) {

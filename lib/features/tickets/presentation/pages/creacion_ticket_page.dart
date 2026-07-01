@@ -116,6 +116,7 @@ void _submitForm() {
     // ✅ ...Y mandamos la telemetría específica si existe. 
     // (Asegúrate de agregar este campo en tu TicketEntity y TicketModel)
     equipoDetalle: detalleDelEquipo, 
+    accesoriosRecibidos: null,
     
     fallaReportada: _fallaController.text,
     numeroSerie: null,

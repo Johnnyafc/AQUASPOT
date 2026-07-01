@@ -1,8 +1,10 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:image_picker/image_picker.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../../features/tickets/domain/entities/ticket_entity.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class PdfService {
   
@@ -10,7 +12,7 @@ class PdfService {
     required TicketEntity ticket,
     required String tipoRequerimiento,
     required String descripcion,
-    required List<File> evidencias, // ✅ NUEVO: Recibimos los archivos físicos
+    required List<XFile> evidencias, // ✅ NUEVO: Recibimos los archivos físicos
   }) async {
     final pdf = pw.Document();
 
@@ -39,7 +41,7 @@ class PdfService {
               "Razón Social / Cliente": ticket.clienteId,
               "Persona que entrega": ticket.nombreContacto,
               "Teléfono de Contacto": ticket.telefonoContacto ?? 'N/A',
-              "Sede Operativa": ticket.sede.name.toUpperCase(),
+              "Sede Operativa": ticket.sede.name.toUpperCase()  ,
             }),
             pw.SizedBox(height: 15),
             

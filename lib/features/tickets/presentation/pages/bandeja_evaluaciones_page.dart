@@ -1,5 +1,8 @@
 // lib/features/tickets/presentation/pages/bandeja_evaluaciones_page.dart
 
+import 'package:aquaspot_postventa/core/enum/segmento_operativo.dart';
+import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/ticket_bloc.dart';
@@ -20,8 +23,25 @@ class _BandejaEvaluacionesPageState extends State<BandejaEvaluacionesPage> {
   @override
   void initState() {
     super.initState();
-    // Solicitamos la data al arrancar
-    context.read<TicketBloc>().add(ObtenerHistorialTicketsEvent());
+ @override
+  void initState() {
+    super.initState();
+
+    // 1. EXTRAEMOS LA CONFIGURACIÓN DEL USUARIO (Auth Context)
+    final authState = context.read<AuthBloc>().state;
+    SegmentoOperativo segmentoActivo = SegmentoOperativo.ninguno;
+
+    if (authState is Authenticated) {
+      segmentoActivo = authState.usuario.segmento;
+    } else {
+      // Manejo de emergencia: Si no hay usuario, no cargamos nada o mandamos a login
+      debugPrint("⚠️ ALERTA: Intento de acceso sin autenticación.");
+    }
+
+    // 2. DISPARAMOS EL EVENTO CON EL SEGMENTO ASIGNADO
+    // Ahora el BLoC sabe exactamente qué datos filtrar desde Firestore
+    context.read<TicketBloc>().add(ObtenerHistorialTicketsEvent(segmento: segmentoActivo));
+  }
   }
 
   @override

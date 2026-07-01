@@ -1,6 +1,7 @@
 // lib/features/tickets/data/repositories/ticket_repository_impl.dart
 
 import 'package:dartz/dartz.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../core/errors/exceptions.dart';
 import '../../../../core/errors/failures.dart';
 import '../../../../core/network/network_info.dart';
@@ -12,6 +13,7 @@ import '../datasources/webhook_remote_datasource.dart';
 import '../models/ticket_model.dart';
 import '../models/evento_auditoria_model.dart';
 import '../datasources/storage_remote_datasource.dart';
+import '../../../../core/enum/segmento_operativo.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -21,6 +23,7 @@ class TicketRepositoryImpl implements ITicketRepository {
   final WebhookRemoteDataSource webhookDataSource;
   final StorageRemoteDataSource storageDataSource;
   final NetworkInfo networkInfo;
+  
 
   TicketRepositoryImpl({
     required this.firebaseDataSource,
@@ -43,6 +46,7 @@ class TicketRepositoryImpl implements ITicketRepository {
       equipo: entity.equipo,
       equipoDetalle: entity.equipoDetalle,
       fallaReportada: entity.fallaReportada,
+      accesoriosRecibidos: entity.accesoriosRecibidos,
       numeroSerie: entity.numeroSerie, // ✅ AHORA SÍ: El número de serie viaja a Firebase
       evaluacionTecnica: entity.evaluacionTecnica, 
       fotosUrls: entity.fotosUrls,
@@ -76,10 +80,11 @@ class TicketRepositoryImpl implements ITicketRepository {
     }
   }
 
-  @override
-  Future<Either<Failure, List<TicketEntity>>> obtenerTickets() async {
+@override
+  Future<Either<Failure, List<TicketEntity>>> obtenerTickets({SegmentoOperativo? segmentoUsuario}) async {
     try {
-      final modelos = await firebaseDataSource.obtenerTickets();
+      // 📡 El repositorio solo transporta la señal hacia el origen de datos
+      final modelos = await firebaseDataSource.obtenerTickets(segmentoUsuario: segmentoUsuario);
       return Right(modelos); 
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message)); 
@@ -101,7 +106,7 @@ class TicketRepositoryImpl implements ITicketRepository {
 
 
   @override
-  Future<Either<Failure, String>> subirEvidencia(File file, String ticketId) async {
+  Future<Either<Failure, String>> subirEvidencia(XFile file, String ticketId) async {
     // 1. Verificación de enlace de red (telemetría)
     if (await networkInfo.isConnected) {
       try {
