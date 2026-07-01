@@ -1,24 +1,26 @@
-// lib/features/tickets/presentation/pages/formulario_recepcion_page.dart
-
-import 'dart:io';
+import 'package:aquaspot_postventa/features/tickets/domain/constant/catalogo_equipos_constants.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:printing/printing.dart';
 
 import '../../domain/entities/ticket_entity.dart';
-import '../../domain/entities/ticket_enums.dart'; // ✅ AÑADIDO: Import del enum para la máquina de estados
+import '../../domain/entities/ticket_enums.dart';
+
+
+// BLoC (El cerebro de la operación)
 import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_event.dart';
 import '../bloc/ticket_state.dart';
 import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../../../features/auth/presentation/bloc/auth_state.dart';
-import '../../domain/entities/evento_auditoria_entity.dart';
-import '../../../../core/services/pdf_service.dart';
-import 'package:printing/printing.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
-import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:io' show File;
+
+// Widgets de UI (Los módulos de interfaz)
+import '../widgets/section_title_widget.dart';
+import '../widgets/read_only_field_widget.dart';
+import '../widgets/custom_input_field_widget.dart';
+import '../widgets/checklist_dinamico_widget.dart';
+import '../widgets/camera_manager_widget.dart';
 
 class FormularioRecepcionPage extends StatefulWidget {
   final TicketEntity ticket;
@@ -32,53 +34,34 @@ class FormularioRecepcionPage extends StatefulWidget {
 class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
   final _formKey = GlobalKey<FormState>();
   
-  // Controlador ÚNICO para la inspección física activa en recepción
+  // Controladores de UI (Memoria volátil de la vista)
   final _descripcionController = TextEditingController(); 
   late TextEditingController _serieController;
   late TextEditingController _fallaController;
-  Prioridad _prioridad = Prioridad.media;
   
+  Prioridad _prioridad = Prioridad.media;
   String _tipoRequerimiento = 'Mantenimiento'; 
-
-  // Buffer local en la memoria de esta instancia
   final List<XFile> _archivosEvidencia = [];
-  Map<String, bool> _accesoriosSeleccionados = {};
+  final Map<String, bool> _accesoriosSeleccionados = {};
 
   @override
   void initState() {
     super.initState();
-    // Pre-cargamos la data del cliente, lista para ser confirmada o editada
+    // Pre-carga de datos
     _serieController = TextEditingController(text: widget.ticket.numeroSerie ?? '');
     _fallaController = TextEditingController(text: widget.ticket.fallaReportada);
-    if (_catalogoAccesorios.containsKey(widget.ticket.equipo)) {
-      for (var accesorio in _catalogoAccesorios[widget.ticket.equipo]!) {
-        _accesoriosSeleccionados[accesorio] = false; // Asumimos que no viene hasta que se marque
+    _inicializarAccesorios();
+  }
+
+  void _inicializarAccesorios() {
+    // Consulta al dominio, no a una variable hardcodeada en la vista
+    final accesorios = CatalogoEquiposConstants.accesoriosPorMaquina[widget.ticket.equipo];
+    if (accesorios != null) {
+      for (var accesorio in accesorios) {
+        _accesoriosSeleccionados[accesorio] = false;
       }
     }
   }
-
-  // =======================================================
-  // ⚙️ CATÁLOGO MAESTRO DE ACCESORIOS POR MÁQUINA
-  // =======================================================
-  final Map<TipoEquipo, List<String>> _catalogoAccesorios = {
- TipoEquipo.Caracol: [
-    'Mangueras largas', 'Manguera interna', 'Serpentín', 'Chasis', 
-    'Carcasa', 'Tapa posterior', 'Tapa frontal', 'Motor hidráulico', 'Impulsor'
-  ],
-  TipoEquipo.Cosechadora_premium: [
-    'Sistema de corte', 'Banda transportadora', 'Sensor de humedad', 
-    'Tolva principal', 'Panel de control', 'Sistema hidráulico'
-  ],
-  TipoEquipo.Cosechadora_standart: [
-    'Cuchillas', 'Motor principal', 'Tolva', 'Filtros'
-  ],
-  TipoEquipo.Cosechadora_elevacion: [
-    'Sinfín de elevación', 'Motor', 'Estructura metálica', 'Correas'
-  ],
-  TipoEquipo.Contador: [
-    'Sensor óptico', 'Pantalla LCD', 'Fuente de poder', 'Cableado'
-  ],
-};
 
   @override
   void dispose() {
@@ -88,132 +71,37 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
     super.dispose();
   }
 
-  Widget _buildCameraPlaceholder() {
-    return Column(
-      children: [
-        InkWell(
-          onTap: () => _mostrarOpcionesCaptura(context),
-          child: Container(
-            height: 80,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.teal.shade200, style: BorderStyle.solid),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // UX: Cambiamos el icono y texto si el supervisor está en la Laptop
-                Icon(kIsWeb ? Icons.upload_file : Icons.add_a_photo_outlined, color: Colors.teal),
-                const SizedBox(width: 12),
-                Text(
-                  kIsWeb ? 'Añadir Archivo o Evidencia' : 'Añadir Foto o Video', 
-                  style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (_archivosEvidencia.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 90,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: _archivosEvidencia.length,
-              itemBuilder: (context, index) {
-                // Ahora sabemos que file es estrictamente un XFile
-                final file = _archivosEvidencia[index]; 
-                
-                // 🛑 CORRECCIÓN LÓGICA: En web, el path es un Blob. Verificamos la extensión en el 'name'.
-                final nombreArchivo = file.name.toLowerCase();
-                final esVideo = nombreArchivo.endsWith('.mp4') || nombreArchivo.endsWith('.mov');
+  // Rutina de disparo
+  void _onConfirmarRecepcion() {
+    if (!_formKey.currentState!.validate()) return;
 
-                return Container(
-                  margin: const EdgeInsets.only(right: 8),
-                  width: 90,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      esVideo 
-                        ? const Icon(Icons.video_file, color: Colors.teal, size: 40)
-                        : ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            // 🚀 CORRECCIÓN ARQUITECTÓNICA: Renderizado seguro según el entorno
-                            child: kIsWeb 
-                                ? Image.network(file.path, fit: BoxFit.cover) // Web lee la Blob URL
-                                : Image.file(File(file.path), fit: BoxFit.cover), // Nativo lee el Disco
-                          ),
-                      Positioned(
-                        top: 2,
-                        right: 2,
-                        child: GestureDetector(
-                          onTap: () => setState(() => _archivosEvidencia.removeAt(index)),
-                          child: Container(
-                            padding: const EdgeInsets.all(2),
-                            decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                            child: const Icon(Icons.close, color: Colors.white, size: 14),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-        ]
-      ],
-    );
-  }
+    // Obtenemos al operario actual del AuthBloc
+    final authState = context.read<AuthBloc>().state;
+    String nombreOperador = 'SISTEMA';
+    String rolOperador = 'TÉCNICO';
 
-  Widget _buildChecklistDinamico() {
-    // 1. SEGURIDAD DE CATÁLOGO: Acceso seguro al mapa
-    final listaAccesorios = _catalogoAccesorios[widget.ticket.equipo];
-    
-    // Si no hay lista para este equipo o el mapa es nulo, salimos suavemente
-    if (listaAccesorios == null || listaAccesorios.isEmpty) {
-      return const SizedBox.shrink();
+    if (authState is Authenticated) {
+      nombreOperador = authState.usuario.nombre;
+      rolOperador = authState.usuario.rol.name.toUpperCase();
     }
 
-    // 2. CONSTRUCCIÓN SEGURA
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle('Inspección de Partes y Accesorios'),
-        Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: Colors.grey.shade300),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
-            children: listaAccesorios.map((String pieza) {
-              // Acceso directo a _accesoriosSeleccionados
-              final isChecked = _accesoriosSeleccionados[pieza] ?? false;
-              
-              return CheckboxListTile(
-                title: Text(pieza, style: const TextStyle(fontWeight: FontWeight.w500)),
-                value: isChecked,
-                activeColor: Colors.teal,
-                controlAffinity: ListTileControlAffinity.leading,
-                dense: true,
-                onChanged: (bool? valor) {
-                  // Aquí es donde el setState disparaba el rebuild
-                  setState(() {
-                    _accesoriosSeleccionados[pieza] = valor ?? false;
-                  });
-                },
-              );
-            }).toList(),
-          ),
-        ),
-      ],
+    final ticketActualizado = widget.ticket.copyWith(
+      estadoActual: EstadoTicket.recepcionFisica,
+      numeroSerie: _serieController.text.trim(), 
+      fallaReportada: _fallaController.text.trim(), 
+      accesoriosRecibidos: _accesoriosSeleccionados, 
+    );
+
+    // 🚀 La UI SOLO despacha el evento. El BLoC se encarga del Firestore y del PDF.
+    context.read<TicketBloc>().add(
+      ConfirmarRecepcionEvent(
+        ticket: ticketActualizado,
+        nombreUsuario: nombreOperador,
+        rolUsuario: rolOperador,
+        tipoRequerimiento: _tipoRequerimiento, // Asegúrate de añadir esto en tu evento
+        notasRecepcion: _descripcionController.text.trim(),
+        evidencias: _archivosEvidencia,
+      )
     );
   }
 
@@ -227,22 +115,31 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
       ),
       body: BlocConsumer<TicketBloc, TicketState>(
         listener: (context, state) {
-          debugPrint("📡 [PUNTO B]: El BLoC ha emitido un nuevo estado: $state");
+          debugPrint("📡 [MONITOR]: Estado BLoC recibido -> $state");
 
           if (state is TicketError) {
-            debugPrint("❌ [PUNTO B]: Error recibido: ${state.message}");
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(state.message), backgroundColor: Colors.red)
             );
-          } else if (state is TicketOperationSuccess) {
-            debugPrint("🎉 [PUNTO B]: Operación Exitosa. Redirigiendo a bandeja principal.");
+          } else if (state is TicketOperationSuccess) { 
+            // ⚠️ NOTA ARQUITECTÓNICA: Si cambiaste este estado a TicketRecepcionExitosa(pdfBytes) 
+            // como te sugerí, ajusta este 'if' y usa state.pdfBytes en el layoutPdf.
             
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Acta registrada y respaldada en el sistema.'), 
+                content: Text('Acta registrada y respaldada en la nube.'), 
                 backgroundColor: Colors.teal
               )
             );
+            
+            // Si tu BLoC actual te devuelve los bytes del PDF en un estado modificado, 
+            // imprimes aquí. Si lo sigues manejando de otra forma, comentalo.
+            if (state is TicketRecepcionExitosa) {
+                Printing.layoutPdf(
+                  onLayout: (format) async => state.pdfBytes,
+                  name: 'Acta_Recepcion_${widget.ticket.id}.pdf',
+                );
+            }
 
             if (context.mounted) {
               Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
@@ -258,29 +155,49 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // ==========================================
-                  // SECCIÓN 1: DATOS LOGÍSTICOS (Solo Lectura)
+                  // BLOQUE 1: DATOS LOGÍSTICOS
                   // ==========================================
-                  _buildSectionTitle('1. Datos del Cliente'),
-                  _buildReadOnlyField('Cliente / Razón Social', widget.ticket.clienteId, Icons.business),
-                  _buildReadOnlyField('Contacto', widget.ticket.nombreContacto, Icons.person),
-                  _buildReadOnlyField('Tipo de Equipo', widget.ticket.equipo.name.toUpperCase(), Icons.precision_manufacturing),
+                  const SectionTitleWidget(title: '1. Datos del Cliente'),
+                  ReadOnlyFieldWidget(
+                    label: 'Cliente / Razón Social', 
+                    value: widget.ticket.clienteId, 
+                    icon: Icons.business
+                  ),
+                  ReadOnlyFieldWidget(
+                    label: 'Contacto', 
+                    value: widget.ticket.nombreContacto, 
+                    icon: Icons.person
+                  ),
+                  ReadOnlyFieldWidget(
+                    label: 'Tipo de Equipo', 
+                    value: widget.ticket.equipo.name.toUpperCase(), 
+                    icon: Icons.precision_manufacturing
+                  ),
                   
                   const Divider(height: 32, thickness: 2),
 
                   // ==========================================
-                  // SECCIÓN 2: CONFIRMACIÓN TÉCNICA (Editables)
+                  // BLOQUE 2: CONFIRMACIÓN TÉCNICA
                   // ==========================================
-                  _buildSectionTitle('2. Confirmación de equipo'),
-                  
-                  _buildInputField(
+                  const SectionTitleWidget(title: '2. Confirmación de equipo'),
+                  CustomInputFieldWidget(
                     label: 'Número de Serie Confirmado',
                     controller: _serieController,
                     icon: Icons.qr_code_scanner,
                   ),
-                  _buildChecklistDinamico(),
+                  
+                  ChecklistDinamicoWidget(
+                    equipo: widget.ticket.equipo,
+                    selecciones: _accesoriosSeleccionados,
+                    onChanged: (pieza, valor) {
+                      setState(() {
+                        _accesoriosSeleccionados[pieza] = valor;
+                      });
+                    },
+                  ),
                   const SizedBox(height: 16),
                   
-                  _buildInputField(
+                  CustomInputFieldWidget(
                     label: 'Falla Reportada (Editable por técnico)',
                     controller: _fallaController,
                     icon: Icons.report_problem_outlined,
@@ -290,10 +207,9 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
                   const Divider(height: 32, thickness: 2),
 
                   // ==========================================
-                  // SECCIÓN 3: PRIORIDAD OPERATIVA
+                  // BLOQUE 3: PRIORIDAD OPERATIVA
                   // ==========================================
-                  _buildSectionTitle('3. Nivel de Prioridad Inicial'),
-                  
+                  const SectionTitleWidget(title: '3. Nivel de Prioridad Inicial'),
                   DropdownButtonFormField<Prioridad>(
                     value: _prioridad,
                     decoration: InputDecoration(
@@ -320,9 +236,9 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
                   const Divider(height: 32, thickness: 2),
 
                   // ==========================================
-                  // SECCIÓN 4: INGRESO FÍSICO
+                  // BLOQUE 4: INGRESO FÍSICO
                   // ==========================================
-                  _buildSectionTitle('4. Datos de Ingreso Físico'),
+                  const SectionTitleWidget(title: '4. Datos de Ingreso Físico'),
                   DropdownButtonFormField<String>(
                     value: _tipoRequerimiento,
                     decoration: InputDecoration(
@@ -343,7 +259,7 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  _buildInputField(
+                  CustomInputFieldWidget(
                     label: 'Descripción / Notas de Recepción',
                     controller: _descripcionController,
                     icon: Icons.description_outlined,
@@ -353,16 +269,32 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
 
                   const Divider(height: 32, thickness: 2),
 
-                  _buildSectionTitle('3. Evidencia Fotográfica'),
-                  _buildCameraPlaceholder(),
+                  // ==========================================
+                  // BLOQUE 5: PERIFÉRICOS DE CÁMARA
+                  // ==========================================
+                  const SectionTitleWidget(title: '5. Evidencia Fotográfica'),
+                  CameraManagerWidget(
+                    archivosEvidencia: _archivosEvidencia,
+                    onArchivosActualizados: (archivos) {
+                      setState(() {
+                        _archivosEvidencia.clear();
+                        _archivosEvidencia.addAll(archivos);
+                      });
+                    },
+                  ),
 
                   const Divider(height: 32, thickness: 2),
 
-                  _buildSectionTitle('4. Registro de Sistema'),
-                  _buildReadOnlyField('Timestamp de Ingreso', DateTime.now().toString().substring(0, 16), Icons.access_time),
+                  const SectionTitleWidget(title: '6. Registro de Sistema'),
+                  ReadOnlyFieldWidget(
+                    label: 'Timestamp de Ingreso HMI', 
+                    value: DateTime.now().toString().substring(0, 16), 
+                    icon: Icons.access_time
+                  ),
 
                   const SizedBox(height: 32),
                   
+                  // Botón de Enclavamiento (Submit)
                   SizedBox(
                     width: double.infinity,
                     height: 50,
@@ -371,7 +303,7 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
                         backgroundColor: Colors.teal,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                      onPressed: state is TicketLoading ? null : _procesarRecepcion,
+                      onPressed: state is TicketLoading ? null : _onConfirmarRecepcion,
                       child: state is TicketLoading 
                         ? const CircularProgressIndicator(color: Colors.white)
                         : const Text('CONFIRMAR RECEPCIÓN', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
@@ -385,258 +317,5 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
         },
       ),
     );
-  }
-
-  // --- Subrutinas de Renderizado ---
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0, top: 8.0),
-      child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
-    );
-  }
-
-  Widget _buildReadOnlyField(String label, String value, IconData icon, {int lines = 1}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
-      child: TextFormField(
-        initialValue: value,
-        maxLines: lines,
-        readOnly: true,
-        style: const TextStyle(color: Colors.black54), 
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon, color: Colors.grey),
-          filled: true,
-          fillColor: Colors.grey.shade100,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-        ),
-      ),
-    );
-  }
-
-  // ⚙️ FILTRO DE COMPRESIÓN INDUSTRIAL
-  Future<File?> _comprimirImagen(File file) async {
-    final filePath = file.absolute.path;
-    
-    // Generamos una nueva ruta temporal para el archivo comprimido
-    final outPath = filePath.replaceAll(
-      RegExp(r'\.(png|jpg|jpeg)$', caseSensitive: false), 
-      '_comprimido.jpg'
-    );
-
-    // Ejecutamos la reducción de resolución y calidad
-    final XFile? result = await FlutterImageCompress.compressAndGetFile(
-      file.absolute.path,
-      outPath,
-      quality: 60,        // 60% es el punto dulce entre legibilidad y peso
-      minWidth: 1024,     // Limitamos a 1 Megapíxel aprox. No necesitamos 4K para un acta.
-      minHeight: 1024,
-      format: CompressFormat.jpeg, // Forzamos formato estándar
-    );
-
-    if (result == null) return null;
-
-    final compressedFile = File(result.path);
-    
-    // Telemetría para depuración (opcional, para que veas la magia)
-    debugPrint("📉 Tamaño Original: ${(file.lengthSync() / 1024).toStringAsFixed(2)} KB");
-    debugPrint("📉 Tamaño Comprimido: ${(compressedFile.lengthSync() / 1024).toStringAsFixed(2)} KB");
-
-    return compressedFile;
-  }
-
-  Widget _buildInputField({
-    required String label, 
-    required TextEditingController controller, 
-    required IconData icon, 
-    int lines = 1,
-    String? hint,
-  }) {
-    return TextFormField(
-      controller: controller,
-      maxLines: lines,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        prefixIcon: Icon(icon, color: Colors.teal),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Colors.teal, width: 2),
-        ),
-      ),
-      validator: (value) => (value == null || value.trim().isEmpty) ? 'Dato requerido para control de calidad.' : null,
-    );
-  }
-
-  // --- Lógica de Control ---
-  Future<void> _procesarRecepcion() async {
-    // 1. Validaciones de la HMI
-    if (!_formKey.currentState!.validate()) return;
-
-    final authState = context.read<AuthBloc>().state;
-    String nombreOperador = 'SISTEMA';
-    String rolOperador = 'TÉCNICO';
-
-    if (authState is Authenticated) {
-      nombreOperador = authState.usuario.nombre;
-      rolOperador = authState.usuario.rol.name.toUpperCase();
-    }
-    
-    // Feedback visual (Bloqueo de HMI)
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.teal)),
-    );
-
-    try {
-      // ========================================================
-      // ⚙️ 2. ZONA DE FABRICACIÓN (Scope local)
-      // ========================================================
-      final pdfService = PdfService();
-      
-      // ✅ CORRECCIÓN CLAVE AQUÍ: Ahora enviamos `accesoriosRecibidos` al clonar
-      final ticketActualizado = widget.ticket.copyWith(
-        estadoActual: EstadoTicket.recepcionFisica,
-        numeroSerie: _serieController.text.trim(), 
-        fallaReportada: _fallaController.text.trim(), 
-        accesoriosRecibidos: _accesoriosSeleccionados, // <-- El mapa actualizado pasa a la entidad
-      );
-
-      // ✅ Generamos el acta con la entidad ACTUALIZADA
-      final bytesGenerados = await pdfService.generateActaRecepcion(
-        ticket: ticketActualizado, 
-        tipoRequerimiento: _tipoRequerimiento,
-        descripcion: _descripcionController.text.trim(),
-        evidencias: _archivosEvidencia,
-      );
-
-      if (context.mounted) {
-        Navigator.pop(context); // Retiramos la pantalla de carga
-
-        // ========================================================
-        // 🚀 3. DISPARO AL BLoC 
-        // ========================================================
-        context.read<TicketBloc>().add(ConfirmarRecepcionEvent(
-          ticket: ticketActualizado, // Se envía a Firestore con la serie Y los accesorios
-          nombreUsuario: nombreOperador, 
-          rolUsuario: rolOperador,
-          notasRecepcion: _descripcionController.text.trim(),
-          evidencias: _archivosEvidencia,
-          pdfBytes: bytesGenerados, 
-        ));
-
-        // ========================================================
-        // 🖨️ 4. LANZAMIENTO DE PERIFÉRICOS
-        // ========================================================
-        await Printing.layoutPdf(
-          onLayout: (format) async => bytesGenerados,
-          name: 'Acta_Recepcion_${ticketActualizado.id}.pdf',
-        );
-      }
-    } catch (e, stacktrace) {
-      if (context.mounted) {
-        Navigator.pop(context); // Importante: quitar el loading si hay fallo crítico
-        debugPrint("💥 CRITICAL: Colapso en renderizado o ensamblaje: $e\n$stacktrace");
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Falla de sistema en generación PDF: $e'), backgroundColor: Colors.red)
-        );
-      }
-    }
-  }
-  
-  void _mostrarOpcionesCaptura(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (context) => SafeArea(
-        child: Wrap(
-          children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt, color: Colors.teal),
-              title: const Text('Tomar Foto'),
-              onTap: () {
-                Navigator.pop(context);
-                _capturarMedio(ImageSource.camera, esVideo: false);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.videocam, color: Colors.teal),
-              title: const Text('Grabar Video'),
-              onTap: () {
-                Navigator.pop(context);
-                _capturarMedio(ImageSource.camera, esVideo: true);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library, color: Colors.grey),
-              title: const Text('Seleccionar de Galería'),
-              onTap: () {
-                Navigator.pop(context);
-                _capturarMedio(ImageSource.gallery, esVideo: false);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _capturarMedio(ImageSource source, {required bool esVideo}) async {
-    final ImagePicker picker = ImagePicker();
-    XFile? archivo;
-
-    try {
-      if (esVideo) {
-        archivo = await picker.pickVideo(
-          source: source,
-          maxDuration: const Duration(seconds: 30), 
-        );
-      } else {
-        archivo = await picker.pickImage(
-          source: source,
-          // En Web el imageQuality suele fallar o ser ignorado, lo condicionamos
-          imageQuality: kIsWeb ? null : 85, 
-        );
-      }
-
-      if (archivo != null) {
-        if (esVideo) {
-          // 📹 VIDEOS: Pasan directo a la lista como XFile (sin compresión local)
-          setState(() {
-            _archivosEvidencia.add(archivo!);
-          });
-        } else {
-          // 📸 IMÁGENES: Bifurcación de Arquitectura (Web vs Nativo)
-          
-          if (kIsWeb) {
-            // 🌐 ENTORNO WEB: El archivo ya está en RAM. 
-            // NO usamos dart:io File ni el compresor nativo.
-            setState(() {
-              _archivosEvidencia.add(archivo!);
-            });
-          } else {
-            // 📱 ENTORNO NATIVO (Android/iOS): Usamos dart:io y comprimimos
-            File originalFile = File(archivo!.path);
-            File? compressedFile = await _comprimirImagen(originalFile);
-
-            if (compressedFile != null) {
-              setState(() {
-                // Lo empaquetamos de nuevo como XFile para mantener la consistencia en la lista
-                _archivosEvidencia.add(XFile(compressedFile.path));
-              });
-            }
-          }
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error en captura de medio: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
   }
 }

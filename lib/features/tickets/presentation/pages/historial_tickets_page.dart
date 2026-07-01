@@ -58,8 +58,8 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
             indicatorColor: Colors.orange,
             indicatorWeight: 4,
             tabs: [
-              Tab(icon: Icon(Icons.assignment_late_outlined), text: 'NUEVOS (CREADO)'),
-              Tab(icon: Icon(Icons.build_circle_outlined), text: 'EN TALLER (RECEPCIÓN)'),
+              Tab(icon: Icon(Icons.assignment_late_outlined), text: 'NUEVOS'),
+              Tab(icon: Icon(Icons.build_circle_outlined), text: 'EN TALLER '),
             ],
           ),
         ),
