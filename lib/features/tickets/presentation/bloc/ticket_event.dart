@@ -1,7 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../domain/entities/ticket_entity.dart';
-import '../../domain/entities/ticket_enums.dart'; // ✅ Requerido para usar Prioridad
+import '../../domain/entities/ticket_enums.dart'; 
 import '../../../../core/enum/segmento_operativo.dart';
 
 abstract class TicketEvent extends Equatable {
@@ -24,17 +24,24 @@ class SubirEvidenciaEvent extends TicketEvent {
   List<Object> get props => [file, ticketId];
 }
 
+// ⚙️ SEÑALES CRUDAS AISLADAS: La UI envía los datos sin procesar, el BLoC los ensambla.
 class ConfirmarRecepcionEvent extends TicketEvent {
-  final TicketEntity ticket;
+  final TicketEntity ticket; // 🚀 El estado previo del equipo
+  final String numeroSerie;     // 🚀 La lectura del escáner en taller
+  final String fallaReportada;
+  final Map<String, bool> accesoriosRecibidos;
   final String nombreUsuario;
   final String rolUsuario;
-  final String tipoRequerimiento; // ✅ Agregado: Para saber si es Garantía o Mantenimiento
-  final Prioridad prioridad;      // ✅ Agregado: Para el nivel de urgencia
+  final String tipoRequerimiento; 
+  final Prioridad prioridad;      
   final String notasRecepcion;
   final List<XFile> evidencias; 
 
   const ConfirmarRecepcionEvent({
     required this.ticket,
+    required this.numeroSerie,
+    required this.fallaReportada,
+    required this.accesoriosRecibidos,
     required this.nombreUsuario,
     required this.rolUsuario,
     required this.tipoRequerimiento,
@@ -44,9 +51,12 @@ class ConfirmarRecepcionEvent extends TicketEvent {
   });
 
   @override
-  // 🛑 IMPORTANTE: Equatable necesita todas las variables de instancia aquí para evitar repintados fantasma.
+  // 🛑 IMPORTANTE: Equatable necesita todas las variables de instancia aquí para el comparador de memoria.
   List<Object> get props => [
     ticket, 
+    numeroSerie,
+    fallaReportada,
+    accesoriosRecibidos,
     nombreUsuario, 
     rolUsuario, 
     tipoRequerimiento, 

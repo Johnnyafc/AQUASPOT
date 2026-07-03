@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_event.dart';
-import '../bloc/ticket_state.dart';
+import '../bloc/ticket_state.dart'; // ⚙️ Tu nuevo estado unificado
 import '../../domain/entities/ticket_enums.dart';
 import 'detalle_ticket_page.dart';
 import 'evaluacion_tecnica_page.dart';
@@ -22,10 +22,7 @@ class BandejaEvaluacionesPage extends StatefulWidget {
 class _BandejaEvaluacionesPageState extends State<BandejaEvaluacionesPage> {
   @override
   void initState() {
-    super.initState();
- @override
-  void initState() {
-    super.initState();
+    super.initState(); // ⚙️ Corregido: Un solo ciclo de inicialización.
 
     // 1. EXTRAEMOS LA CONFIGURACIÓN DEL USUARIO (Auth Context)
     final authState = context.read<AuthBloc>().state;
@@ -34,14 +31,11 @@ class _BandejaEvaluacionesPageState extends State<BandejaEvaluacionesPage> {
     if (authState is Authenticated) {
       segmentoActivo = authState.usuario.segmento;
     } else {
-      // Manejo de emergencia: Si no hay usuario, no cargamos nada o mandamos a login
-      debugPrint("⚠️ ALERTA: Intento de acceso sin autenticación.");
+      debugPrint("⚠️ ALERTA: Intento de acceso sin autenticación en panel operativo.");
     }
 
     // 2. DISPARAMOS EL EVENTO CON EL SEGMENTO ASIGNADO
-    // Ahora el BLoC sabe exactamente qué datos filtrar desde Firestore
     context.read<TicketBloc>().add(ObtenerHistorialTicketsEvent(segmento: segmentoActivo));
-  }
   }
 
   @override
@@ -54,12 +48,35 @@ class _BandejaEvaluacionesPageState extends State<BandejaEvaluacionesPage> {
       ),
       body: BlocBuilder<TicketBloc, TicketState>(
         builder: (context, state) {
-          if (state is TicketLoading) {
-            return const Center(child: CircularProgressIndicator());
+          
+          // ⚙️ ESTÁNDAR INDUSTRIAL: Evaluamos el status de la máquina, no el tipo de clase.
+          if (state.status == TicketStatus.loading) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(state.message.isNotEmpty ? state.message : 'Sincronizando telemetría...', style: const TextStyle(color: Colors.grey)),
+                ],
+              )
+            );
           }
-          if (state is TicketHistorialCargado) {
-            // ✅ FILTRO DE HARDWARE: Solo requerimientos en estado 'creado'
-            final pendientes = state.tickets.where((t) => t.estadoActual == EstadoTicket.creado).toList();
+
+          if (state.status == TicketStatus.error) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Text("Falla de sistema:\n${state.message}", textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+              ),
+            );
+          }
+
+          // Si el estado es loaded o viene de un operationSuccess, mostramos la bandeja
+          if (state.status == TicketStatus.loaded || state.status == TicketStatus.operationSuccess) {
+            
+            // ✅ FILTRO DE HARDWARE: Leemos de state.historial (la matriz que configuramos en el BLoC)
+            final pendientes = state.historial.where((t) => t.estadoActual == EstadoTicket.creado).toList();
 
             if (pendientes.isEmpty) {
               return const Center(child: Text("Bandeja vacía. Todo al día.", style: TextStyle(color: Colors.grey)));
@@ -84,6 +101,8 @@ class _BandejaEvaluacionesPageState extends State<BandejaEvaluacionesPage> {
               },
             );
           }
+          
+          // Estado inicial (Máquina energizada pero sin orden de marcha)
           return const SizedBox.shrink();
         },
       ),

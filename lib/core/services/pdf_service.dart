@@ -76,6 +76,8 @@ class PdfService {
 
   // (Mantenemos _buildHeader, _buildGridSection, _buildSignatureBlock y _buildFooter igual que antes)
   
+
+  
   pw.Widget _buildHeader(TicketEntity ticket) {
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey700, width: 1),

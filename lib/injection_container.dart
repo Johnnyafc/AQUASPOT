@@ -8,6 +8,8 @@ import 'package:internet_connection_checker/internet_connection_checker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 import 'core/network/network_info.dart';
+// ⚙️ CORE SERVICES: Importamos el motor de PDF
+import 'core/services/pdf_service.dart';
 
 // --- FEATURE: TICKETS ---
 import 'features/tickets/data/datasources/ticket_remote_datasource.dart';
@@ -20,11 +22,12 @@ import 'features/tickets/domain/repositories/ticket_repository.dart';
 import 'features/tickets/domain/usecases/ActualizarTicketUseCase.dart';
 import 'features/tickets/domain/usecases/crear_ticket_usecase.dart';
 import 'features/tickets/domain/usecases/subir_evidencia_usecase.dart';
-// ⚙️ NUEVO: Importamos el inyector del PDF
 import 'features/tickets/domain/usecases/subir_acta_pdf_usecase.dart'; 
 import 'features/tickets/domain/usecases/notificar_y_generar_acta_usecase.dart';
 import 'features/tickets/domain/usecases/obtener_clientes_usecase.dart';
 import 'features/tickets/domain/usecases/obtener_tickets_usecase.dart'; 
+// ⚙️ DOMINIO: Importamos el UseCase de generación de PDF
+import 'features/tickets/domain/usecases/generar_acta_pdf_usecase.dart';
 import 'features/tickets/presentation/bloc/ticket_bloc.dart';
 
 // --- FEATURE: AUTH ---
@@ -51,9 +54,12 @@ Future<void> init() async {
   sl.registerLazySingleton(() => FirebaseStorage.instance);
 
   // ===========================================================================
-  // 2. CORE
+  // 2. CORE (Servicios de Infraestructura Base)
   // ===========================================================================
   sl.registerLazySingleton<NetworkInfo>(() => NetworkInfoImpl(sl()));
+  
+  // ⚙️ CABLEADO: Registramos el motor de PDF como Singleton para no saturar la memoria
+  sl.registerLazySingleton(() => PdfService());
 
   // ===========================================================================
   // 3. CAPA DE DATOS (Repositories & DataSources)
@@ -74,6 +80,7 @@ Future<void> init() async {
       webhookDataSource: sl(),
       storageDataSource: sl(),
       networkInfo: sl(),
+      pdfService: sl(), // ⚙️ CABLEADO: Inyectamos el PdfService al repositorio
     ),
   );
 
@@ -99,9 +106,11 @@ Future<void> init() async {
   sl.registerLazySingleton(() => NotificarYGenerarActaUseCase(sl()));
   sl.registerLazySingleton(() => ObtenerTicketsUseCase(sl())); 
   sl.registerLazySingleton(() => SubirEvidenciaUseCase(sl()));
-  // ⚙️ NUEVO: Registramos el actuador del PDF en el bus de datos
   sl.registerLazySingleton(() => SubirActaPdfUseCase(sl())); 
   
+  // ⚙️ CABLEADO: Registramos el actuador de dominio para el BLoC
+  sl.registerLazySingleton(() => GenerarActaPdfUseCase(sl()));
+
   // Auth
   sl.registerLazySingleton(() => IniciarSesionUseCase(sl()));
   sl.registerLazySingleton(() => CerrarSesionUseCase(sl()));
@@ -116,8 +125,8 @@ Future<void> init() async {
         notificarYGenerarActa: sl(),
         obtenerTickets: sl(),
         subirEvidenciaUseCase: sl(),
-        // ⚙️ NUEVO: Enganchamos el actuador al controlador principal
         subirActaPdfUseCase: sl(), 
+        generarActaPdfUseCase: sl(), // ⚙️ CABLEADO: Enganchamos la tubería final al cerebro del SCADA
       ));
   
   sl.registerFactory(() => AuthBloc(

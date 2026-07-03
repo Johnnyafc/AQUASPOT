@@ -1,3 +1,5 @@
+// lib/features/tickets/presentation/pages/formulario_recepcion_page.dart
+
 import 'package:aquaspot_postventa/features/tickets/domain/constant/catalogo_equipos_constants.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -6,7 +8,6 @@ import 'package:printing/printing.dart';
 
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/entities/ticket_enums.dart';
-
 
 // BLoC (El cerebro de la operación)
 import '../bloc/ticket_bloc.dart';
@@ -72,10 +73,10 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
   }
 
   // Rutina de disparo
-  void _onConfirmarRecepcion() {
+void _onConfirmarRecepcion() {
     if (!_formKey.currentState!.validate()) return;
 
-    // Obtenemos al operario actual del AuthBloc
+    // Extraemos al operario (Esto sí es válido en UI porque el AuthBloc provee el contexto de sesión)
     final authState = context.read<AuthBloc>().state;
     String nombreOperador = 'SISTEMA';
     String rolOperador = 'TÉCNICO';
@@ -85,22 +86,19 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
       rolOperador = authState.usuario.rol.name.toUpperCase();
     }
 
-    final ticketActualizado = widget.ticket.copyWith(
-      estadoActual: EstadoTicket.recepcionFisica,
-      numeroSerie: _serieController.text.trim(), 
-      fallaReportada: _fallaController.text.trim(), 
-      accesoriosRecibidos: _accesoriosSeleccionados, 
-    );
-
-    // 🚀 La UI SOLO despacha el evento. El BLoC se encarga del Firestore y del PDF.
+    // 🚀 La UI dispara señales crudas. Cero lógica de negocio aquí.
     context.read<TicketBloc>().add(
       ConfirmarRecepcionEvent(
-        ticket: ticketActualizado,
-        nombreUsuario: nombreOperador,
-        rolUsuario: rolOperador,
-        tipoRequerimiento: _tipoRequerimiento, // Asegúrate de añadir esto en tu evento
+        ticket: widget.ticket, // Mandamos el ticket base intacto
+        numeroSerie: _serieController.text.trim(),
+        fallaReportada: _fallaController.text.trim(),
+        accesoriosRecibidos: _accesoriosSeleccionados,
+        tipoRequerimiento: _tipoRequerimiento,
+        prioridad: _prioridad,
         notasRecepcion: _descripcionController.text.trim(),
         evidencias: _archivosEvidencia,
+        nombreUsuario: nombreOperador,
+        rolUsuario: rolOperador,
       )
     );
   }
@@ -114,203 +112,111 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
         foregroundColor: Colors.white,
       ),
       body: BlocConsumer<TicketBloc, TicketState>(
+        listenWhen: (previous, current) => previous.status != current.status,
         listener: (context, state) {
-          debugPrint("📡 [MONITOR]: Estado BLoC recibido -> $state");
-
-          if (state is TicketError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.message), backgroundColor: Colors.red)
-            );
-          } else if (state is TicketOperationSuccess) { 
-            // ⚠️ NOTA ARQUITECTÓNICA: Si cambiaste este estado a TicketRecepcionExitosa(pdfBytes) 
-            // como te sugerí, ajusta este 'if' y usa state.pdfBytes en el layoutPdf.
+          if (state.status == TicketStatus.error) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.red));
+          } else if (state.status == TicketStatus.operationSuccess) { 
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Acta registrada en la nube.'), backgroundColor: Colors.teal));
             
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Acta registrada y respaldada en la nube.'), 
-                backgroundColor: Colors.teal
-              )
-            );
-            
-            // Si tu BLoC actual te devuelve los bytes del PDF en un estado modificado, 
-            // imprimes aquí. Si lo sigues manejando de otra forma, comentalo.
-            if (state is TicketRecepcionExitosa) {
+            if (state.pdfBytes != null && state.pdfBytes!.isNotEmpty) {
                 Printing.layoutPdf(
-                  onLayout: (format) async => state.pdfBytes,
+                  onLayout: (format) async => state.pdfBytes!,
                   name: 'Acta_Recepcion_${widget.ticket.id}.pdf',
                 );
             }
-
-            if (context.mounted) {
-              Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
-            }
+            if (context.mounted) Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
           }
         },
         builder: (context, state) {
+          final isProcessing = state.status == TicketStatus.loading;
+
           return Form(
             key: _formKey,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ==========================================
-                  // BLOQUE 1: DATOS LOGÍSTICOS
-                  // ==========================================
-                  const SectionTitleWidget(title: '1. Datos del Cliente'),
-                  ReadOnlyFieldWidget(
-                    label: 'Cliente / Razón Social', 
-                    value: widget.ticket.clienteId, 
-                    icon: Icons.business
-                  ),
-                  ReadOnlyFieldWidget(
-                    label: 'Contacto', 
-                    value: widget.ticket.nombreContacto, 
-                    icon: Icons.person
-                  ),
-                  ReadOnlyFieldWidget(
-                    label: 'Tipo de Equipo', 
-                    value: widget.ticket.equipo.name.toUpperCase(), 
-                    icon: Icons.precision_manufacturing
-                  ),
-                  
-                  const Divider(height: 32, thickness: 2),
+            child: AbsorbPointer(
+              absorbing: isProcessing, // ⚙️ Enclavamiento de seguridad
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ⚙️ MÓDULO 1: LOGÍSTICA
+                    const SectionTitleWidget(title: '1. Datos del Cliente'),
+                    ReadOnlyFieldWidget(label: 'Cliente', value: widget.ticket.clienteId, icon: Icons.business),
+                    ReadOnlyFieldWidget(label: 'Contacto', value: widget.ticket.nombreContacto, icon: Icons.person),
+                    ReadOnlyFieldWidget(label: 'Tipo de Equipo', value: widget.ticket.equipo.name.toUpperCase(), icon: Icons.precision_manufacturing),
+                    const Divider(height: 32, thickness: 2),
 
-                  // ==========================================
-                  // BLOQUE 2: CONFIRMACIÓN TÉCNICA
-                  // ==========================================
-                  const SectionTitleWidget(title: '2. Confirmación de equipo'),
-                  CustomInputFieldWidget(
-                    label: 'Número de Serie Confirmado',
-                    controller: _serieController,
-                    icon: Icons.qr_code_scanner,
-                  ),
-                  
-                  ChecklistDinamicoWidget(
-                    equipo: widget.ticket.equipo,
-                    selecciones: _accesoriosSeleccionados,
-                    onChanged: (pieza, valor) {
-                      setState(() {
-                        _accesoriosSeleccionados[pieza] = valor;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  CustomInputFieldWidget(
-                    label: 'Falla Reportada (Editable por técnico)',
-                    controller: _fallaController,
-                    icon: Icons.report_problem_outlined,
-                    lines: 2,
-                  ),
-
-                  const Divider(height: 32, thickness: 2),
-
-                  // ==========================================
-                  // BLOQUE 3: PRIORIDAD OPERATIVA
-                  // ==========================================
-                  const SectionTitleWidget(title: '3. Nivel de Prioridad Inicial'),
-                  DropdownButtonFormField<Prioridad>(
-                    value: _prioridad,
-                    decoration: InputDecoration(
-                      labelText: 'Prioridad de Atención',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      prefixIcon: const Icon(Icons.flag_circle_outlined),
+                    // ⚙️ MÓDULO 2: INSPECCIÓN
+                    const SectionTitleWidget(title: '2. Confirmación de equipo'),
+                    CustomInputFieldWidget(label: 'Número de Serie Confirmado', controller: _serieController, icon: Icons.qr_code_scanner),
+                    ChecklistDinamicoWidget(
+                      equipo: widget.ticket.equipo,
+                      selecciones: _accesoriosSeleccionados,
+                      onChanged: (pieza, valor) => setState(() => _accesoriosSeleccionados[pieza] = valor),
                     ),
-                    items: Prioridad.values.map((Prioridad p) {
-                      return DropdownMenuItem<Prioridad>(
-                        value: p,
-                        child: Text(
-                          p.name.toUpperCase(),
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (Prioridad? newValue) {
-                      setState(() {
-                        _prioridad = newValue!;
-                      });
-                    },
-                  ),
+                    const SizedBox(height: 16),
+                    CustomInputFieldWidget(label: 'Falla Reportada', controller: _fallaController, icon: Icons.report_problem_outlined, lines: 2),
+                    const Divider(height: 32, thickness: 2),
 
-                  const Divider(height: 32, thickness: 2),
-
-                  // ==========================================
-                  // BLOQUE 4: INGRESO FÍSICO
-                  // ==========================================
-                  const SectionTitleWidget(title: '4. Datos de Ingreso Físico'),
-                  DropdownButtonFormField<String>(
-                    value: _tipoRequerimiento,
-                    decoration: InputDecoration(
-                      labelText: 'Tipo de Requerimiento',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      prefixIcon: const Icon(Icons.build_circle_outlined),
+                    // ⚙️ MÓDULO 3: PARAMETRIZACIÓN (Prioridad y Tipo)
+                    const SectionTitleWidget(title: '3. Parámetros Operativos'),
+                    DropdownButtonFormField<Prioridad>(
+                      value: _prioridad,
+                      decoration: const InputDecoration(labelText: 'Prioridad', border: OutlineInputBorder(), prefixIcon: Icon(Icons.flag_circle_outlined)),
+                      items: Prioridad.values.map((p) => DropdownMenuItem(value: p, child: Text(p.name.toUpperCase()))).toList(),
+                      onChanged: (val) => setState(() => _prioridad = val!),
                     ),
-                    items: ['Garantía', 'Mantenimiento'].map((String value) {
-                      return DropdownMenuItem<String>(
-                        value: value,
-                        child: Text(value),
-                      );
-                    }).toList(),
-                    onChanged: (newValue) {
-                      setState(() {
-                        _tipoRequerimiento = newValue!;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  CustomInputFieldWidget(
-                    label: 'Descripción / Notas de Recepción',
-                    controller: _descripcionController,
-                    icon: Icons.description_outlined,
-                    lines: 3,
-                    hint: 'Ej: Equipo llega con carcasa rayada, sin cables de alimentación...',
-                  ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: _tipoRequerimiento,
+                      decoration: const InputDecoration(labelText: 'Tipo de Requerimiento', border: OutlineInputBorder(), prefixIcon: Icon(Icons.build_circle_outlined)),
+                      items: ['Garantía', 'Mantenimiento'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                      onChanged: (val) => setState(() => _tipoRequerimiento = val!),
+                    ),
+                    const SizedBox(height: 16),
+                    CustomInputFieldWidget(
+                      label: 'Notas de Recepción', 
+                      controller: _descripcionController, 
+                      icon: Icons.description_outlined, 
+                      lines: 3, 
+                      hint: 'Ej: Equipo llega con carcasa rayada...'
+                    ),
+                    const Divider(height: 32, thickness: 2),
 
-                  const Divider(height: 32, thickness: 2),
-
-                  // ==========================================
-                  // BLOQUE 5: PERIFÉRICOS DE CÁMARA
-                  // ==========================================
-                  const SectionTitleWidget(title: '5. Evidencia Fotográfica'),
-                  CameraManagerWidget(
-                    archivosEvidencia: _archivosEvidencia,
-                    onArchivosActualizados: (archivos) {
-                      setState(() {
+                    // ⚙️ MÓDULO 4: TELEMETRÍA VISUAL
+                    const SectionTitleWidget(title: '4. Evidencia Fotográfica'),
+                    CameraManagerWidget(
+                      archivosEvidencia: _archivosEvidencia,
+                      onArchivosActualizados: (archivos) => setState(() {
                         _archivosEvidencia.clear();
                         _archivosEvidencia.addAll(archivos);
-                      });
-                    },
-                  ),
-
-                  const Divider(height: 32, thickness: 2),
-
-                  const SectionTitleWidget(title: '6. Registro de Sistema'),
-                  ReadOnlyFieldWidget(
-                    label: 'Timestamp de Ingreso HMI', 
-                    value: DateTime.now().toString().substring(0, 16), 
-                    icon: Icons.access_time
-                  ),
-
-                  const SizedBox(height: 32),
-                  
-                  // Botón de Enclavamiento (Submit)
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.teal,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      onPressed: state is TicketLoading ? null : _onConfirmarRecepcion,
-                      child: state is TicketLoading 
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text('CONFIRMAR RECEPCIÓN', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                      }),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                ],
+                    const Divider(height: 32, thickness: 2),
+
+                    // ⚙️ ACTUADOR FINAL
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                        onPressed: isProcessing ? null : _onConfirmarRecepcion,
+                        child: isProcessing 
+                          ? const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+                                SizedBox(width: 12),
+                                Text('TRANSMITIENDO DATOS...', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
+                              ],
+                            )
+                          : const Text('CONFIRMAR RECEPCIÓN', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
             ),
           );

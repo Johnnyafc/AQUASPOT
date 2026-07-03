@@ -14,6 +14,7 @@ import '../models/ticket_model.dart';
 import '../models/evento_auditoria_model.dart';
 import '../datasources/storage_remote_datasource.dart';
 import '../../../../core/enum/segmento_operativo.dart';
+import '../../../../core/services/pdf_service.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -23,13 +24,14 @@ class TicketRepositoryImpl implements ITicketRepository {
   final WebhookRemoteDataSource webhookDataSource;
   final StorageRemoteDataSource storageDataSource;
   final NetworkInfo networkInfo;
-  
+  final PdfService pdfService;
 
-  TicketRepositoryImpl({
+TicketRepositoryImpl({
     required this.firebaseDataSource,
     required this.webhookDataSource,
     required this.storageDataSource,
-    required this.networkInfo,
+    required this.networkInfo, // ⚙️ Lo agregamos al constructor
+    required this.pdfService,
   });
 
   // --- Subrutina de Conversión Universal ---
@@ -79,6 +81,39 @@ class TicketRepositoryImpl implements ITicketRepository {
       return const Left(NetworkFailure('Sin conexión a internet en el campamento.'));
     }
   }
+
+
+@override
+  Future<Either<Failure, Uint8List>> generarActaPdf({
+    required TicketEntity ticket,
+    required String tipoRequerimiento,
+    required String descripcion,
+    required List<XFile> evidencias, // Mantenemos la tubería en File (dart:io)
+  }) async {
+    try {
+      // Delegamos toda la lógica gráfica a tu clase especializada
+      final Uint8List pdfBytes = await pdfService.generateActaRecepcion(
+        ticket: ticket,
+        tipoRequerimiento: tipoRequerimiento,
+        descripcion: descripcion,
+        evidencias: evidencias,
+      );
+
+      // Control de calidad post-fabricación
+      if (pdfBytes.isEmpty) {
+         return Left(ServerFailure('Falla mecánica: El servicio PDF devolvió un flujo de bytes vacío.'));
+      }
+
+      // Despacho exitoso hacia el UseCase -> BLoC
+      return Right(pdfBytes);
+
+    } catch (e) {
+      // Cualquier excepción de memoria, formato corrupto o fallo de la librería 'pdf' queda atrapada aquí.
+      return Left(ServerFailure('Colapso en el renderizado del PDF: ${e.toString()}'));
+    }
+  }
+
+
 
 @override
   Future<Either<Failure, List<TicketEntity>>> obtenerTickets({SegmentoOperativo? segmentoUsuario}) async {
@@ -180,4 +215,4 @@ class TicketRepositoryImpl implements ITicketRepository {
       return const Left(NetworkFailure('Operación abortada: No hay señal de red.'));
     }
   } 
-}
+  }

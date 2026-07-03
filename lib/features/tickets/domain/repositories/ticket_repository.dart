@@ -22,4 +22,10 @@ abstract class ITicketRepository {
 Future<Either<Failure, String>> subirActaPdfStorage(String ticketId, Uint8List pdfBytes);
   // Añadir en ITicketRepository
   Future<Either<Failure, String>> subirEvidencia(XFile file, String ticketId);
+  Future<Either<Failure, Uint8List>> generarActaPdf({
+    required TicketEntity ticket,
+    required String tipoRequerimiento,
+    required String descripcion,
+    required List<XFile> evidencias,
+  });
 }

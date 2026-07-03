@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_event.dart';
-import '../bloc/ticket_state.dart';
+import '../bloc/ticket_state.dart'; // ⚙️ El estado unificado
 import '../../domain/entities/ticket_enums.dart';
 import '../../domain/entities/ticket_entity.dart';
 import 'detalle_ticket_page.dart';
@@ -18,7 +18,7 @@ class HistorialTicketsPage extends StatefulWidget {
 }
 
 class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
- @override
+  @override
   void initState() {
     super.initState();
     // ⚙️ LLAVE MAESTRA: Solicitamos telemetría GLOBAL (Sin filtros de segmento)
@@ -64,13 +64,17 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
           ),
         ),
         body: BlocBuilder<TicketBloc, TicketState>(
-          buildWhen: (previous, current) => current is TicketLoading || current is TicketHistorialCargado || current is TicketError,
+          // ⚙️ ESTÁNDAR INDUSTRIAL: Escuchamos cambios en la variable de estado, no en tipos de clase
+          buildWhen: (previous, current) => previous.status != current.status,
           builder: (context, state) {
-            if (state is TicketLoading) {
+            
+            // 1. ESTADO DE TRABAJO
+            if (state.status == TicketStatus.loading) {
               return const Center(child: CircularProgressIndicator(color: Color(0xFF005A9C)));
             } 
             
-            if (state is TicketError) {
+            // 2. ESTADO DE ALARMA
+            if (state.status == TicketStatus.error) {
               return Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -79,7 +83,7 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
                     const SizedBox(height: 16),
                     Text(state.message, textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
                     TextButton(
-                      onPressed: () => context.read<TicketBloc>().add(ObtenerHistorialTicketsEvent(segmento: SegmentoOperativo.general)),
+                      onPressed: () => context.read<TicketBloc>().add(const ObtenerHistorialTicketsEvent(segmento: SegmentoOperativo.general)),
                       child: const Text('REINTENTAR CONEXIÓN'),
                     )
                   ],
@@ -87,10 +91,11 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
               );
             } 
             
-            if (state is TicketHistorialCargado) {
-              // 🗄️ LÓGICA DE FILTRADO (Separación de buffers)
-              final ticketsCreados = state.tickets.where((t) => t.estadoActual == EstadoTicket.creado).toList();
-              final ticketsRecepcionados = state.tickets.where((t) => t.estadoActual == EstadoTicket.recepcionFisica).toList();
+            // 3. ESTADO DE LECTURA EXITOSA
+            if (state.status == TicketStatus.loaded || state.status == TicketStatus.operationSuccess) {
+              // 🗄️ LÓGICA DE FILTRADO (Separación de buffers desde state.historial)
+              final ticketsCreados = state.historial.where((t) => t.estadoActual == EstadoTicket.creado).toList();
+              final ticketsRecepcionados = state.historial.where((t) => t.estadoActual == EstadoTicket.recepcionFisica).toList();
               
               // 🚀 Renderizado de las vistas acopladas al TabBar
               return TabBarView(
@@ -101,6 +106,7 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
               );
             }
             
+            // 4. ESTADO INICIAL
             return const SizedBox.shrink();
           },
         ),
@@ -113,9 +119,8 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
   // =========================================================================
   Widget _buildListaTickets(List<TicketEntity> ticketsFiltrados, String mensajeVacio) {
     if (ticketsFiltrados.isEmpty) {
-      // RefreshIndicator también aquí para poder recargar si la lista está vacía
       return RefreshIndicator(
-        onRefresh: () async => context.read<TicketBloc>().add(ObtenerHistorialTicketsEvent(segmento: SegmentoOperativo.general)),
+        onRefresh: () async => context.read<TicketBloc>().add(const ObtenerHistorialTicketsEvent(segmento: SegmentoOperativo.general)),
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
@@ -131,7 +136,7 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
     }
 
     return RefreshIndicator(
-      onRefresh: () async => context.read<TicketBloc>().add(ObtenerHistorialTicketsEvent(segmento: SegmentoOperativo.general)),
+      onRefresh: () async => context.read<TicketBloc>().add(const ObtenerHistorialTicketsEvent(segmento: SegmentoOperativo.general)),
       child: ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: ticketsFiltrados.length,
