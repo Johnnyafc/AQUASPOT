@@ -134,7 +134,7 @@ Future<void> _onActualizarEvaluacion(ActualizarEvaluacionEvent event, Emitter<Ti
     emit(state.copyWith(status: TicketStatus.loading, message: 'Consultando telemetría histórica...'));
 
     // Asumo que tu evento o caso de uso tiene la lógica para traer el historial
-    final result = await obtenerTickets(); // Pásale los parámetros de segmento si los requiere
+    final result = await obtenerTickets(segmentoUsuario: event.segmento); // Pásale los parámetros de segmento si los requiere
 
     result.fold(
       (failure) => emit(state.copyWith(
@@ -148,31 +148,88 @@ Future<void> _onActualizarEvaluacion(ActualizarEvaluacionEvent event, Emitter<Ti
     );
   }
 
-  Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) async {
-    emit(state.copyWith(
-      status: TicketStatus.loading, 
-      message: 'Transmitiendo nuevo ticket a la base de datos...'
-    ));
+Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) async {
+  // 1. Activamos la baliza de carga mutando el estado actual
+  emit(state.copyWith(
+    status: TicketStatus.loading, 
+    message: 'Transmitiendo datos...'
+  ));
 
-    final result = await crearTicket(event.ticket);
+  // 2. Generación de telemetría interna
+  final marcaDeTiempo = DateTime.now();
+  final idGenerado = 'REQ-${marcaDeTiempo.millisecondsSinceEpoch}';
 
-    result.fold(
-      (failure) => emit(state.copyWith(
-        status: TicketStatus.error,
-        message: _mapFailureToMessage(failure)
-      )),
-      (ticketCreado) {
-        // ⚙️ Preservamos la memoria: Clonamos la lista actual y le sumamos el nuevo ticket
-        final listaActualizada = List<TicketEntity>.from(state.tickets)..add(ticketCreado);
-        
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: 'CREACIÓN DE REQUERIMIENTO',
+    usuarioNombre: event.nombreUsuario,
+    usuarioRol: event.rolUsuario,
+    timestamp: marcaDeTiempo,
+  );
+
+  final List<String> urlsSubidas = [];
+
+  // 3. Lazo de transmisión de imágenes
+  if (event.evidencias.isNotEmpty) {
+    for (final file in event.evidencias) {
+      final uploadResult = await subirEvidenciaUseCase(file, idGenerado);
+      
+      bool tieneFalla = false;
+      String mensajeFalla = '';
+
+      uploadResult.fold(
+        (failure) {
+          tieneFalla = true;
+          mensajeFalla = _mapFailureToMessage(failure);
+        },
+        (url) => urlsSubidas.add(url),
+      );
+
+      // 🛑 PARADA DE EMERGENCIA: Emitimos el error usando copyWith
+      if (tieneFalla) {
         emit(state.copyWith(
-          status: TicketStatus.operationSuccess,
-          message: 'Ticket generado con éxito en el sistema.',
-          tickets: listaActualizada, // Inyectamos la lista actualizada
+          status: TicketStatus.error, 
+          message: mensajeFalla
         ));
-      },
-    );
+        return; 
+      }
+    }
   }
+
+  // ⚙️ 4. ZONA DE ENSAMBLAJE
+  final ticketFinal = TicketEntity(
+    id: idGenerado,
+    estadoActual: EstadoTicket.creado,
+    sede: event.sede, 
+    clienteId: event.clienteId,
+    campamento: event.campamento,
+    nombreContacto: event.nombreContacto,
+    telefonoContacto: event.telefonoContacto,
+    emailContacto: event.emailContacto,
+    equipo: event.equipo,
+    equipoDetalle: event.equipoDetalle,
+    accesoriosRecibidos: const {}, 
+    fallaReportada: event.fallaReportada,
+    numeroSerie: null, 
+    historialEventos: [eventoAuditoria],
+    fotosUrls: urlsSubidas, 
+  );
+
+  // 5. PERSISTENCIA EN FIRESTORE
+  final failureOrTicket = await crearTicket(ticketFinal);
+
+  failureOrTicket.fold(
+    // 🛑 ERROR:
+    (failure) => emit(state.copyWith(
+      status: TicketStatus.error, 
+      message: _mapFailureToMessage(failure)
+    )),
+    // ✅ ÉXITO:
+    (ticketCreado) => emit(state.copyWith(
+      status: TicketStatus.operationSuccess, 
+      message: 'Requerimiento registrado con éxito en el sistema central.'
+    )),
+  );
+}
 
 Future<void> _onObtenerClientes(ObtenerClientesEvent event, Emitter<TicketState> emit) async {
     // Señal de arranque: Mantenemos lo que hay, pero pasamos a estado de carga

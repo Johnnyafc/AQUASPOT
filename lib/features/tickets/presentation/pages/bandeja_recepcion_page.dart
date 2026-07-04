@@ -36,8 +36,9 @@ class _BandejaRecepcionPageState extends State<BandejaRecepcionPage> {
       context.read<TicketBloc>().add(
         ObtenerHistorialTicketsEvent(segmento: authState.usuario.segmento)
       );
+      String segmento= authState.usuario.segmento.name;
     } else {
-      debugPrint("⚠️ ALERTA: No se puede solicitar telemetría sin usuario autenticado.");
+      debugPrint("⚠️ ALERTA: No se puede solicitar datos sin usuario autenticado.");
     }
   }
 

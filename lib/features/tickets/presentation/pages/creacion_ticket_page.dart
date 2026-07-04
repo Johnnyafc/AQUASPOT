@@ -75,16 +75,18 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
     _formKey.currentState?.reset();
   }
 
-  void _submitForm() {
+ void _submitForm() {
+    // 1. Validaciones de Interfaz (Sensores locales)
     if (!_formKey.currentState!.validate()) return;
 
     if (_selectedClienteId == null || _selectedClienteId!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('⚠️ Debe seleccionar una Camaronera de la lista sugerida.')),
+        const SnackBar(content: Text('⚠️ Debe seleccionar un Cliente de la lista sugerida.')),
       );
       return;
     }
     
+    // 2. Extracción de variables de entorno
     final authState = context.read<AuthBloc>().state;
     String nombreOperario = 'SISTEMA';
     String rolOperario = 'DESCONOCIDO';
@@ -98,31 +100,20 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
         ? _customEquipoController.text.trim() 
         : null;
 
-    final String nuevoId = 'REQ-${DateTime.now().millisecondsSinceEpoch}';
-
-    final ticketBorrador = TicketEntity(
-      id: nuevoId,
-      estadoActual: EstadoTicket.creado,
+    // 3. Disparo de Señal al Controlador Lógico (BLoC)
+    context.read<TicketBloc>().add(CrearTicketEvent(
       sede: _selectedSede!,
       clienteId: _selectedClienteId!, 
-      campamento: _campamentoController.text,
-      nombreContacto: _nombreContactoController.text,
-      telefonoContacto: _telefonoController.text,
-      emailContacto: _emailController.text,
+      campamento: _campamentoController.text.trim(),
+      nombreContacto: _nombreContactoController.text.trim(),
+      telefonoContacto: _telefonoController.text.trim(),
+      emailContacto: _emailController.text.trim(),
       equipo: _selectedEquipo!, 
       equipoDetalle: detalleDelEquipo, 
-      accesoriosRecibidos: null,
-      fallaReportada: _fallaController.text,
-      numeroSerie: null,
-      historialEventos: const [], 
-      fotosUrls: const [],
-    );
-
-    context.read<TicketBloc>().add(CrearTicketEvent(
-      ticket: ticketBorrador,
+      fallaReportada: _fallaController.text.trim(),
       nombreUsuario: nombreOperario,
       rolUsuario: rolOperario,
-      evidencias: const [],
+      evidencias: const [], // O la variable donde tengas las fotos iniciales si aplica
     ));
   }
 

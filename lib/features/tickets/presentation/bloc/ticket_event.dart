@@ -75,20 +75,40 @@ class ObtenerClientesEvent extends TicketEvent {}
 
 // 2. Etapa 1: Comercial ingresa un equipo nuevo
 class CrearTicketEvent extends TicketEvent {
-  final TicketEntity ticket;
-  final List<XFile> evidencias;
+  final Sede sede;
+  final String clienteId;
+  final String campamento;
+  final String nombreContacto;
+  final String telefonoContacto;
+  final String emailContacto;
+  final TipoEquipo equipo;
+  final String? equipoDetalle;
+  final String fallaReportada;
   final String nombreUsuario;
   final String rolUsuario;
+  final List<XFile> evidencias;
 
   const CrearTicketEvent({
-    required this.ticket,
+    required this.sede,
+    required this.clienteId,
+    required this.campamento,
+    required this.nombreContacto,
+    required this.telefonoContacto,
+    required this.emailContacto,
+    required this.equipo,
+    this.equipoDetalle,
+    required this.fallaReportada,
     required this.nombreUsuario,
-    required this.evidencias,
     required this.rolUsuario,
+    this.evidencias = const [],
   });
 
   @override
-  List<Object> get props => [ticket, nombreUsuario, rolUsuario, evidencias];
+  List<Object?> get props => [
+        sede, clienteId, campamento, nombreContacto, telefonoContacto, 
+        emailContacto, equipo, equipoDetalle, fallaReportada, 
+        nombreUsuario, rolUsuario, evidencias
+      ];
 }
 
 // 3. Etapa 2: Técnico en el taller emite su diagnóstico

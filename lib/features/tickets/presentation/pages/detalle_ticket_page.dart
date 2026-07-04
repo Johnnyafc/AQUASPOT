@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 import '../../domain/entities/ticket_entity.dart';
-import 'full_photo_page.dart';
+import '../widgets/full_photo_widget.dart';
 
 class DetalleTicketPage extends StatelessWidget {
   final TicketEntity ticket;
