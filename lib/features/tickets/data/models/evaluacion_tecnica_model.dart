@@ -1,7 +1,7 @@
 // lib/features/tickets/data/models/evaluacion_tecnica_model.dart
 
 import '../../domain/entities/evaluacion_tecnica_entity.dart';
-import '../../domain/entities/ticket_enums.dart';
+import '../../../../core/enum/ticket_enums.dart';
 
 class EvaluacionTecnicaModel extends EvaluacionTecnicaEntity {
   const EvaluacionTecnicaModel({

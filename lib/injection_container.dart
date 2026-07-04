@@ -36,6 +36,7 @@ import 'features/auth/data/repositories/auth_repository_impl.dart';
 import 'features/auth/domain/repositories/auth_repository.dart';
 import 'features/auth/domain/usecases/cerrar_sesion_usecase.dart';
 import 'features/auth/domain/usecases/iniciar_sesion_usecase.dart';
+import 'features/auth/domain/usecases/registrar_usuario_usecase.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 
 final sl = GetIt.instance;
@@ -115,6 +116,8 @@ Future<void> init() async {
   sl.registerLazySingleton(() => IniciarSesionUseCase(sl()));
   sl.registerLazySingleton(() => CerrarSesionUseCase(sl()));
 
+  sl.registerLazySingleton(() => RegistrarUsuarioUseCase(sl()));
+
   // ===========================================================================
   // 5. CAPA DE PRESENTACIÓN (Blocs) - REGISTRAR AL FINAL
   // ===========================================================================
@@ -132,5 +135,6 @@ Future<void> init() async {
   sl.registerFactory(() => AuthBloc(
         iniciarSesion: sl(),
         cerrarSesion: sl(),
+        registrarUsuarioUseCase: sl(),
       ));
 }

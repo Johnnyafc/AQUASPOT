@@ -3,15 +3,9 @@
 import 'package:equatable/equatable.dart';
 // ⚙️ IMPORTANTE: Asegúrate de importar la ruta correcta de tu enum
 import '../../../../core/enum/segmento_operativo.dart'; 
-
+import '../../../../core/enum/rol_usuario.dart';
 // El nivel de privilegios del operador
-enum RolUsuario { 
-  requerimiento, 
-  tecnico, 
-  supervisor,
-  recepcion, 
-  desconocido // Estado de fallo de seguridad
-}
+
 
 class UsuarioEntity extends Equatable {
   final String uid;

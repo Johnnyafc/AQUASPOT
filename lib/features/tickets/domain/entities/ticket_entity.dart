@@ -1,7 +1,7 @@
 // lib/features/tickets/domain/entities/ticket_entity.dart
 
 import 'package:equatable/equatable.dart';
-import 'ticket_enums.dart';
+import '../../../../core/enum/ticket_enums.dart';
 import 'evaluacion_tecnica_entity.dart';
 import 'evento_auditoria_entity.dart';
 
@@ -113,4 +113,23 @@ class TicketEntity extends Equatable {
         pdfActaUrl,
         historialEventos,
       ];
+
+}
+
+extension TicketMetrics on TicketEntity {
+  // ⚙️ Cálculo de tiempo de proceso (Lead Time de Creación a Recepción)
+  Duration? get tiempoDePasoARecepcion {
+    
+    // 1. Buscamos todas las coincidencias en el historial de telemetría sin forzar tipos
+    final eventosInicio = historialEventos.where((e) => e.accion == 'CREACIÓN DE REQUERIMIENTO');
+    final eventosFin = historialEventos.where((e) => e.accion == 'RECEPCIÓN FÍSICA Y EMISIÓN DE ACTA');
+
+    // 2. Enclavamiento de seguridad: Si no existen ambos eventos, abortamos el cálculo
+    if (eventosInicio.isEmpty || eventosFin.isEmpty) {
+      return null;
+    }
+
+    // 3. Calculamos el delta de tiempo usando el primer registro cronológico encontrado
+    return eventosFin.first.timestamp.difference(eventosInicio.first.timestamp);
+  }
 }

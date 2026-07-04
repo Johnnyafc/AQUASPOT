@@ -8,7 +8,7 @@ import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_event.dart';
 import '../bloc/ticket_state.dart';
 import '../../domain/entities/ticket_entity.dart';
-import '../../domain/entities/ticket_enums.dart';
+import '../../../../core/enum/ticket_enums.dart';
 import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../../../features/auth/presentation/bloc/auth_state.dart';
 import '../../domain/entities/cliente_entity.dart';

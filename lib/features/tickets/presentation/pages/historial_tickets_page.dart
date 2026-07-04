@@ -6,7 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_event.dart';
 import '../bloc/ticket_state.dart'; // ⚙️ El estado unificado
-import '../../domain/entities/ticket_enums.dart';
+import '../../../../core/enum/ticket_enums.dart';
 import '../../domain/entities/ticket_entity.dart';
 import 'detalle_ticket_page.dart';
 
@@ -117,6 +117,9 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
   // =========================================================================
   // ⚙️ WIDGET HELPER: Recicla el código de la lista y el RefreshIndicator
   // =========================================================================
+  // =========================================================================
+  // ⚙️ WIDGET HELPER: Recicla el código de la lista y el RefreshIndicator
+  // =========================================================================
   Widget _buildListaTickets(List<TicketEntity> ticketsFiltrados, String mensajeVacio) {
     if (ticketsFiltrados.isEmpty) {
       return RefreshIndicator(
@@ -154,10 +157,32 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
                 child: const Icon(Icons.precision_manufacturing, color: Colors.white),
               ),
               title: Text('${ticket.id} | ${ticket.equipo.name.toUpperCase()}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              
+              // ⚙️ EL SUBTÍTULO MODIFICADO (Falla + Lead Time)
               subtitle: Padding(
                 padding: const EdgeInsets.only(top: 8.0),
-                child: Text('Cliente: ${ticket.clienteId}\nFalla: ${ticket.fallaReportada}', 
-                            maxLines: 2, overflow: TextOverflow.ellipsis),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Cliente: ${ticket.clienteId}\nFalla: ${ticket.fallaReportada}', 
+                          maxLines: 2, overflow: TextOverflow.ellipsis),
+                    
+                    // ⏱️ INDICADOR DE TIEMPO (Solo visible en la pestaña "EN TALLER")
+                    if (ticket.estadoActual == EstadoTicket.recepcionFisica) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        ticket.tiempoDePasoARecepcion != null
+                            ? '⏱️ TIEMPO EN CAMBIAR DE ESTADO: ${ticket.tiempoDePasoARecepcion!.inDays}d ${ticket.tiempoDePasoARecepcion!.inHours.remainder(24)}h ${ticket.tiempoDePasoARecepcion!.inMinutes.remainder(60)}m'
+                            : '⏱️ TIEMPO EN CABIAR DE ESTADO: Faltan datos',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold, 
+                          color: Colors.green, 
+                          fontSize: 12,
+                        ),
+                      ),
+                    ]
+                  ],
+                ),
               ),
               trailing: const Icon(Icons.chevron_right),
               isThreeLine: true,

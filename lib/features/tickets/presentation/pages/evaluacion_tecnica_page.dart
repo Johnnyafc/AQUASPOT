@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/entities/ticket_entity.dart';
-import '../../domain/entities/ticket_enums.dart';
+import '../../../../core/enum/ticket_enums.dart';
 import '../../domain/entities/evaluacion_tecnica_entity.dart';
 import '../../domain/entities/evento_auditoria_entity.dart';
 import '../../../../features/auth/presentation/bloc/auth_bloc.dart';

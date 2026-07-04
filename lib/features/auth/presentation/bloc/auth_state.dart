@@ -13,10 +13,10 @@ abstract class AuthState extends Equatable {
 // Baliza apagada (Estado inicial)
 class AuthInitial extends AuthState {}
 
-// Baliza amarilla (Procesando validación)
+// Baliza amarilla (Procesando validación / Creando usuario)
 class AuthLoading extends AuthState {}
 
-// Baliza verde (Enclavamiento exitoso, tarjeta válida)
+// Baliza verde continua (Enclavamiento exitoso, tarjeta válida)
 class Authenticated extends AuthState {
   final UsuarioEntity usuario;
   const Authenticated(this.usuario);
@@ -25,10 +25,19 @@ class Authenticated extends AuthState {
   List<Object?> get props => [usuario];
 }
 
-// Baliza roja (Operador sin acceso o desconectado)
+// Baliza roja continua (Operador sin acceso o desconectado)
 class Unauthenticated extends AuthState {}
 
-// Alarma de falla técnica
+// 🚀 NUEVO ESTADO: Baliza verde intermitente (Nuevo operario registrado con éxito)
+class AuthRegistrationSuccess extends AuthState {
+  final String message;
+  const AuthRegistrationSuccess(this.message);
+
+  @override
+  List<Object?> get props => [message];
+}
+
+// Alarma de falla técnica (Credenciales inválidas, error de red)
 class AuthError extends AuthState {
   final String message;
   const AuthError(this.message);

@@ -2,6 +2,7 @@
 
 import '../../domain/entities/usuario_entity.dart'; // Ajusta tu ruta
 import '../../../../core/enum/segmento_operativo.dart';
+import '../../../../core/enum/rol_usuario.dart';
 
 class UsuarioModel extends UsuarioEntity {
   const UsuarioModel({

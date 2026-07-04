@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/cliente_model.dart';
 import '../models/ticket_model.dart';
 import '../../../../core/errors/exceptions.dart';
-import '../../../../features/tickets/domain/entities/ticket_enums.dart';
+import '../../../../core/enum/ticket_enums.dart';
 import '../../../../core/enum/segmento_operativo.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:typed_data'; // <-- Ruta de tu nuevo Enum       // <-- Ruta de tu Enum de máquinas

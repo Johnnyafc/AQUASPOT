@@ -8,7 +8,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_event.dart';
 import '../bloc/ticket_state.dart'; // ⚙️ Tu nuevo estado unificado
-import '../../domain/entities/ticket_enums.dart';
+import '../../../../core/enum/ticket_enums.dart';
 import 'detalle_ticket_page.dart';
 import 'evaluacion_tecnica_page.dart';
 

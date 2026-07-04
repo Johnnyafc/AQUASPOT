@@ -8,7 +8,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_event.dart';
 import '../bloc/ticket_state.dart'; // ⚙️ Tu estado unificado
-import '../../domain/entities/ticket_enums.dart';
+import '../../../../core/enum/ticket_enums.dart';
 
 import 'formulario_recepcion_page.dart';
 
@@ -36,7 +36,6 @@ class _BandejaRecepcionPageState extends State<BandejaRecepcionPage> {
       context.read<TicketBloc>().add(
         ObtenerHistorialTicketsEvent(segmento: authState.usuario.segmento)
       );
-      String segmento= authState.usuario.segmento.name;
     } else {
       debugPrint("⚠️ ALERTA: No se puede solicitar datos sin usuario autenticado.");
     }

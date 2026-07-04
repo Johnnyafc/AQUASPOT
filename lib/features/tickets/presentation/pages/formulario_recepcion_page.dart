@@ -7,7 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:printing/printing.dart';
 
 import '../../domain/entities/ticket_entity.dart';
-import '../../domain/entities/ticket_enums.dart';
+import '../../../../core/enum/ticket_enums.dart';
 
 // BLoC (El cerebro de la operación)
 import '../bloc/ticket_bloc.dart';

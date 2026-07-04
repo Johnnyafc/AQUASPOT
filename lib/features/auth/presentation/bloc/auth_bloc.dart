@@ -7,17 +7,20 @@ import '../../domain/usecases/iniciar_sesion_usecase.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
 import '../../../../core/services/notification_service.dart';
-
+import '../../domain/usecases/registrar_usuario_usecase.dart';
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final IniciarSesionUseCase iniciarSesion;
   final CerrarSesionUseCase cerrarSesion;
+  final RegistrarUsuarioUseCase registrarUsuarioUseCase;
 
   AuthBloc({
     required this.iniciarSesion,
     required this.cerrarSesion,
+    required this.registrarUsuarioUseCase,
   }) : super(AuthInitial()) {
     on<IniciarSesionEvent>(_onIniciarSesion);
     on<CerrarSesionEvent>(_onCerrarSesion);
+    on<RegistrarUsuarioEvent>(_onRegistrarUsuario);
   }
 
   String _mapFailureToMessage(Failure failure) {
@@ -65,4 +68,28 @@ Future<void> _onCerrarSesion(CerrarSesionEvent event, Emitter<AuthState> emit) a
       (_) => emit(Unauthenticated()), // Cortamos la corriente al panel principal
     );
   }
+
+Future<void> _onRegistrarUsuario(RegistrarUsuarioEvent event, Emitter<AuthState> emit) async {
+    // 1. Encendemos la baliza amarilla (Enclavamiento de seguridad en la HMI)
+    emit(AuthLoading());
+
+    // 2. Transmisión de datos al Dominio (El UseCase hace el trabajo pesado)
+    final result = await registrarUsuarioUseCase(
+      nombre: event.nombre,
+      email: event.email,
+      password: event.password,
+      segmento: event.segmento,
+      rol: event.rol,
+    );
+
+    // 3. Resolución de la maniobra
+    result.fold(
+      // 🛑 FALLA: Se disparan los relés de protección
+      (failure) => emit(AuthError(_mapFailureToMessage(failure))),
+      
+      // ✅ ÉXITO: Alta confirmada en Firebase
+      (_) => emit(const AuthRegistrationSuccess('Operario dado de alta y sincronizado exitosamente.')),
+    );
+  }
+
 }

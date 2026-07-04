@@ -1,4 +1,4 @@
-import '../entities/ticket_enums.dart';
+import '../../../../core/enum/ticket_enums.dart';
 
 class CatalogoEquiposConstants {
   static const Map<TipoEquipo, List<String>> accesoriosPorMaquina = {

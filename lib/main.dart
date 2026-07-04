@@ -10,7 +10,7 @@ import 'injection_container.dart' as di;
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/tickets/presentation/bloc/ticket_bloc.dart';
 import 'features/auth/presentation/pages/login_page.dart';
-import 'features/tickets/presentation/pages/main_menu_page.dart'; // ✅ El colector principal
+import 'features/auth/presentation/pages/main_menu_page.dart'; // ✅ El colector principal
 import 'core/services/notification_service.dart';
 
 void main() async {

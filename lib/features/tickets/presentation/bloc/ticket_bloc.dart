@@ -13,7 +13,7 @@ import '../../domain/usecases/subir_acta_pdf_usecase.dart';
 import '../../domain/usecases/generar_acta_pdf_usecase.dart'; 
 import '../../domain/entities/evento_auditoria_entity.dart';
 import '../../domain/entities/ticket_entity.dart';
-import '../../domain/entities/ticket_enums.dart';
+import '../../../../core/enum/ticket_enums.dart';
 import 'dart:io';  
 import 'ticket_event.dart';
 import 'ticket_state.dart'; // Asegúrate de estar importando el nuevo TicketState unificado
@@ -134,7 +134,7 @@ Future<void> _onActualizarEvaluacion(ActualizarEvaluacionEvent event, Emitter<Ti
     emit(state.copyWith(status: TicketStatus.loading, message: 'Consultando telemetría histórica...'));
 
     // Asumo que tu evento o caso de uso tiene la lógica para traer el historial
-    final result = await obtenerTickets(segmentoUsuario: event.segmento); // Pásale los parámetros de segmento si los requiere
+    final result = await obtenerTickets(); // Pásale los parámetros de segmento si los requiere
 
     result.fold(
       (failure) => emit(state.copyWith(

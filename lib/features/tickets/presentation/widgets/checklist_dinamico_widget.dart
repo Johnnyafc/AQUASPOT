@@ -1,6 +1,6 @@
 import 'package:aquaspot_postventa/features/tickets/domain/constant/catalogo_equipos_constants.dart';
 import 'package:flutter/material.dart';
-import '../../domain/entities/ticket_enums.dart';
+import '../../../../core/enum/ticket_enums.dart';
 
 class ChecklistDinamicoWidget extends StatelessWidget {
   final TipoEquipo equipo;

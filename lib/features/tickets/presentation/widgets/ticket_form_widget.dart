@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 import '../../domain/entities/cliente_entity.dart';
-import '../../domain/entities/ticket_enums.dart';
+import '../../../../core/enum/ticket_enums.dart';
 import 'custom_dropdown.dart';
 import 'custom_input_field.dart';
 

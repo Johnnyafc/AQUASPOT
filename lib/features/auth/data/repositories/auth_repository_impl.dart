@@ -7,6 +7,8 @@ import '../../../../../core/network/network_info.dart';
 import '../../domain/entities/usuario_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../datasources/auth_remote_datasource.dart';
+import '../../../../core/enum/rol_usuario.dart';
+import '../../../../core/enum/segmento_operativo.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   final AuthRemoteDataSource remoteDataSource;
@@ -38,6 +40,9 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
+
+  
+
   @override
   Future<Either<Failure, void>> cerrarSesion() async {
     try {
@@ -47,4 +52,46 @@ class AuthRepositoryImpl implements AuthRepository {
       return const Left(ServerFailure('Error al intentar desconectar el panel local.'));
     }
   }
+
+@override
+  Future<Either<Failure, void>> registrarUsuario({
+    required String nombre,
+    required String email,
+    required String password,
+    required SegmentoOperativo segmento,
+    required RolUsuario rol,
+  }) async {
+    try {
+      // 1. CREACIÓN EN AUTH (Usando una instancia secundaria para no cerrar sesión del admin)
+      // Nota: Debes haber inicializado esta app secundaria al arrancar la app.
+      // Si no quieres complicarte ahora, usa createUserWithEmailAndPassword, 
+      // pero ten en cuenta que te logueará como el nuevo usuario inmediatamente.
+      
+      final UserCredential userCredential = await firebaseAuth.createUserWithEmailAndPassword(
+        email: email, 
+        password: password
+      );
+
+      final String uid = userCredential.user!.uid;
+
+      // 2. PERSISTENCIA DEL PERFIL EN FIRESTORE
+      // Usamos el UID generado por Auth para identificar al documento en Firestore
+      await remoteDataSource.guardarPerfilUsuario(
+        uid: uid,
+        nombre: nombre,
+        email: email,
+        segmento: segmento,
+        rol: rol,
+      );
+
+      return const Right(null);
+      
+    } on FirebaseAuthException catch (e) {
+      return Left(ServerFailure(e.message ?? 'Error crítico en el nodo de Autenticación'));
+    } catch (e) {
+      return Left(ServerFailure('Fallo estructural en el proceso de alta: $e'));
+    }
+  }
+
+
 }

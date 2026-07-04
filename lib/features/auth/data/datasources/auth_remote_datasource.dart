@@ -5,10 +5,20 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/entities/usuario_entity.dart';
 import '../../../../../core/errors/failures.dart';
+import '../../../../core/enum/rol_usuario.dart';
 
 abstract class AuthRemoteDataSource {
   Future<UsuarioEntity> iniciarSesion(String email, String password);
+Future<void> guardarPerfilUsuario({
+    required String uid,
+    required String nombre,
+    required String email,
+    required SegmentoOperativo segmento,
+    required RolUsuario rol,
+  });
 }
+  
+
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   final FirebaseAuth firebaseAuth;
@@ -33,6 +43,8 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         return RolUsuario.supervisor;
       case 'RECEPCION':
         return RolUsuario.recepcion;
+      case 'ADMIN':
+         return RolUsuario.admin;
       default:
         return RolUsuario.desconocido;
     }
@@ -61,6 +73,32 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   // =====================================================================
   // 🚀 LÓGICA DE AUTENTICACIÓN
   // =====================================================================
+
+@override
+  Future<void> guardarPerfilUsuario({
+    required String uid,
+    required String nombre,
+    required String email,
+    required SegmentoOperativo segmento,
+    required RolUsuario rol,
+  }) async {
+    try {
+      // 📡 Comando de escritura en Firestore (La ruta 'usuarios' es el nodo de almacenamiento)
+      await firestore.collection('usuarios').doc(uid).set({
+        'uid': uid,
+        'nombre': nombre,
+        'email': email,
+        'segmento': segmento.name, // Convertimos el Enum a String para el JSON
+        'rol': rol.name,           // Convertimos el Enum a String
+        'fechaCreacion': FieldValue.serverTimestamp(), // Telemetría industrial importante
+      });
+    } catch (e) {
+      // Si la escritura falla, lanzamos una excepción para que el Repositorio la capture
+      throw Exception('Fallo crítico en la escritura de base de datos: $e');
+    }
+  }
+
+  
 
   @override
   Future<UsuarioEntity> iniciarSesion(String email, String password) async {
@@ -116,4 +154,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       throw ServerFailure('Fallo interno del lector RFID: $e');
     }
   }
+
+
+  
 }

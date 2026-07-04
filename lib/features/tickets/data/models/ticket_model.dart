@@ -3,7 +3,7 @@
 import 'dart:math';
 
 import '../../domain/entities/ticket_entity.dart';
-import '../../domain/entities/ticket_enums.dart';
+import '../../../../core/enum/ticket_enums.dart';
 import 'evaluacion_tecnica_model.dart';
 import 'evento_auditoria_model.dart';
 

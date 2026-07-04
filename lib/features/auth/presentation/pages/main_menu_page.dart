@@ -2,14 +2,16 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
-import '../../../../features/auth/presentation/bloc/auth_event.dart';
-import '../../../../features/auth/presentation/bloc/auth_state.dart';
-import '../../../../features/auth/domain/entities/usuario_entity.dart';
-import 'creacion_ticket_page.dart';
-import 'historial_tickets_page.dart';
-import 'bandeja_evaluaciones_page.dart';
-import 'bandeja_recepcion_page.dart';
+import '../bloc/auth_bloc.dart';
+import '../bloc/auth_event.dart';
+import '../bloc/auth_state.dart';
+import '../../domain/entities/usuario_entity.dart';
+import '../../../tickets/presentation/pages/creacion_ticket_page.dart';
+import '../../../tickets/presentation/pages/historial_tickets_page.dart';
+import '../../../tickets/presentation/pages/bandeja_evaluaciones_page.dart';
+import '../../../tickets/presentation/pages/bandeja_recepcion_page.dart';
+import '../../../../core/enum/rol_usuario.dart';
+import '../pages/registro_usuario_page.dart';
 
 class MainMenuPage extends StatefulWidget {
   const MainMenuPage({super.key});
@@ -152,6 +154,19 @@ class _InicioView extends StatelessWidget {
        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaEvaluacionesPage())),
       ));
     }*/
+
+// 🔒 ACCESO EXCLUSIVO PARA SUPER ADMINISTRADORES
+    if (operador.rol == RolUsuario.admin) {
+      modules.add(_buildCardOption(
+        title: 'Gestión de Operarios',
+        icon: Icons.admin_panel_settings,
+        color: Colors.blueGrey, // Color sobrio para módulos administrativos
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const RegistroUsuarioPage())
+        ),
+      ));
+    }
+
     return modules;
   } 
 
