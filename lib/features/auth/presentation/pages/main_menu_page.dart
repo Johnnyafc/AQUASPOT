@@ -1,5 +1,9 @@
 // lib/features/tickets/presentation/pages/main_menu_page.dart
 
+import 'package:aquaspot_postventa/core/enum/segmento_operativo.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_bloc.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_event.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_comercial_Page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/auth_bloc.dart';
@@ -83,6 +87,14 @@ class _MainMenuPageState extends State<MainMenuPage> {
               } else {
                 setState(() => _selectedIndex = index);
               }
+              if (index == 1) {
+    // DISPARO DE ORDEN DE RECARGA GLOBAL
+    // Usamos 'ninguno' para abrir la válvula de filtrado en el DataSource
+              context.read<TicketBloc>().add(
+              const ObtenerHistorialTicketsEvent(segmento: SegmentoOperativo.ninguno)
+                );
+                 }
+                 setState(() => _selectedIndex = index);
             },
             items: const [
               BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Inicio'),
@@ -125,7 +137,7 @@ class _InicioView extends StatelessWidget {
     
     if (operador.rol == RolUsuario.requerimiento || operador.rol == RolUsuario.supervisor) {
       modules.add(_buildCardOption(
-        title: 'Ingreso de requerimiento',
+        title: 'Crear Ticket',
         icon: Icons.add_box,
         color: Colors.blue,
         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CreacionTicketPage())),
@@ -136,7 +148,7 @@ class _InicioView extends StatelessWidget {
     // Cuando el comisionamiento termine, agregaremos el rol de 'recepcion' o 'requerimiento' aquí.
     if (operador.rol == RolUsuario.supervisor || operador.rol == RolUsuario.recepcion ) {
       modules.add(_buildCardOption(
-        title: 'Recepción Física',
+        title: 'Tickets',
         icon: Icons.inventory_outlined, // Ícono industrial de inventario/recepción
         color: Colors.teal, 
         onTap: () {
@@ -145,7 +157,7 @@ class _InicioView extends StatelessWidget {
         },
       ));
     }
-/*
+
     if (operador.rol == RolUsuario.tecnico || operador.rol == RolUsuario.supervisor) {
       modules.add(_buildCardOption(
         title: 'Evaluaciones Técnicas',
@@ -153,7 +165,7 @@ class _InicioView extends StatelessWidget {
         color: Colors.orange,
        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaEvaluacionesPage())),
       ));
-    }*/
+    }
 
 // 🔒 ACCESO EXCLUSIVO PARA SUPER ADMINISTRADORES
     if (operador.rol == RolUsuario.admin) {
@@ -163,6 +175,16 @@ class _InicioView extends StatelessWidget {
         color: Colors.blueGrey, // Color sobrio para módulos administrativos
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const RegistroUsuarioPage())
+        ),
+      ));
+    }
+    if (operador.rol == RolUsuario.comercial) {
+      modules.add(_buildCardOption(
+        title: 'Gestión Comercial',
+        icon: Icons.business_center,
+        color: Colors.green, // Color asociado a transacciones comerciales
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const BandejaComercialPage())
         ),
       ));
     }

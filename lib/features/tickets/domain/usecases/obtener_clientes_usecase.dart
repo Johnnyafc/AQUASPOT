@@ -1,5 +1,6 @@
 // lib/features/tickets/domain/usecases/obtener_clientes_usecase.dart
 
+import 'package:aquaspot_postventa/core/enum/segmento_operativo.dart';
 import 'package:dartz/dartz.dart';
 import '../../../../core/errors/failures.dart';
 import '../entities/cliente_entity.dart';

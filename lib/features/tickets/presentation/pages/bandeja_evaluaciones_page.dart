@@ -76,7 +76,10 @@ class _BandejaEvaluacionesPageState extends State<BandejaEvaluacionesPage> {
           if (state.status == TicketStatus.loaded || state.status == TicketStatus.operationSuccess) {
             
             // ✅ FILTRO DE HARDWARE: Leemos de state.historial (la matriz que configuramos en el BLoC)
-            final pendientes = state.historial.where((t) => t.estadoActual == EstadoTicket.creado).toList();
+            final pendientes = state.historial.where((t) => 
+              t.estadoActual == EstadoTicket.recepcionFisica && 
+              t.esRegistroCompleto == true
+            ).toList();
 
             if (pendientes.isEmpty) {
               return const Center(child: Text("Bandeja vacía. Todo al día.", style: TextStyle(color: Colors.grey)));

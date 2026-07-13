@@ -9,6 +9,7 @@ class ClienteEntity {
   final DateTime? fechaRegistro; // ⚠️ Ojo, en Firestore es Timestamp, en Dart es DateTime
   final String nombreContacto;
   final String subSector;
+  final String? notasRecepcion;
 
   const ClienteEntity({
     required this.id,
@@ -20,5 +21,6 @@ class ClienteEntity {
     this.fechaRegistro,
     required this.nombreContacto,
     required this.subSector,
+    this.notasRecepcion,
   });
 }

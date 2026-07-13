@@ -1,6 +1,6 @@
 // lib/features/tickets/data/models/cliente_model.dart
 
-import '../../domain/entities/cliente_entity.dart';
+import '../../../tickets/domain/entities/cliente_entity.dart';
 // data/models/cliente_model.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -31,5 +31,19 @@ class ClienteModel extends ClienteEntity {
       nombreContacto: json['nombreContacto'] ?? '',
       subSector: json['subSector'] ?? '',
     );
+  }
+
+  // ⚙️ EL CONVERSOR DE SALIDA (Para inyectar en Firestore)
+  Map<String, dynamic> toJson() {
+    return {
+      'camaronera': camaronera,
+      'celular': celular,
+      'direccion': direccion,
+      'emailContacto': emailContacto,
+      'estadoActual': 'activo', // Forzamos el alta como activo por defecto
+      'fechaRegistro': FieldValue.serverTimestamp(), // Telemetría de tiempo exacta del servidor
+      'nombreContacto': nombreContacto,
+      'subSector': subSector,
+    };
   }
 }

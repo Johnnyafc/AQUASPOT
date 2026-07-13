@@ -6,6 +6,7 @@ class CustomInputFieldWidget extends StatelessWidget {
   final IconData icon;
   final int lines;
   final String? hint;
+  final String? Function(String?)? validator;
 
   const CustomInputFieldWidget({
     super.key,
@@ -14,6 +15,7 @@ class CustomInputFieldWidget extends StatelessWidget {
     required this.icon,
     this.lines = 1,
     this.hint,
+    this.validator,
   });
 
   @override
@@ -21,6 +23,7 @@ class CustomInputFieldWidget extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16.0),
       child: TextFormField(
+        validator: validator ?? (value) => value == null || value.isEmpty ? 'Campo requerido' : null, // Comportamiento por defecto
         controller: controller,
         maxLines: lines,
         decoration: InputDecoration(
@@ -33,9 +36,6 @@ class CustomInputFieldWidget extends StatelessWidget {
             borderSide: const BorderSide(color: Colors.teal, width: 2),
           ),
         ),
-        validator: (value) => (value == null || value.trim().isEmpty) 
-            ? 'Dato requerido para control de calidad.' 
-            : null,
       ),
     );
   }

@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:equatable/equatable.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../../../core/enum/ticket_enums.dart'; 
 import '../../../../core/enum/segmento_operativo.dart';
+import 'package:file_picker/file_picker.dart';
 
 abstract class TicketEvent extends Equatable {
   const TicketEvent();
@@ -36,6 +39,7 @@ class ConfirmarRecepcionEvent extends TicketEvent {
   final Prioridad prioridad;      
   final String notasRecepcion;
   final List<XFile> evidencias; 
+  final bool esRegistroCompleto;
 
   const ConfirmarRecepcionEvent({
     required this.ticket,
@@ -48,6 +52,8 @@ class ConfirmarRecepcionEvent extends TicketEvent {
     required this.prioridad,
     this.notasRecepcion = '',
     this.evidencias = const [],
+    this.esRegistroCompleto = true,
+    
   });
 
   @override
@@ -62,7 +68,7 @@ class ConfirmarRecepcionEvent extends TicketEvent {
     tipoRequerimiento, 
     prioridad, 
     notasRecepcion, 
-    evidencias
+    evidencias,
   ]; 
 }
 
@@ -87,6 +93,14 @@ class CrearTicketEvent extends TicketEvent {
   final String nombreUsuario;
   final String rolUsuario;
   final List<XFile> evidencias;
+  
+  // 🚀 LOS DOS NUEVOS SENSORES
+  final TipoRequerimiento tipoRequerimiento;
+  final LugarAtencion lugarAtencion;
+  final String? numeroSerie;
+  final Map<String, bool>? accesoriosRecibidos;
+  final bool esRegistroCompleto;
+   final String? notasRecepcion;
 
   const CrearTicketEvent({
     required this.sede,
@@ -101,13 +115,21 @@ class CrearTicketEvent extends TicketEvent {
     required this.nombreUsuario,
     required this.rolUsuario,
     this.evidencias = const [],
+    // 🚀 OBLIGATORIOS EN LA TRANSMISIÓN
+    required this.tipoRequerimiento,
+    required this.lugarAtencion,
+    this.numeroSerie,
+    this.accesoriosRecibidos,
+    required this.esRegistroCompleto,
+    this.notasRecepcion
   });
 
   @override
   List<Object?> get props => [
         sede, clienteId, campamento, nombreContacto, telefonoContacto, 
         emailContacto, equipo, equipoDetalle, fallaReportada, 
-        nombreUsuario, rolUsuario, evidencias
+        nombreUsuario, rolUsuario, evidencias,
+        tipoRequerimiento, lugarAtencion,numeroSerie,accesoriosRecibidos,esRegistroCompleto,notasRecepcion // 🚀 Añadidos a las props
       ];
 }
 
@@ -138,4 +160,73 @@ class ObtenerHistorialTicketsEvent extends TicketEvent {
 
   @override
   List<Object> get props => [segmento];
+}
+
+class SeleccionarTipoRequerimientoEvent extends TicketEvent {
+  final TipoRequerimiento tipo;
+
+  const SeleccionarTipoRequerimientoEvent(this.tipo);
+
+  @override
+  List<Object> get props => [tipo];
+}
+
+// ⚙️ COMANDO 2: Selección de submenú (Taller/Campo)
+class SeleccionarLugarAtencionEvent extends TicketEvent {
+  final LugarAtencion lugar;
+
+  const SeleccionarLugarAtencionEvent(this.lugar);
+
+  @override
+  List<Object> get props => [lugar];
+}
+// 🚀 EVENTO: Procesar la evaluación técnica y subir documentos
+class ProcesarEvaluacionDocumentalEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final List<PlatformFile> documentos;
+  final String observacion;
+  final String nombreUsuario; 
+  final String rolUsuario;
+
+  const ProcesarEvaluacionDocumentalEvent({
+    required this.ticket,
+    required this.documentos,
+    required this.observacion,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+List<Object?> get props => [ticket, documentos, observacion, nombreUsuario, rolUsuario];
+}
+
+class ProcesarCotizacionEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final List<PlatformFile> archivosPdf; // 📦 Actualizado a Lista
+  final List<PlatformFile> archivosExcel; // 📦 Actualizado a Lista
+  final String observacion;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const ProcesarCotizacionEvent({
+    required this.ticket,
+    required this.archivosPdf,
+    required this.archivosExcel,
+    required this.observacion,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [
+    ticket, archivosPdf, archivosExcel, observacion, nombreUsuario, rolUsuario
+  ];
+}
+class ObtenerTicketsEvent extends TicketEvent {
+  final EstadoTicket? estadoFiltro; // ⚙️ Válvula reguladora opcional
+
+  const ObtenerTicketsEvent({this.estadoFiltro});
+
+  @override
+  List<Object?> get props => [estadoFiltro];
 }

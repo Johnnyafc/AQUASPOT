@@ -1,19 +1,9 @@
-// lib/features/tickets/domain/entities/evaluacion_tecnica_entity.dart
-
-import 'package:equatable/equatable.dart';
-import '../../../../core/enum/ticket_enums.dart';
-
-class EvaluacionTecnicaEntity extends Equatable {
-  final String serieEquipo;
-  final String diagnostico;
-  final Prioridad prioridad;
+class EvaluacionTecnicaEntity {
+  final List<String> documentosUrls;
+  final String observacion; // 🔌 Nuevo pin de datos
 
   const EvaluacionTecnicaEntity({
-    required this.serieEquipo,
-    required this.diagnostico,
-    required this.prioridad,
+    required this.documentosUrls,
+    this.observacion = '', // Inicializado en vacío por si no escriben nada
   });
-
-  @override
-  List<Object?> get props => [serieEquipo, diagnostico, prioridad];
 }

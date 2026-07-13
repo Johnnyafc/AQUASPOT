@@ -1,13 +1,32 @@
 // lib/features/tickets/domain/entities/ticket_enums.dart
 
-enum Sede { guayaquil, machala }
+enum Sede { DURAN, EL_GUABO }
 
-enum TipoEquipo { Caracol, Cosechadora_premium,Cosechadora_standart,Cosechadora_elevacion, Contador, Otros}
+enum TipoEquipo { Caracol, Cosechadora, Contador, Otros}
 
 enum Prioridad { baja, media, alta }
 
 enum EstadoTicket { 
-  creado,              // Etapa 1: Comercial/Operaciones
-  evaluacionTecnica,   // Etapa 2: Taller/Mantenimiento
-  recepcionFisica      // Etapa 3: Generación de Acta
+  creado,
+  recibido,              
+  evaluacionTecnica,   
+  recepcionFisica,
+  comercial,
+  cotizado      
+}
+
+enum TipoRequerimiento {
+  ventaRepuesto,
+  alquilerPrueba,
+  reparacion,
+  reclamoGarantia,
+  ventaMaquina,
+  ninguno
+}
+
+enum LugarAtencion {
+  taller,
+  campo,
+  pendiente, // ⚙️ Clave para mantener el submenú abierto
+  noAplica
 }

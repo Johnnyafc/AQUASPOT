@@ -1,39 +1,32 @@
 // lib/features/tickets/data/models/evaluacion_tecnica_model.dart
 
 import '../../domain/entities/evaluacion_tecnica_entity.dart';
-import '../../../../core/enum/ticket_enums.dart';
 
 class EvaluacionTecnicaModel extends EvaluacionTecnicaEntity {
   const EvaluacionTecnicaModel({
-    required super.serieEquipo,
-    required super.diagnostico,
-    required super.prioridad,
+    required super.documentosUrls,
+    super.observacion = '',
   });
 
   factory EvaluacionTecnicaModel.fromJson(Map<String, dynamic> json) {
     return EvaluacionTecnicaModel(
-      serieEquipo: json['serieEquipo'] ?? '',
-      diagnostico: json['diagnostico'] ?? '',
-      prioridad: Prioridad.values.firstWhere(
-        (e) => e.name == json['prioridad'],
-        orElse: () => Prioridad.media,
-      ),
+      // ⚙️ CASTEO ESTRICTO: Prevenimos fallos si Firestore devuelve null o un tipo dinámico
+      documentosUrls: List<String>.from(json['documentosUrls'] ?? []),
+      observacion: json['observacion'] ?? '',
     );
   }
 
   factory EvaluacionTecnicaModel.fromEntity(EvaluacionTecnicaEntity entity) {
     return EvaluacionTecnicaModel(
-      serieEquipo: entity.serieEquipo,
-      diagnostico: entity.diagnostico,
-      prioridad: entity.prioridad,
+      documentosUrls: entity.documentosUrls,
+      observacion: entity.observacion,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'serieEquipo': serieEquipo,
-      'diagnostico': diagnostico,
-      'prioridad': prioridad.name,
+      'documentosUrls': documentosUrls,
+      'observacion': observacion,
     };
   }
 }

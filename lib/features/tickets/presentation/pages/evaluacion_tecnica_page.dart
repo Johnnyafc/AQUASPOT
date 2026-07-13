@@ -1,19 +1,16 @@
-// lib/features/tickets/presentation/pages/evaluacion_tecnica_page.dart
-
+import 'dart:io';
+import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../domain/entities/ticket_entity.dart';
-import '../../../../core/enum/ticket_enums.dart';
-import '../../domain/entities/evaluacion_tecnica_entity.dart';
-import '../../domain/entities/evento_auditoria_entity.dart';
-import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
-import '../../../../features/auth/presentation/bloc/auth_state.dart';
+import 'package:file_picker/file_picker.dart' as fp;
 import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_event.dart';
+import '../../domain/entities/ticket_entity.dart';
 
 class EvaluacionTecnicaPage extends StatefulWidget {
   final TicketEntity ticket;
-
   const EvaluacionTecnicaPage({super.key, required this.ticket});
 
   @override
@@ -21,88 +18,180 @@ class EvaluacionTecnicaPage extends StatefulWidget {
 }
 
 class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _serieController = TextEditingController();
-  final _descController = TextEditingController();
-  Prioridad _prioridad = Prioridad.media;
+  // ⚙️ Memoria volátil para archivos y texto
+  final List<fp.PlatformFile> _archivosSeleccionados = [];
+  final TextEditingController _observacionController = TextEditingController(); // 🔌 Nuevo sensor
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Evaluación Técnica")),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              _buildField("Serie del equipo", _serieController, Icons.qr_code),
-              const SizedBox(height: 16),
-              _buildField("Descripción técnica", _descController, Icons.description, lines: 3),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<Prioridad>(
-                value: _prioridad,
-                decoration: const InputDecoration(labelText: 'Prioridad', border: OutlineInputBorder()),
-                items: Prioridad.values.map((p) => DropdownMenuItem(value: p, child: Text(p.name.toUpperCase()))).toList(),
-                onChanged: (v) => setState(() => _prioridad = v!),
-              ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF005A9C), padding: const EdgeInsets.all(16)),
-                  onPressed: _guardarEvaluacion,
-                  child: const Text("GUARDAR EVALUACIÓN", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                ),
-              )
-            ],
-          ),
-        ),
+  void dispose() {
+    // 🧹 Mantenimiento preventivo: liberar memoria
+    _observacionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _seleccionarDocumentos() async {
+  fp.FilePickerResult? result = await fp.FilePicker.pickFiles(
+    allowMultiple: true,
+    type: fp.FileType.custom, 
+    allowedExtensions: ['pdf', 'xls', 'xlsx'],
+    withData: true, // 🔌 CRÍTICO PARA WEB: Obliga al sensor a leer los bytes en RAM
+  );
+
+  if (result != null) {
+    setState(() {
+      // ✅ Extraemos directamente los objetos PlatformFile, sin importar la ruta
+      _archivosSeleccionados.addAll(result.files);
+    });
+  }
+}
+
+  void _enviarReporte() {
+    if (_archivosSeleccionados.isEmpty && _observacionController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Debe adjuntar un documento o ingresar una observación.'), backgroundColor: Colors.orange)
+      );
+      return;
+    }
+
+    // 1. LECTURA DE LA SESIÓN ACTIVA (Lectura de credenciales)
+    final authState = context.read<AuthBloc>().state;
+    String operador = 'DESCONOCIDO';
+    String rol = 'SIN_ROL';
+
+    if (authState is Authenticated) {
+      operador = authState.usuario.nombre;
+      rol = authState.usuario.rol.name.toUpperCase();
+    }
+
+    // 2. 🚀 DISPARO EN CRUDO AL BLoC CON METADATA COMPLETA
+    context.read<TicketBloc>().add(
+      ProcesarEvaluacionDocumentalEvent(
+        ticket: widget.ticket,
+        documentos: _archivosSeleccionados,
+        observacion: _observacionController.text.trim(),
+        nombreUsuario: operador, // 📡 Transmisión del badge
+        rolUsuario: rol,         // 📡 Transmisión del nivel de acceso
       ),
     );
   }
 
-  Widget _buildField(String label, TextEditingController controller, IconData icon, {int lines = 1}) {
-    return TextFormField(
-      controller: controller,
-      maxLines: lines,
-      decoration: InputDecoration(labelText: label, border: const OutlineInputBorder(), prefixIcon: Icon(icon)),
-      validator: (v) => v!.isEmpty ? 'Campo obligatorio' : null,
-    );
-  }
-
-  void _guardarEvaluacion() {
-    if (!_formKey.currentState!.validate()) return;
-
-    final authState = context.read<AuthBloc>().state;
-    if (authState is Authenticated) {
-      final supervisor = authState.usuario;
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("Evaluación: ${widget.ticket.id}")),
       
-      // 1. Crear el objeto de evaluación
-      final evaluacion = EvaluacionTecnicaEntity(
-        serieEquipo: _serieController.text.trim(),
-        diagnostico: _descController.text.trim(),
-        prioridad: _prioridad,
-      );
+      // ⚙️ INSTALAMOS EL BLOC CONSUMER (Sensor de estados + Renderizador)
+      body: BlocConsumer<TicketBloc, TicketState>(
+        listener: (context, state) {
+          // 🚨 ALARMA DE FALLO
+          if (state.status == TicketStatus.error) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(state.message), backgroundColor: Colors.red)
+            );
+          } 
+          // ✅ CONFIRMACIÓN DE CICLO COMPLETADO
+          else if (state.status == TicketStatus.operationSuccess) {
+            // 1. Limpieza de memoria RAM local (HMI)
+            _archivosSeleccionados.clear();
+            _observacionController.clear();
 
-      // 2. Crear evento de auditoría
-      final evento = EventoAuditoriaEntity(
-        accion: 'EVALUACIÓN TÉCNICA COMPLETADA',
-        usuarioNombre: supervisor.nombre,
-        usuarioRol: supervisor.rol.name,
-        timestamp: DateTime.now(),
-      );
+            // 2. Notificación visual
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Reporte técnico enviado con éxito.'), backgroundColor: Colors.green)
+            );
 
-      // 3. Clonar ticket con nuevos datos
-      final ticketActualizado = widget.ticket.copyWith(
-        evaluacionTecnica: evaluacion,
-        estadoActual: EstadoTicket.evaluacionTecnica,
-        historialEventos: [...widget.ticket.historialEventos, evento],
-      );
+            // 3. Regreso a la bandeja base (Destruye esta pantalla)
+            Navigator.pop(context);
+          }
+        },
+        builder: (context, state) {
+          // 🔒 ENCLAVAMIENTO DE SEGURIDAD: Bloquear HMI si el motor está trabajando
+          final bool isProcesando = state.status == TicketStatus.loading;
 
-      // 4. Disparar al PLC
-      context.read<TicketBloc>().add(ActualizarEvaluacionEvent(ticket: ticketActualizado));
-      Navigator.pop(context); // Regresar a la bandeja
-    }
+          return Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("Adjuntar Documentación Técnica", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                const Text("Formatos admitidos: PDF, Excel (.xls, .xlsx)", style: TextStyle(color: Colors.grey)),
+                const SizedBox(height: 24),
+                
+                // ⚡ ACTUADOR DE ADQUISICIÓN DE ARCHIVOS
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.upload_file),
+                  label: const Text("SELECCIONAR ARCHIVOS"),
+                  onPressed: isProcesando ? null : _seleccionarDocumentos, // Se bloquea si está cargando
+                  style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // 📊 VISOR DE TELEMETRÍA (Archivos en cola)
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: _archivosSeleccionados.length,
+                    itemBuilder: (context, index) {
+                      final file = _archivosSeleccionados[index];
+                      final fileName = file.name; 
+                      return Card(
+                        child: ListTile(
+                          leading: Icon(fileName.endsWith('.pdf') ? Icons.picture_as_pdf : Icons.table_chart, color: Colors.blueGrey),
+                          title: Text(fileName, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: isProcesando ? null : () => setState(() => _archivosSeleccionados.removeAt(index)),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // 📝 SENSOR DE OBSERVACIÓN (Campo de texto)
+                TextField(
+                  controller: _observacionController,
+                  maxLines: 4,
+                  enabled: !isProcesando, // Se bloquea si está cargando
+                  decoration: const InputDecoration(
+                    labelText: 'Observación Técnica (Opcional)',
+                    hintText: 'Ingrese detalles adicionales, estado de las piezas, etc.',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.engineering),
+                  ),
+                ),
+                
+                const SizedBox(height: 24),
+                
+                // ⚡ ACTUADOR FINAL
+                SizedBox(
+                  width: double.infinity,
+                  height: 55,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isProcesando ? Colors.grey : const Color(0xFF005A9C)
+                    ),
+                    onPressed: isProcesando ? null : _enviarReporte,
+                    child: isProcesando 
+                        ? const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+                              SizedBox(width: 12),
+                              Text("TRANSMITIENDO...", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            ],
+                          )
+                        : const Text("ENVIAR REPORTE TÉCNICO", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
   }
 }

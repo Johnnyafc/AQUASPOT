@@ -1,6 +1,7 @@
 // lib/features/tickets/domain/repositories/ticket_repository.dart
 
 import 'package:dartz/dartz.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/errors/failures.dart';
 import '../entities/cliente_entity.dart';
@@ -11,7 +12,7 @@ import '../../../../core/enum/segmento_operativo.dart';
 
 abstract class ITicketRepository {
   Future<Either<Failure, List<ClienteEntity>>> obtenerClientes();
-  Future<Either<Failure, List<TicketEntity>>> obtenerTickets({SegmentoOperativo? segmentoUsuario});
+  Future<Either<Failure, List<TicketEntity>>> obtenerTickets(SegmentoOperativo segmento);
   Future<Either<Failure, TicketEntity>> crearTicket(TicketEntity ticket);
   
   // ✅ EL ÚNICO CONDUCTO DE ACTUALIZACIÓN PERMITIDO
@@ -28,4 +29,7 @@ Future<Either<Failure, String>> subirActaPdfStorage(String ticketId, Uint8List p
     required String descripcion,
     required List<XFile> evidencias,
   });
+  Future<Either<Failure, String>> subirArchivoDocumental(PlatformFile archivo, String ticketId, String subcarpeta);
+  // 🔧 NUEVO CONTRATO COMERCIAL
+  Future<Either<Failure, String>> subirDocumentoComercial(String ticketId, PlatformFile archivo, String tipoDocumento);
 }

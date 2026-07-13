@@ -5,12 +5,14 @@ class ReadOnlyFieldWidget extends StatelessWidget {
   final String value;
   final IconData icon;
   final int lines;
+  final bool isMultiline;
 
   const ReadOnlyFieldWidget({
     super.key,
     required this.label,
     required this.value,
     required this.icon,
+    this.isMultiline = false,
     this.lines = 1,
   });
 

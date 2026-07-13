@@ -1,5 +1,13 @@
 // lib/injection_container.dart
 
+import 'package:aquaspot_postventa/features/clientes/data/datasources/cliente_remote_datasource.dart';
+import 'package:aquaspot_postventa/features/clientes/data/datasources/cliente_remote_datasource_impl.dart';
+import 'package:aquaspot_postventa/features/clientes/data/repositories/cliente_repository_impl.dart';
+import 'package:aquaspot_postventa/features/clientes/domain/repositories/cliente_repository.dart';
+import 'package:aquaspot_postventa/features/clientes/domain/usecases/registrar_cliente_usecase.dart';
+import 'package:aquaspot_postventa/features/clientes/presentation/bloc/cliente_bloc.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_documento_comercial_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_documento_evaluacion_usecase.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,17 +16,16 @@ import 'package:internet_connection_checker/internet_connection_checker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 import 'core/network/network_info.dart';
-// ⚙️ CORE SERVICES: Importamos el motor de PDF
 import 'core/services/pdf_service.dart';
 
 // --- FEATURE: TICKETS ---
-import 'features/tickets/data/datasources/ticket_remote_datasource.dart';
+import 'features/tickets/data/datasources/ticket_remote_datasource_impl.dart';
 import 'features/tickets/data/datasources/webhook_remote_datasource.dart';
 import 'features/tickets/data/datasources/storage_remote_datasource.dart';
 import 'features/tickets/data/datasources/storage_remote_datasource_impl.dart';
+import 'features/tickets/data/datasources/ticket_remote_datasource.dart';
 import 'features/tickets/data/repositories/ticket_repository_impl.dart';
 import 'features/tickets/domain/repositories/ticket_repository.dart';
-
 import 'features/tickets/domain/usecases/ActualizarTicketUseCase.dart';
 import 'features/tickets/domain/usecases/crear_ticket_usecase.dart';
 import 'features/tickets/domain/usecases/subir_evidencia_usecase.dart';
@@ -26,7 +33,6 @@ import 'features/tickets/domain/usecases/subir_acta_pdf_usecase.dart';
 import 'features/tickets/domain/usecases/notificar_y_generar_acta_usecase.dart';
 import 'features/tickets/domain/usecases/obtener_clientes_usecase.dart';
 import 'features/tickets/domain/usecases/obtener_tickets_usecase.dart'; 
-// ⚙️ DOMINIO: Importamos el UseCase de generación de PDF
 import 'features/tickets/domain/usecases/generar_acta_pdf_usecase.dart';
 import 'features/tickets/presentation/bloc/ticket_bloc.dart';
 
@@ -38,6 +44,9 @@ import 'features/auth/domain/usecases/cerrar_sesion_usecase.dart';
 import 'features/auth/domain/usecases/iniciar_sesion_usecase.dart';
 import 'features/auth/domain/usecases/registrar_usuario_usecase.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
+
+// --- FEATURE: CLIENTES (Las rutas que definimos) ---
+
 
 final sl = GetIt.instance;
 
@@ -58,14 +67,14 @@ Future<void> init() async {
   // 2. CORE (Servicios de Infraestructura Base)
   // ===========================================================================
   sl.registerLazySingleton<NetworkInfo>(() => NetworkInfoImpl(sl()));
-  
-  // ⚙️ CABLEADO: Registramos el motor de PDF como Singleton para no saturar la memoria
   sl.registerLazySingleton(() => PdfService());
 
   // ===========================================================================
-  // 3. CAPA DE DATOS (Repositories & DataSources)
+  // 3. CAPA DE DATOS (DataSources & Repositories)
+  //    (Nota Industrial: Primero se registran las fuentes, luego los repos)
   // ===========================================================================
-  // Tickets
+  
+  // --- TICKETS ---
   sl.registerLazySingleton<TicketRemoteDataSource>(
     () => TicketRemoteDataSourceImpl(firestore: sl()),
   );
@@ -81,11 +90,11 @@ Future<void> init() async {
       webhookDataSource: sl(),
       storageDataSource: sl(),
       networkInfo: sl(),
-      pdfService: sl(), // ⚙️ CABLEADO: Inyectamos el PdfService al repositorio
+      pdfService: sl(), 
     ),
   );
 
-  // Auth
+  // --- AUTH ---
   sl.registerLazySingleton<AuthRemoteDataSource>(
     () => AuthRemoteDataSourceImpl(firebaseAuth: sl(), firestore: sl()),
   );
@@ -97,10 +106,20 @@ Future<void> init() async {
     ),
   );
 
+  // --- CLIENTES ---
+  // ⚙️ CORRECCIÓN: Faltaba registrar la fuente de datos física antes del repositorio
+  sl.registerLazySingleton<ClienteRemoteDataSource>(
+    () => ClienteRemoteDataSourceImpl(firestore: sl()),
+  );
+  sl.registerLazySingleton<ClienteRepository>(
+    () => ClienteRepositoryImpl(remoteDataSource: sl()),
+  );
+
   // ===========================================================================
   // 4. CAPA DE DOMINIO (UseCases)
   // ===========================================================================
-  // Tickets
+  
+  // --- TICKETS ---
   sl.registerLazySingleton(() => ObtenerClientesUseCase(sl()));
   sl.registerLazySingleton(() => CrearTicketUseCase(sl()));
   sl.registerLazySingleton(() => ActualizarTicketUseCase(sl()));
@@ -108,18 +127,21 @@ Future<void> init() async {
   sl.registerLazySingleton(() => ObtenerTicketsUseCase(sl())); 
   sl.registerLazySingleton(() => SubirEvidenciaUseCase(sl()));
   sl.registerLazySingleton(() => SubirActaPdfUseCase(sl())); 
-  
-  // ⚙️ CABLEADO: Registramos el actuador de dominio para el BLoC
   sl.registerLazySingleton(() => GenerarActaPdfUseCase(sl()));
 
-  // Auth
+  // --- AUTH ---
   sl.registerLazySingleton(() => IniciarSesionUseCase(sl()));
   sl.registerLazySingleton(() => CerrarSesionUseCase(sl()));
-
   sl.registerLazySingleton(() => RegistrarUsuarioUseCase(sl()));
+  
+  // --- CLIENTES ---
+  sl.registerLazySingleton(() => RegistrarClienteUseCase(sl()));
+  sl.registerLazySingleton(() => SubirDocumentoEvaluacionUseCase(sl()));
+
+  sl.registerLazySingleton(() => SubirDocumentoComercialUseCase(sl()));
 
   // ===========================================================================
-  // 5. CAPA DE PRESENTACIÓN (Blocs) - REGISTRAR AL FINAL
+  // 5. CAPA DE PRESENTACIÓN (Blocs)
   // ===========================================================================
   sl.registerFactory(() => TicketBloc(
         obtenerClientes: sl(),
@@ -129,12 +151,18 @@ Future<void> init() async {
         obtenerTickets: sl(),
         subirEvidenciaUseCase: sl(),
         subirActaPdfUseCase: sl(), 
-        generarActaPdfUseCase: sl(), // ⚙️ CABLEADO: Enganchamos la tubería final al cerebro del SCADA
+        generarActaPdfUseCase: sl(), 
+        notificarYGenerarActaUseCase: sl(),
+        subirDocumentoEvaluacionUseCase: sl(),
+        subirDocumentoComercialUseCase: sl(),
       ));
-  
+
   sl.registerFactory(() => AuthBloc(
         iniciarSesion: sl(),
         cerrarSesion: sl(),
         registrarUsuarioUseCase: sl(),
       ));
+      
+  // --- CLIENTES ---
+  sl.registerFactory(() => ClienteBloc(registrarClienteUseCase: sl()));
 }

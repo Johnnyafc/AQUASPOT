@@ -23,7 +23,7 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
     super.initState();
     // ⚙️ LLAVE MAESTRA: Solicitamos telemetría GLOBAL (Sin filtros de segmento)
     context.read<TicketBloc>().add(
-      const ObtenerHistorialTicketsEvent(segmento: SegmentoOperativo.general)
+      const ObtenerHistorialTicketsEvent(segmento: SegmentoOperativo.ninguno)
     );
   }
 

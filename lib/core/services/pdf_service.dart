@@ -1,29 +1,45 @@
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:image/image.dart' as img; // ✅ Paquete 'image' para compresión
 import '../../features/tickets/domain/entities/ticket_entity.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 
 class PdfService {
   
   Future<Uint8List> generateActaRecepcion({
     required TicketEntity ticket,
     required String tipoRequerimiento,
-    required String descripcion,
-    required List<XFile> evidencias, // ✅ NUEVO: Recibimos los archivos físicos
+    // Eliminamos 'descripcion' porque no se usaba
+    required List<XFile> evidencias, 
   }) async {
     final pdf = pw.Document();
-
-    // ⚙️ PROCESAMIENTO DE IMÁGENES
-    // Convertimos los File de Dart a MemoryImage de la librería PDF
     final List<pw.MemoryImage> imagenesProcesadas = [];
+
+    // ⚙️ PROCESAMIENTO Y COMPRESIÓN DE IMÁGENES (Prevención de OOM)
     for (var file in evidencias) {
-      // Omitimos videos para el PDF (solo fotos)
-      if (!file.path.endsWith('.mp4') && !file.path.endsWith('.mov')) {
-        final bytes = await file.readAsBytes();
-        imagenesProcesadas.add(pw.MemoryImage(bytes));
+      // Validación más segura usando mimeType si está disponible
+      if (file.mimeType?.startsWith('video/') ?? false) continue;
+      
+      // Fallback para extensiones en móvil (evitando web paths ciegamente)
+      final pathLower = file.path.toLowerCase();
+      if (pathLower.endsWith('.mp4') || pathLower.endsWith('.mov')) continue;
+
+      try {
+        final Uint8List rawBytes = await file.readAsBytes();
+        
+        // Redimensionamos la imagen para que el PDF no pese una tonelada
+        // Esto requiere el paquete 'image' en tu pubspec.yaml
+        final img.Image? decodedImage = img.decodeImage(rawBytes);
+        if (decodedImage != null) {
+          final img.Image resizedImage = img.copyResize(decodedImage, width: 800); // Ancho estándar para A4
+          final Uint8List compressedBytes = img.encodeJpg(resizedImage, quality: 75);
+          
+          imagenesProcesadas.add(pw.MemoryImage(compressedBytes));
+        }
+      } catch (e) {
+        // En un log de telemetría real registraríamos esto
+        print('Error procesando evidencia visual: $e');
       }
     }
 
@@ -41,7 +57,7 @@ class PdfService {
               "Razón Social / Cliente": ticket.clienteId,
               "Persona que entrega": ticket.nombreContacto,
               "Teléfono de Contacto": ticket.telefonoContacto ?? 'N/A',
-              "Sede Operativa": ticket.sede.name.toUpperCase()  ,
+              "Sede Operativa": ticket.sede.name.toUpperCase(),
             }),
             pw.SizedBox(height: 15),
             
@@ -53,15 +69,18 @@ class PdfService {
             
             _buildGridSection("INSPECCIÓN TÉCNICA", {
               "Tipo de Requerimiento": tipoRequerimiento,
-              "Falla Reportada (Cliente)": ticket.fallaReportada.split('\n[RECEPCIÓN]').first, 
-              "Notas de Recepción (Físico)": descripcion,
+              // ✅ La Entidad ya viene procesada desde el Mapper/BLoC. Cero lógica aquí.
+              "Falla Reportada (Cliente)": ticket.fallaReportada, 
+              "Notas de Recepción (Físico)": ticket.notasRecepcion ?? 'N/A',
             }),
 
             pw.SizedBox(height: 20),
 
-            // ✅ NUEVA SECCIÓN: Renderizado de la telemetría visual
-            if (imagenesProcesadas.isNotEmpty)
+            if (imagenesProcesadas.isNotEmpty) ...[
+              pw.Text("EVIDENCIA FOTOGRÁFICA", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 10),
               _buildEvidenciasVisuales(imagenesProcesadas),
+            ],
 
             pw.SizedBox(height: 40),
             _buildSignatureBlock(),
@@ -71,7 +90,6 @@ class PdfService {
     );
     return pdf.save();
   }
-
   // --- SUBRUTINAS ---
 
   // (Mantenemos _buildHeader, _buildGridSection, _buildSignatureBlock y _buildFooter igual que antes)

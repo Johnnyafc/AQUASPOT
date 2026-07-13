@@ -6,6 +6,7 @@ class CustomDropdownField<T> extends StatelessWidget {
   final List<T> items;
   final T? value;
   final ValueChanged<T?> onChanged;
+  final String? Function(T?)? validator;
 
   const CustomDropdownField({
     super.key,
@@ -14,6 +15,7 @@ class CustomDropdownField<T> extends StatelessWidget {
     required this.items,
     required this.value,
     required this.onChanged,
+    this.validator
   });
 
   @override

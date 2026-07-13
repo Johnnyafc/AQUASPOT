@@ -2,6 +2,7 @@ import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/fire
 import * as admin from "firebase-admin";
 import * as nodemailer from "nodemailer";
 import * as logger from "firebase-functions/logger";
+import { onDocumentWritten } from "firebase-functions/v2/firestore"
 
 admin.initializeApp();
 
@@ -109,23 +110,36 @@ export const notificarRecepcion = onDocumentUpdated(
 // ============================================================================
 // ✉️ MÓDULO 3: ACTA DE RECEPCIÓN AL CLIENTE (EMAIL SMTP)
 // ============================================================================
-export const enviarCorreoActaCliente = onDocumentUpdated(
+export const enviarCorreoActaCliente = onDocumentWritten(
   "tickets/{ticketId}",
   async (event) => {
     const snap = event.data;
-    if (!snap) return;
+    
+    // 1. HARD INTERLOCK: Si no hay snapshot o el documento fue eliminado (Delete), cortamos el circuito
+    if (!snap || !snap.after.exists) return;
 
-    const docBefore = snap.before.data();
-    const docAfter = snap.after.data();
+    const docAfter = snap.after.data() as any;
+    // 2. Extracción segura: Evaluamos si existía un estado previo
+    const docBefore = snap.before.exists ? snap.before.data() as any : null;
 
-    const estadoAnterior = docBefore.estadoActual;
     const estadoNuevo = docAfter.estadoActual;
+    const estadoAnterior = docBefore ? docBefore.estadoActual : null;
     const urlPdf = docAfter.pdfActaUrl;
     const emailCliente = docAfter.emailContacto;
     const nombreContacto = docAfter.nombreContacto || "Cliente";
 
-    // Compuerta Lógica: Solo disparamos cuando el equipo ingresa físicamente al laboratorio
-    if (estadoNuevo === "recepcionFisica" && estadoAnterior !== "recepcionFisica") {
+    // =========================================================
+    // 🔀 COMPUERTA LÓGICA OR (Detección de Origen)
+    // =========================================================
+    
+    // Condición A: El ticket nace desde la app en campo ya completo
+    const esCreacionDirecta = !docBefore && estadoNuevo === "recepcionFisica";
+    
+    // Condición B: El ticket transiciona en el taller (pasó de 'creado' a 'recepcionFisica')
+    const esTransicionTaller = docBefore && estadoNuevo === "recepcionFisica" && estadoAnterior !== "recepcionFisica";
+
+    // 3. ACTUADOR PRINCIPAL
+    if (esCreacionDirecta || esTransicionTaller) {
       
       if (!urlPdf || !emailCliente) {
         logger.warn(`[Ticket ${event.params.ticketId}] Operación abortada: Falta PDF o correo del cliente.`);

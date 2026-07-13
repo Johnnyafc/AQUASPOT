@@ -1,9 +1,7 @@
-// lib/features/tickets/data/models/ticket_model.dart
-
-import 'dart:math';
+import 'package:aquaspot_postventa/features/tickets/data/models/proforma_model.dart';
 
 import '../../domain/entities/ticket_entity.dart';
-import '../../../../core/enum/ticket_enums.dart';
+import '../../../../core/enum/ticket_enums.dart'; // ⚙️ Ojo con la 's' en enums
 import 'evaluacion_tecnica_model.dart';
 import 'evento_auditoria_model.dart';
 
@@ -18,17 +16,22 @@ class TicketModel extends TicketEntity {
     required super.telefonoContacto,
     required super.emailContacto,
     required super.equipo,
-    required super.equipoDetalle,
+    super.equipoDetalle,
     required super.fallaReportada,
     super.accesoriosRecibidos,
-    super.numeroSerie, // ✅ CONSTRUCTOR: Parámetro aceptado
+    super.numeroSerie, 
     super.evaluacionTecnica,
     super.fotosUrls = const [],
     super.pdfActaUrl,
     required super.historialEventos,
+    required super.tipoRequerimiento,
+    required super.lugarAtencion,
+    super.esRegistroCompleto = false, 
+    super.notasRecepcion, // 🔌 CONECTOR LISTO
+    super.proforma
   });
 
-  factory TicketModel.fromJson(Map<String, dynamic> json) {
+factory TicketModel.fromJson(Map<String, dynamic> json) {
     return TicketModel(
       id: json['id'] ?? '',
       estadoActual: EstadoTicket.values.firstWhere(
@@ -37,24 +40,23 @@ class TicketModel extends TicketEntity {
       ),
       sede: Sede.values.firstWhere(
         (e) => e.name == json['sede'],
-        orElse: () => Sede.guayaquil,
+        orElse: () => Sede.DURAN,
       ),
       clienteId: json['clienteId'] ?? '',
       campamento: json['campamento'] ?? '',
-      
       nombreContacto: json['nombreContacto'] ?? '',
       telefonoContacto: json['telefonoContacto'] ?? '',
       emailContacto: json['emailContacto'] ?? '',
       equipoDetalle: json['equipoDetalle'] as String?,
       equipo: TipoEquipo.values.firstWhere(
         (e) => e.name == json['equipo'],
-        orElse: () => TipoEquipo.Cosechadora_standart,
+        orElse: () => TipoEquipo.Cosechadora,
       ),
       accesoriosRecibidos: json['accesoriosRecibidos'] != null 
           ? Map<String, bool>.from(json['accesoriosRecibidos'] as Map)
           : null,
       fallaReportada: json['fallaReportada'] ?? '',
-      numeroSerie: json['numeroSerie'] ?? (json['evaluacionTecnica'] != null ? json['evaluacionTecnica']['serieEquipo'] : null),// ✅ LECTURA: Recuperamos el dato del JSON de Firebase
+      numeroSerie: json['numeroSerie'] ?? (json['evaluacionTecnica'] != null ? json['evaluacionTecnica']['serieEquipo'] : null),
       evaluacionTecnica: json['evaluacionTecnica'] != null
           ? EvaluacionTecnicaModel.fromJson(json['evaluacionTecnica'])
           : null,
@@ -64,6 +66,20 @@ class TicketModel extends TicketEntity {
               ?.map((e) => EventoAuditoriaModel.fromJson(e))
               .toList() ??
           [],
+      tipoRequerimiento: TipoRequerimiento.values.firstWhere(
+        (e) => e.name == json['tipoRequerimiento'],
+        orElse: () => TipoRequerimiento.ninguno,
+      ),
+      lugarAtencion: LugarAtencion.values.firstWhere(
+        (e) => e.name == json['lugarAtencion'],
+        orElse: () => LugarAtencion.noAplica,
+      ),
+      esRegistroCompleto: json['esRegistroCompleto'] ?? false,
+      notasRecepcion: json['notasRecepcion'],
+      // 🔌 NUEVO SENSOR COMERCIAL: Decodificador de la Proforma
+      proforma: json['proforma'] != null
+          ? ProformaModel.fromJson(json['proforma'])
+          : null,
     );
   }
 
@@ -80,8 +96,8 @@ class TicketModel extends TicketEntity {
       equipo: entity.equipo,
       equipoDetalle: entity.equipoDetalle,
       fallaReportada: entity.fallaReportada,
-      accesoriosRecibidos:entity.accesoriosRecibidos,
-      numeroSerie: entity.numeroSerie, // ✅ MAPEO: De la entidad abstracta al modelo concreto
+      accesoriosRecibidos: entity.accesoriosRecibidos,
+      numeroSerie: entity.numeroSerie, 
       evaluacionTecnica: entity.evaluacionTecnica != null
           ? EvaluacionTecnicaModel.fromEntity(entity.evaluacionTecnica!)
           : null,
@@ -90,6 +106,12 @@ class TicketModel extends TicketEntity {
       historialEventos: entity.historialEventos
           .map((e) => EventoAuditoriaModel.fromEntity(e))
           .toList(),
+      tipoRequerimiento: entity.tipoRequerimiento,
+      lugarAtencion: entity.lugarAtencion,
+      esRegistroCompleto: entity.esRegistroCompleto,
+      // 🔄 MAPEO ENTIDAD -> MODELO
+      notasRecepcion: entity.notasRecepcion,
+      proforma: entity.proforma 
     );
   }
 
@@ -106,19 +128,22 @@ class TicketModel extends TicketEntity {
       'equipo': equipo.name,
       'equipoDetalle': equipoDetalle,
       'fallaReportada': fallaReportada,
-      'numeroSerie': numeroSerie, // ✅ ESCRITURA: Empaquetamos el dato para enviarlo a Firebase
+      'numeroSerie': numeroSerie, 
       'accesoriosRecibidos': accesoriosRecibidos,
-      
       'evaluacionTecnica': evaluacionTecnica != null
           ? EvaluacionTecnicaModel.fromEntity(evaluacionTecnica!).toJson()
           : null,
-          
       'fotosUrls': fotosUrls,
       'pdfActaUrl': pdfActaUrl,
-      
       'historialEventos': historialEventos
           .map((e) => EventoAuditoriaModel.fromEntity(e).toJson())
           .toList(),
+      'tipoRequerimiento': tipoRequerimiento.name,
+      'lugarAtencion': lugarAtencion.name,
+      'esRegistroCompleto': esRegistroCompleto,
+      // 📤 ESCRITURA HACIA FIREBASE
+      'notasRecepcion': notasRecepcion,
+      'proforma': proforma != null ? (proforma as ProformaModel).toJson() : null,
     };
   }
 }

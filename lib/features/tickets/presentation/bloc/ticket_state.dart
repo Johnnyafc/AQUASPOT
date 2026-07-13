@@ -1,9 +1,10 @@
-import 'dart:typed_data'; // ⚙️ CRÍTICO: Necesitas esto para Uint8List
+import 'dart:typed_data';
 import 'package:equatable/equatable.dart';
 import '../../domain/entities/cliente_entity.dart';
 import '../../domain/entities/ticket_entity.dart';
+// ⚙️ Asegúrate de importar tu archivo de Enums
+import '../../../../core/enum/ticket_enums.dart'; 
 
-// 1. El Enum de Estado
 enum TicketStatus { 
   initial, 
   loading, 
@@ -13,7 +14,6 @@ enum TicketStatus {
   error 
 }
 
-// 2. El Estado Único
 class TicketState extends Equatable {
   final TicketStatus status;
   
@@ -26,7 +26,11 @@ class TicketState extends Equatable {
   final String message;
   final TicketEntity? currentTicket;
   final String? evidenciaUrl;
-  final Uint8List? pdfBytes; // 🚀 AQUÍ ESTÁ EL CAMPO QUE FALTABA
+  final Uint8List? pdfBytes;
+
+  // 🚀 LOS NUEVOS SENSORES DE REQUERIMIENTO
+  final TipoRequerimiento tipoSeleccionado;
+  final LugarAtencion lugarAtencion;
 
   const TicketState({
     this.status = TicketStatus.initial,
@@ -36,10 +40,15 @@ class TicketState extends Equatable {
     this.message = '',
     this.currentTicket,
     this.evidenciaUrl,
-    this.pdfBytes, // 🚀 Añadido al constructor
+    this.pdfBytes,
+    // ⚙️ Valores neutros de fábrica para que el menú arranque cerrado
+    this.tipoSeleccionado = TipoRequerimiento.ninguno,
+    this.lugarAtencion = LugarAtencion.noAplica,
   });
 
-  // 3. El copyWith
+  List<TicketEntity> get ticketsComerciales => 
+      historial.where((t) => t.estadoActual == EstadoTicket.comercial).toList();
+
   TicketState copyWith({
     TicketStatus? status,
     List<TicketEntity>? tickets,
@@ -48,7 +57,10 @@ class TicketState extends Equatable {
     String? message,
     TicketEntity? currentTicket,
     String? evidenciaUrl,
-    Uint8List? pdfBytes, // 🚀 Añadido a los parámetros
+    Uint8List? pdfBytes,
+    // 🚀 Añadimos los parámetros al mutador
+    TipoRequerimiento? tipoSeleccionado,
+    LugarAtencion? lugarAtencion,
   }) {
     return TicketState(
       status: status ?? this.status,
@@ -58,7 +70,10 @@ class TicketState extends Equatable {
       message: message ?? this.message,
       currentTicket: currentTicket ?? this.currentTicket,
       evidenciaUrl: evidenciaUrl ?? this.evidenciaUrl,
-      pdfBytes: pdfBytes ?? this.pdfBytes, // 🚀 Añadida la mutación
+      pdfBytes: pdfBytes ?? this.pdfBytes,
+      // 🚀 Asignamos la mutación
+      tipoSeleccionado: tipoSeleccionado ?? this.tipoSeleccionado,
+      lugarAtencion: lugarAtencion ?? this.lugarAtencion,
     );
   }
 
@@ -71,6 +86,9 @@ class TicketState extends Equatable {
         message,
         currentTicket,
         evidenciaUrl,
-        pdfBytes, // 🚀 Añadido a las props para que Equatable lo detecte
+        pdfBytes,
+        // 🚀 Vital para que el AnimatedSwitcher del UI detecte el cambio y se mueva
+        tipoSeleccionado,
+        lugarAtencion,
       ];
 }

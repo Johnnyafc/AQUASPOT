@@ -1,7 +1,15 @@
 // lib/features/tickets/domain/entities/ticket_entity.dart
 
+import 'package:aquaspot_postventa/features/tickets/domain/entities/proforma_entity.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../core/enum/ticket_enums.dart';
+import 'evaluacion_tecnica_entity.dart';
+import 'evento_auditoria_entity.dart';
+
+// lib/features/tickets/domain/entities/ticket_entity.dart
+
+import 'package:equatable/equatable.dart';
+import '../../../../core/enum/ticket_enums.dart'; // ⚙️ Asegúrate de apuntar a tus enums unificados
 import 'evaluacion_tecnica_entity.dart';
 import 'evento_auditoria_entity.dart';
 
@@ -22,9 +30,9 @@ class TicketEntity extends Equatable {
   final String? equipoDetalle;
   final Map<String, bool>? accesoriosRecibidos;
   
-  
   // Etapa 2 (Opcional al inicio)
   final EvaluacionTecnicaEntity? evaluacionTecnica;
+  final bool esRegistroCompleto;
   
   // Etapa 3 (Opcional al inicio)
   final List<String> fotosUrls;
@@ -32,6 +40,12 @@ class TicketEntity extends Equatable {
   
   // Trazabilidad
   final List<EventoAuditoriaEntity> historialEventos;
+
+  // 🚀 SENSORES DE CONTROL DE REQUERIMIENTO ACTIVOS
+  final TipoRequerimiento tipoRequerimiento;
+  final LugarAtencion lugarAtencion;
+  final String? notasRecepcion;
+  final ProformaEntity? proforma;
 
   const TicketEntity({
     required this.id,
@@ -51,8 +65,14 @@ class TicketEntity extends Equatable {
     this.fotosUrls = const [],
     this.pdfActaUrl,
     required this.historialEventos,
+    required this.tipoRequerimiento,
+    required this.lugarAtencion,
+    required this.esRegistroCompleto,
+    this.notasRecepcion,
+    this.proforma
   });
 
+  // ⚙️ CLONADOR INDUSTRIAL CORREGIDO (Mutación Segura)
   TicketEntity copyWith({
     String? id,
     EstadoTicket? estadoActual,
@@ -65,12 +85,18 @@ class TicketEntity extends Equatable {
     String? equipoDetalle,
     TipoEquipo? equipo,
     String? fallaReportada,
-    String? numeroSerie, // <-- CORRECCIÓN: Agregado como parámetro
+    String? numeroSerie,
     Map<String, bool>? accesoriosRecibidos,
     EvaluacionTecnicaEntity? evaluacionTecnica,
     List<String>? fotosUrls,
     String? pdfActaUrl,
     List<EventoAuditoriaEntity>? historialEventos,
+    // 🚀 REPARACIÓN: Pines añadidos a los argumentos del clonador
+    TipoRequerimiento? tipoRequerimiento,
+    LugarAtencion? lugarAtencion,
+    bool? esRegistroCompleto,
+    String? notasRecepcion,
+    ProformaEntity? proforma
   }) {
     return TicketEntity(
       id: id ?? this.id,
@@ -84,12 +110,18 @@ class TicketEntity extends Equatable {
       equipoDetalle: equipoDetalle ?? this.equipoDetalle,
       equipo: equipo ?? this.equipo,
       fallaReportada: fallaReportada ?? this.fallaReportada,
-      numeroSerie: numeroSerie ?? this.numeroSerie, // <-- CORRECCIÓN: Asignación en el clon
+      notasRecepcion: notasRecepcion ?? this.notasRecepcion,
+      proforma: proforma ?? this.proforma,
+      numeroSerie: numeroSerie ?? this.numeroSerie,
       accesoriosRecibidos: accesoriosRecibidos ?? this.accesoriosRecibidos,
       evaluacionTecnica: evaluacionTecnica ?? this.evaluacionTecnica,
       fotosUrls: fotosUrls ?? this.fotosUrls,
       pdfActaUrl: pdfActaUrl ?? this.pdfActaUrl,
       historialEventos: historialEventos ?? this.historialEventos,
+      // 🚀 REPARACIÓN: Inyección de datos obligatorios al constructor del clon
+      tipoRequerimiento: tipoRequerimiento ?? this.tipoRequerimiento,
+      lugarAtencion: lugarAtencion ?? this.lugarAtencion,
+      esRegistroCompleto: esRegistroCompleto ?? this.esRegistroCompleto,
     );
   }
 
@@ -106,14 +138,19 @@ class TicketEntity extends Equatable {
         equipo,
         equipoDetalle,
         fallaReportada,
-        numeroSerie, // <-- CORRECCIÓN: Agregado al radar de Equatable
+        notasRecepcion,
+        numeroSerie, 
         accesoriosRecibidos,
         evaluacionTecnica,
         fotosUrls,
         pdfActaUrl,
         historialEventos,
+        // 🚀 REPARACIÓN: Conectados al radar de Equatable para reactividad de UI
+        tipoRequerimiento,
+        lugarAtencion,
+        esRegistroCompleto,
+        proforma
       ];
-
 }
 
 extension TicketMetrics on TicketEntity {

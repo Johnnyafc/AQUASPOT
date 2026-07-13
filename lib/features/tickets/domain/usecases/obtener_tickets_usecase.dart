@@ -14,7 +14,7 @@ class ObtenerTicketsUseCase {
   ObtenerTicketsUseCase(this.repository);
 
   // El método call() permite ejecutar la clase como si fuera una función
-Future<Either<Failure, List<TicketEntity>>> call({SegmentoOperativo? segmentoUsuario}) async {
-   return await repository.obtenerTickets(segmentoUsuario: segmentoUsuario);
-  }
+Future<Either<Failure, List<TicketEntity>>> call(SegmentoOperativo segmento) async {
+  return await repository.obtenerTickets(segmento);
+}
 }
