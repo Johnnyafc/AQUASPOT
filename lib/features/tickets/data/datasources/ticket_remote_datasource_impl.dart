@@ -87,14 +87,42 @@ class TicketRemoteDataSourceImpl implements TicketRemoteDataSource {
 
 
 
-  @override
+@override
   Future<TicketModel> crearTicket(TicketModel ticket) async {
     try {
-      final docRef = firestore.collection('tickets').doc(ticket.id);
-      await docRef.set(ticket.toJson());
-      return ticket;
+      final counterRef = firestore.collection('metadata').doc('contadores');
+
+      final ticketGenerado = await firestore.runTransaction<TicketModel>((transaction) async {
+        
+        final snapshot = await transaction.get(counterRef);
+        int currentCount = 0;
+        
+        if (snapshot.exists && snapshot.data() != null && snapshot.data()!.containsKey('ticket_count')) {
+          currentCount = snapshot.data()!['ticket_count'] as int;
+        }
+
+        final nextCount = currentCount + 1;
+
+        // ⚙️ TROQUELADO LÓGICO
+        final nuevoId = 'REQ-${nextCount.toString().padLeft(5, '0')}';
+        
+        // 🔌 LA LÍNEA CRÍTICA: Apuntamos al nuevo ID, NO a ticket.id
+        final docRef = firestore.collection('tickets').doc(nuevoId); 
+
+        // Inyección directa para esquivar el error de copyWith
+        final Map<String, dynamic> ticketJson = ticket.toJson();
+        ticketJson['id'] = nuevoId; 
+
+        // Escritura síncrona
+        transaction.set(counterRef, {'ticket_count': nextCount}, SetOptions(merge: true));
+        transaction.set(docRef, ticketJson);
+
+        return TicketModel.fromJson(ticketJson);
+      });
+
+      return ticketGenerado;
+      
     } catch (e) {
-      print("🚨 ERROR CRUDO DE FIREBASE (ESCRITURA): $e");
       throw ServerException(e.toString());
     }
   }

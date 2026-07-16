@@ -3,6 +3,7 @@
 import 'package:aquaspot_postventa/core/enum/segmento_operativo.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_bloc.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_event.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaProformasEnviadasPage.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_comercial_Page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -180,11 +181,19 @@ class _InicioView extends StatelessWidget {
     }
     if (operador.rol == RolUsuario.comercial) {
       modules.add(_buildCardOption(
-        title: 'Gestión Comercial',
+        title: 'Crear proforma',
         icon: Icons.business_center,
         color: Colors.green, // Color asociado a transacciones comerciales
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const BandejaComercialPage())
+        ),
+      ));
+            modules.add(_buildCardOption(
+        title: 'Proformas enviadas',
+        icon: Icons.access_alarm,
+        color: Colors.blue, // Color asociado a transacciones comerciales
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const BandejaProformasEnviadasPage())
         ),
       ));
     }

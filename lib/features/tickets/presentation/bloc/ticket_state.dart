@@ -48,6 +48,9 @@ class TicketState extends Equatable {
 
   List<TicketEntity> get ticketsComerciales => 
       historial.where((t) => t.estadoActual == EstadoTicket.comercial).toList();
+  
+  List<TicketEntity> get proformasEnviadas => 
+      historial.where((t) => t.estadoActual == EstadoTicket.cotizado).toList();
 
   TicketState copyWith({
     TicketStatus? status,

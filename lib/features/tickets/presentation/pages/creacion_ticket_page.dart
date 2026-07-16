@@ -212,23 +212,23 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
           } else if (state.status == TicketStatus.operationSuccess) { 
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Registro Exitoso'), backgroundColor: Colors.green));
             
-            // ⚙️ COMPUERTA LÓGICA DE SEGURIDAD (Doble Validación)
-            // Extraemos el ticket que se acaba de guardar en memoria
+            // ⚙️ COMPUERTA LÓGICA DE SEGURIDAD
             final ticketReciente = state.currentTicket;
             final bool esTicketCompleto = ticketReciente != null && ticketReciente.esRegistroCompleto;
 
-            // 🖨️ INTERLOCK DE IMPRESIÓN: Solo si es completo AND tiene bytes
+            // 🖨️ INTERLOCK DE IMPRESIÓN
             if (esTicketCompleto && state.pdfBytes != null && state.pdfBytes!.isNotEmpty) {
-              // Hacemos un await para que el usuario pueda ver el PDF y decidir qué hacer con él
               await Printing.layoutPdf(
                 onLayout: (format) async => state.pdfBytes!,
                 name: 'Acta_Ingreso_Directo.pdf',
               );
             }
 
-            // Después de imprimir (o si no hubo impresión por ser incompleto), limpiamos y salimos
-            _limpiarFormulario(); 
+            // 🚪 EVACUACIÓN DE LA PANTALLA
+            // 1. Revisamos que el contexto exista (OBLIGATORIO DESPUÉS DE UN AWAIT)
             if (!context.mounted) return; 
+            
+            // 2. Demolición de la ruta (NO uses _limpiarFormulario, deja que el Garbage Collector de Flutter libere la RAM)
             Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
           }
         },

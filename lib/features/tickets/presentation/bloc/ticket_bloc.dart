@@ -60,6 +60,7 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     on<SeleccionarTipoRequerimientoEvent>(_onSeleccionarTipoRequerimiento);
     on<SeleccionarLugarAtencionEvent>(_onSeleccionarLugarAtencion);
     on<ProcesarEvaluacionDocumentalEvent>(_onProcesarEvaluacionDocumental);
+    on<ReversarAComercialEvent>(_onReversarAComercial);
     on<ProcesarCotizacionEvent>(_onProcesarCotizacion);
   }
 
@@ -97,6 +98,57 @@ void _onSeleccionarLugarAtencion(
   }
 
   
+Future<void> _onReversarAComercial(
+    ReversarAComercialEvent event, 
+    Emitter<TicketState> emit
+  ) async {
+    // 1. BALIZA DE CARGA
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Reversando ticket a estado comercial...'
+    ));
+
+    // 2. ENSAMBLAJE DE LA AUDITORÍA (Con la observación obligatoria)
+    final eventoAuditoria = EventoAuditoriaEntity(
+      accion: 'SOLICITUD DE MODIFICACIÓN: ${event.observacion.toUpperCase()}',
+      usuarioNombre: event.nombreUsuario, 
+      usuarioRol: event.rolUsuario,
+      timestamp: DateTime.now(),
+    );
+
+    // 3. MUTACIÓN DEL TICKET (El Troquelado)
+    final ticketActualizado = event.ticketActual.copyWith(
+      estadoActual: EstadoTicket.comercial, // 🚀 TRASPASO DE REGRESO AL ESTADO ANTERIOR
+      // ⚠️ Aplicando tu estándar estructural (el evento nuevo al final de la matriz)
+      historialEventos: [...event.ticketActual.historialEventos, eventoAuditoria],
+    );
+
+    // 4. PERSISTENCIA EN FIRESTORE
+    final dbResult = await actualizarTicket(ticketActualizado);
+
+    dbResult.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error, 
+        message: 'Error al reversar el ticket: ${_mapFailureToMessage(failure)}'
+      )),
+      (ticketGuardado) {
+        // 5. HOT SWAP: Actualizamos la memoria RAM (Lazo cerrado para el HMI)
+        final listaActualizada = state.historial.map((t) => 
+          t.id == ticketGuardado.id ? ticketGuardado : t
+        ).toList();
+
+        // 6. EMISIÓN DE SEÑAL DE ÉXITO
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: '✅ Ticket retornado a comercial para modificación.',
+          historial: listaActualizada,
+          currentTicket: ticketGuardado,
+        ));
+      }
+    );
+  }
+
+
 
 Future<void> _onSubirEvidencia(SubirEvidenciaEvent event, Emitter<TicketState> emit) async {
     emit(state.copyWith(
@@ -338,7 +390,7 @@ Future<void> _onProcesarCotizacion(
       );
 
       final eventoAuditoria = EventoAuditoriaEntity(
-        accion: 'COTIZACIÓN MÚLTIPLE GENERADA',
+        accion: 'COTIZACIÓN GENERADA',
         usuarioNombre: event.nombreUsuario,
         usuarioRol: event.rolUsuario,
         timestamp: DateTime.now(),
@@ -366,16 +418,12 @@ Future<void> _onProcesarCotizacion(
 
 
 Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) async {
-  // 1. Activamos la baliza de carga mutando el estado actual
-  emit(state.copyWith(
-    status: TicketStatus.loading, 
-    message: 'Transmitiendo datos...'
-  ));
+  // 1. BALIZA DE CARGA
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Asignando número de serie en servidor...'));
 
-  // 2. Generación de telemetría interna (Tu lógica inmutable de ID)
   final marcaDeTiempo = DateTime.now();
-  final idGenerado = 'REQ-${marcaDeTiempo.millisecondsSinceEpoch}';
-
+  
+  // ⚙️ 2. ZONA DE ENSAMBLAJE BASE
   final eventoAuditoria = EventoAuditoriaEntity(
     accion: 'CREACIÓN DE REQUERIMIENTO',
     usuarioNombre: event.nombreUsuario,
@@ -383,40 +431,10 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
     timestamp: marcaDeTiempo,
   );
 
-  final List<String> urlsSubidas = [];
-
-  // 3. Lazo de transmisión de imágenes
-  if (event.evidencias.isNotEmpty) {
-    for (final file in event.evidencias) {
-      final uploadResult = await subirEvidenciaUseCase(file, idGenerado);
-      
-      bool tieneFalla = false;
-      String mensajeFalla = '';
-
-      uploadResult.fold(
-        (failure) {
-          tieneFalla = true;
-          mensajeFalla = _mapFailureToMessage(failure);
-        },
-        (url) => urlsSubidas.add(url),
-      );
-
-      // 🛑 PARADA DE EMERGENCIA: Emitimos el error usando copyWith
-      if (tieneFalla) {
-        emit(state.copyWith(
-          status: TicketStatus.error, 
-          message: mensajeFalla
-        ));
-        return; 
-      }
-    }
-  }
-
-  // ⚙️ 4. ZONA DE ENSAMBLAJE BASE
   final ticketBase = TicketEntity(
-    id: idGenerado,
-    // Ajuste de Arquitecto: Si nace completo pasa directo a 'recepcionFisica'
-    estadoActual: event.esRegistroCompleto ? EstadoTicket.recepcionFisica : EstadoTicket.creado,
+    id: 'TEMP', // 🔌 Será reemplazado por la Transacción en Firebase
+    // 🚨 CORRECCIÓN 1: Nace SIEMPRE como 'creado' para preparar el salto de estado en el backend
+    estadoActual: EstadoTicket.creado, 
     sede: event.sede, 
     clienteId: event.clienteId,
     campamento: event.campamento,
@@ -433,146 +451,121 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
     esRegistroCompleto: event.esRegistroCompleto,
     tipoRequerimiento: event.tipoRequerimiento,
     lugarAtencion: event.lugarAtencion,
-    fotosUrls: urlsSubidas,
+    fotosUrls: const [], // Aún no hay URLs
+    pdfActaUrl: '',
   );
 
   // =========================================================
-  // 🔀 5. COMPUERTA LÓGICA DE DERIVACIÓN (LOGICA MAESTRA)
+  // 🚀 FASE 1: OBTENER EL ID OFICIAL CONSECUTIVO
   // =========================================================
-  print("🛠️ ENTIDAD ARMADA CON: ${ticketBase.esRegistroCompleto}");
-
-  if (event.esRegistroCompleto) {
-    // 🚀 RUTA A: REGISTRO COMPLETO -> GENERAR LOCALMENTE, SUBIR PDF Y NOTIFICAR VIA WEBHOOK
+  final dbResult = await crearTicket(ticketBase);
+  
+  if (dbResult.isLeft()) {
     emit(state.copyWith(
-      status: TicketStatus.loading, 
-      message: 'Consolidando parámetros y fabricando documento PDF...'
+      status: TicketStatus.error, 
+      message: 'Fallo al troquelar el ticket en BD: ${_mapFailureToMessage(dbResult.fold((l) => l, (r) => throw Exception()))}'
     ));
+    return;
+  }
 
-    // A. Fabricación local del PDF (Utilizamos la falla como descripción base)
+  // 💎 EXTRACCIÓN DEL TICKET OFICIAL
+  final ticketOficial = dbResult.fold((l) => throw Exception(), (r) => r);
+  final idReal = ticketOficial.id;
+  final List<String> urlsSubidas = [];
+
+  // =========================================================
+  // 📸 FASE 2: SUBIDA DE EVIDENCIAS
+  // =========================================================
+  if (event.evidencias.isNotEmpty) {
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Subiendo evidencias a carpeta $idReal...'));
+    
+    for (final file in event.evidencias) {
+      final uploadResult = await subirEvidenciaUseCase(file, idReal); 
+      
+      uploadResult.fold(
+        (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+        (url) => urlsSubidas.add(url),
+      );
+      if (state.status == TicketStatus.error) return; // Parada de emergencia
+    }
+  }
+
+  // =========================================================
+  // 🔀 FASE 3: COMPUERTA LÓGICA DE DERIVACIÓN
+  // =========================================================
+  if (event.esRegistroCompleto) {
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Generando PDF para $idReal...'));
+
+    // A. Fabricación local del PDF en RAM
     final pdfBytesResult = await generarActaPdfUseCase(
-      ticket: ticketBase,
+      ticket: ticketOficial,
       tipoRequerimiento: event.tipoRequerimiento.name, 
       descripcion: event.fallaReportada, 
       evidencias: event.evidencias,
     );
 
     Uint8List? bytesGenerados;
-    bool falloGeneracion = false;
-    String mensajeFalloGeneracion = '';
-
     pdfBytesResult.fold(
-      (failure) {
-        falloGeneracion = true;
-        mensajeFalloGeneracion = _mapFailureToMessage(failure);
-      },
+      (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
       (bytes) => bytesGenerados = bytes,
     );
+    if (state.status == TicketStatus.error) return;
 
-    if (falloGeneracion || bytesGenerados == null) {
-      emit(state.copyWith(
-        status: TicketStatus.error, 
-        message: "Fallo crítico al renderizar el documento PDF: $mensajeFalloGeneracion"
-      ));
-      return;
-    }
-
-    emit(state.copyWith(
-      status: TicketStatus.loading, 
-      message: 'Transmitiendo acta al servidor de almacenamiento...'
-    ));
-
-    // B. Subida del Acta PDF a Firebase Storage
-    final pdfUploadResult = await subirActaPdfUseCase(ticketBase.id, bytesGenerados!);
+    // B. Subida del Acta PDF al Storage
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Subiendo PDF al servidor...'));
+    final pdfUploadResult = await subirActaPdfUseCase(idReal, bytesGenerados!);
     
     String urlPdfFinal = '';
-    bool falloPdf = false;
-    String mensajeFalloPdf = '';
-
     pdfUploadResult.fold(
-      (failure) {
-        falloPdf = true;
-        mensajeFalloPdf = _mapFailureToMessage(failure);
-      },
+      (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
       (url) => urlPdfFinal = url,
     );
+    if (state.status == TicketStatus.error) return;
 
-    if (falloPdf) {
-      emit(state.copyWith(
-        status: TicketStatus.error, 
-        message: "Falla de telemetría al guardar el documento PDF: $mensajeFalloPdf"
-      ));
-      return;
-    }
-
-    // C. Ensamblaje final con la URL del PDF y guardado en base de datos
-    final ticketFinal = ticketBase.copyWith(
+    // C. ACTUALIZACIÓN FINAL EN BASE DE DATOS (El detonador de la Cloud Function)
+    final ticketFinalActualizado = ticketOficial.copyWith(
+      fotosUrls: urlsSubidas,
       pdfActaUrl: urlPdfFinal,
+      // 🚀 CORRECCIÓN 2: INYECCIÓN DEL SALTO DE ESTADO. Aquí el backend detecta la transición.
+      estadoActual: EstadoTicket.recepcionFisica, 
     );
 
-    final dbResult = await crearTicket(ticketFinal);
+    final updateResult = await actualizarTicket(ticketFinalActualizado);
     
-    // Usamos await porque dentro llamaremos a la API asíncrona de notificación
-    await dbResult.fold(
-      (failure) async => emit(state.copyWith(
-        status: TicketStatus.error, 
-        message: _mapFailureToMessage(failure)
-      )),
-      (ticketGuardado) async {
+    updateResult.fold(
+      (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+      (ticketGuardado) {
+        // 🚀 SEÑAL DIRECTA AL HMI (El backend despacha el correo en paralelo)
         emit(state.copyWith(
-          status: TicketStatus.loading, 
-          message: 'Ticket registrado. Disparando notificación de correo...'
+          status: TicketStatus.operationSuccess,
+          message: '✅ $idReal registrado. El servidor despachará el correo.',
+          historial: [ticketGuardado, ...state.historial],
+          currentTicket: ticketGuardado,
+          pdfBytes: bytesGenerados, // Transportamos el binario para imprimir
         ));
-
-        // D. Disparo del Webhook hacia Python para enviar por correo el acta
-        final actaResult = await notificarYGenerarActaUseCase(ticketGuardado);
-        
-        actaResult.fold(
-          (actaFailure) => emit(state.copyWith(
-            status: TicketStatus.error, 
-            message: 'Ticket creado, pero falló el envío del correo: ${_mapFailureToMessage(actaFailure)}'
-          )),
-          (ticketProcesado) {
-            // ⚙️ HOT SWAP RAM: Introducir el nuevo elemento al inicio de la matriz
-            final listaActualizada = [ticketProcesado, ...state.historial];
-            
-            emit(state.copyWith(
-              status: TicketStatus.operationSuccess,
-              message: '✅ Requerimiento Completo: Ticket registrado, acta enviada al correo y lista en pantalla.',
-              historial: listaActualizada,
-              currentTicket: ticketProcesado,
-              pdfBytes: bytesGenerados, // ⚡ PIN ENERGIZADO: Ahora la UI sí abrirá la pantalla de impresión
-            ));
-          },
-        );
       },
     );
 
   } else {
-    // ⚙️ RUTA B: INCOMPLETO -> SOLO GUARDAR EN BASE DE DATOS (Tu lógica base original)
-    emit(state.copyWith(
-      status: TicketStatus.loading, 
-      message: 'Guardando registro parcial en el sistema...'
-    ));
-
-    final dbResult = await crearTicket(ticketBase);
-
-    dbResult.fold(
-      (failure) => emit(state.copyWith(
-        status: TicketStatus.error, 
-        message: _mapFailureToMessage(failure)
-      )),
-      (ticketGuardado) {
-        final listaActualizada = [ticketGuardado, ...state.historial];
-
-        emit(state.copyWith(
-          status: TicketStatus.operationSuccess, 
-          message: '⚠️ Requerimiento guardado como INCOMPLETO. Pendiente revisión en taller.',
-          historial: listaActualizada,
-          currentTicket: ticketGuardado,
-          pdfBytes: null, // Válvula cerrada, cero bytes pasados al HMI
-        ));
-      },
-    );
+    // ⚙️ RUTA B: INCOMPLETO (Restaurada tu lógica de ahorro de escrituras)
+    if (urlsSubidas.isNotEmpty) {
+      final ticketParcialActualizado = ticketOficial.copyWith(fotosUrls: urlsSubidas);
+      await actualizarTicket(ticketParcialActualizado); // Solo escribimos si hay fotos nuevas
+      
+      emit(state.copyWith(
+        status: TicketStatus.operationSuccess, 
+        message: '⚠️ $idReal guardado INCOMPLETO. Pendiente taller.',
+        historial: [ticketParcialActualizado, ...state.historial],
+        currentTicket: ticketParcialActualizado,
+      ));
+    } else {
+       emit(state.copyWith(
+        status: TicketStatus.operationSuccess, 
+        message: '⚠️ $idReal guardado INCOMPLETO. Pendiente taller.',
+        historial: [ticketOficial, ...state.historial],
+        currentTicket: ticketOficial,
+      ));
+    }
   }
 }
 

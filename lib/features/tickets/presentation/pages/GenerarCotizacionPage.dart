@@ -6,9 +6,9 @@ import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_eve
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart'; // 🔌 IMPORTACIÓN CRÍTICA PARA ABRIR ENLACES
 import 'package:file_picker/file_picker.dart' as fp;
-// Importa tus blocs, entidades y dependencias aquí
+import '../../../../core/enum/segmento_operativo.dart';
 
 class GenerarCotizacionPage extends StatefulWidget {
   final TicketEntity ticket;
@@ -20,12 +20,30 @@ class GenerarCotizacionPage extends StatefulWidget {
 
 class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
   final TextEditingController _observacionController = TextEditingController();
-final List<fp.PlatformFile> _pdfsSeleccionados = [];
+  final List<fp.PlatformFile> _pdfsSeleccionados = [];
   final List<fp.PlatformFile> _excelsSeleccionados = [];
 
-Future<void> _seleccionarPDFs() async {
+  // ⚙️ SUBRUTINA DE APERTURA DE ARCHIVOS TÉCNICOS
+  Future<void> _abrirEnlaceTecnico(String url) async {
+    final uri = Uri.parse(url);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        throw Exception('Circuito bloqueado por el SO.');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error al abrir el documento técnico.'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _seleccionarPDFs() async {
     final result = await fp.FilePicker.pickFiles(
-      allowMultiple: true, // 🔌 COMPUERTA LÓGICA ABIERTA PARA MÚLTIPLES ARCHIVOS
+      allowMultiple: true, 
       type: fp.FileType.custom,
       allowedExtensions: ['pdf'],
       withData: true, 
@@ -39,7 +57,7 @@ Future<void> _seleccionarPDFs() async {
 
   Future<void> _seleccionarExcels() async {
     final result = await fp.FilePicker.pickFiles(
-      allowMultiple: true, // 🔌 COMPUERTA LÓGICA ABIERTA
+      allowMultiple: true, 
       type: fp.FileType.custom,
       allowedExtensions: ['xls', 'xlsx'],
       withData: true,
@@ -57,8 +75,7 @@ Future<void> _seleccionarPDFs() async {
     });
   }
 
-void _finalizarCotizacion() {
-    // ⚙️ VALIDACIÓN DE TOLVA: Revisamos si ambos arreglos están vacíos
+  void _finalizarCotizacion() {
     if (_pdfsSeleccionados.isEmpty && _excelsSeleccionados.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -69,7 +86,6 @@ void _finalizarCotizacion() {
       return;
     }
 
-    // 🔒 LECTURA DE SEGURIDAD
     final authState = context.read<AuthBloc>().state;
     String operador = 'DESCONOCIDO';
     String rol = 'SIN_ROL';
@@ -79,12 +95,11 @@ void _finalizarCotizacion() {
       rol = authState.usuario.rol.name.toUpperCase();
     }
 
-    // 🚀 DISPARO HACIA EL BLOC (Señal Múltiple)
     context.read<TicketBloc>().add(
       ProcesarCotizacionEvent(
         ticket: widget.ticket,
-        archivosPdf: _pdfsSeleccionados, // 🔌 Pasamos el arreglo completo
-        archivosExcel: _excelsSeleccionados, // 🔌 Pasamos el arreglo completo
+        archivosPdf: _pdfsSeleccionados, 
+        archivosExcel: _excelsSeleccionados, 
         observacion: _observacionController.text.trim(),
         nombreUsuario: operador,
         rolUsuario: rol,
@@ -92,14 +107,13 @@ void _finalizarCotizacion() {
     );
   }
 
- @override
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text('Cotización: ${widget.ticket.id}'), backgroundColor: Colors.green),
       body: BlocListener<TicketBloc, TicketState>(
-       listener: (context, state) {
-          if (state.status == TicketStatus.operationSuccess) { // O operationSuccess, el que uses
-            // 1. ALARMA VISUAL (Operación exitosa)
+        listener: (context, state) {
+          if (state.status == TicketStatus.operationSuccess) { // Ajusta a operationSuccess si es el que usas
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text('Cotización registrada. Sincronizando SCADA...'), 
@@ -108,17 +122,17 @@ void _finalizarCotizacion() {
               )
             );
             
-            // 2. PULSO DE RECARGA (Actualiza la memoria del BLoC en segundo plano)
-            context.read<TicketBloc>().add(const ObtenerTicketsEvent()); 
+context.read<TicketBloc>().add(
+  const ObtenerHistorialTicketsEvent(
+    // ⚙️ Reemplaza 'SegmentoEnum' por el nombre real de tu clase enum
+    segmento: SegmentoOperativo .ninguno, 
+  ),
+);
             
-            // 3. RETORNO SEGURO O(1) (Cierra la válvula y desapila la pantalla actual)
             if (Navigator.canPop(context)) {
               Navigator.pop(context);
             }
-          } 
-          
-          // 🚨 MANEJO DE FALLOS INDEPENDIENTE
-          else if (state.status == TicketStatus.error) {
+          } else if (state.status == TicketStatus.error) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(state.message), backgroundColor: Colors.red)
             );
@@ -128,7 +142,72 @@ void _finalizarCotizacion() {
           padding: const EdgeInsets.all(16.0),
           child: ListView(
             children: [
-              // PANEL DE DOCUMENTOS MULTIPLES
+              // ==========================================
+              // 🔍 PANEL DE DIAGNÓSTICO TÉCNICO (Solo Lectura)
+              // ==========================================
+              if (widget.ticket.evaluacionTecnica != null)
+                Card(
+                  elevation: 2,
+                  color: Colors.blueGrey.shade50,
+                  shape: RoundedRectangleBorder(
+                    side: BorderSide(color: Colors.blueGrey.shade200, width: 1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.engineering, color: Colors.blueGrey),
+                            SizedBox(width: 8),
+                            Text('Diagnóstico de Servicio Técnico', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blueGrey)),
+                          ],
+                        ),
+                        const Divider(),
+                        
+                        const Text('Observaciones del Taller:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                        const SizedBox(height: 4),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
+                          child: Text(
+                            widget.ticket.evaluacionTecnica!.observacion.isNotEmpty 
+                                ? widget.ticket.evaluacionTecnica!.observacion 
+                                : 'Sin observaciones reportadas.',
+                            style: const TextStyle(fontStyle: FontStyle.italic),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        const Text('Archivos Adjuntos de Evaluación:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                        if (widget.ticket.evaluacionTecnica!.documentosUrls.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8.0),
+                            child: Text('El técnico no subió documentos.', style: TextStyle(color: Colors.grey)),
+                          )
+                        else
+                          ...widget.ticket.evaluacionTecnica!.documentosUrls.map((url) {
+                            return ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.file_present, color: Colors.blue),
+                              title: const Text('Ver Documento Técnico', style: TextStyle(decoration: TextDecoration.underline, color: Colors.blue)),
+                              trailing: const Icon(Icons.open_in_new, size: 20),
+                              onTap: () => _abrirEnlaceTecnico(url),
+                            );
+                          }),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 20),
+
+              // ==========================================
+              // PANEL DE DOCUMENTOS MULTIPLES (Comercial)
+              // ==========================================
               Card(
                 elevation: 3,
                 child: Padding(
@@ -163,31 +242,6 @@ void _finalizarCotizacion() {
                         ),
                       )),
                       
-                      const Divider(height: 30),
-
-                      // 📊 SECCIÓN EXCEL
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Archivos Excel', style: TextStyle(fontWeight: FontWeight.w600)),
-                          ElevatedButton.icon(
-                            onPressed: _seleccionarExcels, 
-                            icon: const Icon(Icons.add), 
-                            label: const Text('Añadir Excel')
-                          ),
-                        ],
-                      ),
-                      if (_excelsSeleccionados.isEmpty)
-                        const Padding(padding: EdgeInsets.symmetric(vertical: 8.0), child: Text('Sin Excels cargados.', style: TextStyle(color: Colors.grey))),
-                      ..._excelsSeleccionados.map((file) => ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.table_chart, color: Colors.green),
-                        title: Text(file.name, overflow: TextOverflow.ellipsis),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                          onPressed: () => _eliminarArchivo(_excelsSeleccionados, file),
-                        ),
-                      )),
                     ],
                   ),
                 ),

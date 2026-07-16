@@ -230,3 +230,19 @@ class ObtenerTicketsEvent extends TicketEvent {
   @override
   List<Object?> get props => [estadoFiltro];
 }
+class ReversarAComercialEvent extends TicketEvent {
+  final TicketEntity ticketActual;
+  final String nombreUsuario;
+  final String rolUsuario;
+  final String observacion;
+
+  const ReversarAComercialEvent({
+    required this.ticketActual,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+    required this.observacion,
+  });
+
+  @override
+  List<Object?> get props => [ticketActual, nombreUsuario, rolUsuario, observacion];
+}
