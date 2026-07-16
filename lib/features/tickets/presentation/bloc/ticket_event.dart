@@ -246,3 +246,63 @@ class ReversarAComercialEvent extends TicketEvent {
   @override
   List<Object?> get props => [ticketActual, nombreUsuario, rolUsuario, observacion];
 }
+class AprobarProformaComercialEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final List<dynamic> ordenesVentaArchivos; // Archivos físicos (File o XFile)
+  final List<dynamic> ordenesCompraArchivos; // Archivos físicos opcionales
+  final String nombreUsuario; // Para la baliza de auditoría
+  final String rolUsuario;
+
+  const AprobarProformaComercialEvent({
+    required this.ticket,
+    required this.ordenesVentaArchivos,
+    required this.ordenesCompraArchivos,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [
+        ticket,
+        ordenesVentaArchivos,
+        ordenesCompraArchivos,
+        nombreUsuario,
+        rolUsuario,
+      ];
+}
+
+// ⚙️ EVENTO PARA EL TABLERO DE COSTOS
+class CompletarFaseCostosEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final String codigoProyecto;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const CompletarFaseCostosEvent({
+    required this.ticket,
+    required this.codigoProyecto,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, codigoProyecto, nombreUsuario, rolUsuario];
+}
+
+// ⚙️ EVENTO PARA EL TABLERO DE COMPRAS
+class CompletarFaseComprasEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final List<dynamic> ordenesCompraInternaArchivos; // Los PDFs que sube Compras
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const CompletarFaseComprasEvent({
+    required this.ticket,
+    required this.ordenesCompraInternaArchivos,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, ordenesCompraInternaArchivos, nombreUsuario, rolUsuario];
+}

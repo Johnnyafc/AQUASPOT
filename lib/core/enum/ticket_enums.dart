@@ -12,7 +12,12 @@ enum EstadoTicket {
   evaluacionTecnica,   
   recepcionFisica,
   comercial,
-  cotizado      
+  cotizado,
+  aprobacionComercial,
+  bodega,
+  procesoTrabajo,
+  finalizado,           // Cerrado y correo enviado
+  anulado 
 }
 
 enum TipoRequerimiento {

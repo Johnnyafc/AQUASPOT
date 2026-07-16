@@ -1,5 +1,6 @@
 // lib/features/tickets/domain/entities/ticket_entity.dart
 
+import 'package:aquaspot_postventa/features/tickets/domain/entities/item_compra_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/proforma_entity.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../core/enum/ticket_enums.dart';
@@ -29,6 +30,18 @@ class TicketEntity extends Equatable {
   final String? numeroSerie;
   final String? equipoDetalle;
   final Map<String, bool>? accesoriosRecibidos;
+
+
+final String marca; // 🚨 El que te habías olvidado
+  final String? codigoProyecto;
+  final List<String> codigoOrdenVenta;
+  final List<String> codigoOrdenCompra;
+  final List<String> procesoTrabajoUrls;
+  
+  // 🔒 VÁLVULAS DE SEGURIDAD (Enclavamientos)
+  final bool isCostosCompletado;
+  final bool isComprasCompletado;
+
   
   // Etapa 2 (Opcional al inicio)
   final EvaluacionTecnicaEntity? evaluacionTecnica;
@@ -46,8 +59,9 @@ class TicketEntity extends Equatable {
   final LugarAtencion lugarAtencion;
   final String? notasRecepcion;
   final ProformaEntity? proforma;
+  final List<ItemCompraEntity>? itemsCompra;
 
-  const TicketEntity({
+const TicketEntity({
     required this.id,
     required this.estadoActual,
     required this.sede,
@@ -61,15 +75,24 @@ class TicketEntity extends Equatable {
     required this.equipo,
     required this.fallaReportada,
     required this.numeroSerie,
-    this.evaluacionTecnica,
-    this.fotosUrls = const [],
-    this.pdfActaUrl,
     required this.historialEventos,
     required this.tipoRequerimiento,
     required this.lugarAtencion,
     required this.esRegistroCompleto,
+    this.evaluacionTecnica,
+    this.fotosUrls = const [],
+    this.pdfActaUrl,
     this.notasRecepcion,
-    this.proforma
+    this.proforma,
+    // ⚙️ EXPANSIÓN INDUSTRIAL: Pines para Costos, Compras y Taller
+    this.marca = 'NO ESPECIFICADA', // Tolerancia a fallos para tickets antiguos
+    this.codigoProyecto,
+    this.codigoOrdenVenta = const [],
+    this.codigoOrdenCompra = const [],
+    this.itemsCompra = const [], // 🚨 Requiere que fabriques la clase ItemCompraEntity
+    this.procesoTrabajoUrls = const [],
+    this.isCostosCompletado = false,
+    this.isComprasCompletado = false,
   });
 
   // ⚙️ CLONADOR INDUSTRIAL CORREGIDO (Mutación Segura)
@@ -91,12 +114,20 @@ class TicketEntity extends Equatable {
     List<String>? fotosUrls,
     String? pdfActaUrl,
     List<EventoAuditoriaEntity>? historialEventos,
-    // 🚀 REPARACIÓN: Pines añadidos a los argumentos del clonador
     TipoRequerimiento? tipoRequerimiento,
     LugarAtencion? lugarAtencion,
     bool? esRegistroCompleto,
     String? notasRecepcion,
-    ProformaEntity? proforma
+    ProformaEntity? proforma,
+    // 🚀 EXPANSIÓN: Añadidos a los argumentos del clonador
+    String? marca,
+    String? codigoProyecto,
+    List<String>? codigoOrdenVenta,
+    List<String>? codigoOrdenCompra,
+    List<ItemCompraEntity>? itemsCompra, 
+    List<String>? procesoTrabajoUrls,
+    bool? isCostosCompletado,
+    bool? isComprasCompletado,
   }) {
     return TicketEntity(
       id: id ?? this.id,
@@ -118,10 +149,18 @@ class TicketEntity extends Equatable {
       fotosUrls: fotosUrls ?? this.fotosUrls,
       pdfActaUrl: pdfActaUrl ?? this.pdfActaUrl,
       historialEventos: historialEventos ?? this.historialEventos,
-      // 🚀 REPARACIÓN: Inyección de datos obligatorios al constructor del clon
       tipoRequerimiento: tipoRequerimiento ?? this.tipoRequerimiento,
       lugarAtencion: lugarAtencion ?? this.lugarAtencion,
       esRegistroCompleto: esRegistroCompleto ?? this.esRegistroCompleto,
+      // 🚀 EXPANSIÓN: Inyección al constructor del clon
+      marca: marca ?? this.marca,
+      codigoProyecto: codigoProyecto ?? this.codigoProyecto,
+      codigoOrdenVenta: codigoOrdenVenta ?? this.codigoOrdenVenta,
+      codigoOrdenCompra: codigoOrdenCompra ?? this.codigoOrdenCompra,
+      itemsCompra: itemsCompra ?? this.itemsCompra,
+      procesoTrabajoUrls: procesoTrabajoUrls ?? this.procesoTrabajoUrls,
+      isCostosCompletado: isCostosCompletado ?? this.isCostosCompletado,
+      isComprasCompletado: isComprasCompletado ?? this.isComprasCompletado,
     );
   }
 
@@ -145,11 +184,19 @@ class TicketEntity extends Equatable {
         fotosUrls,
         pdfActaUrl,
         historialEventos,
-        // 🚀 REPARACIÓN: Conectados al radar de Equatable para reactividad de UI
         tipoRequerimiento,
         lugarAtencion,
         esRegistroCompleto,
-        proforma
+        proforma,
+        // 🚀 EXPANSIÓN: Conectados al radar de Equatable (CRÍTICO para redibujar la HMI)
+        marca,
+        codigoProyecto,
+        codigoOrdenVenta,
+        codigoOrdenCompra,
+        itemsCompra,
+        procesoTrabajoUrls,
+        isCostosCompletado,
+        isComprasCompletado,
       ];
 }
 

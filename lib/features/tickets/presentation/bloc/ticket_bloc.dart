@@ -569,6 +569,198 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
   }
 }
 
+
+Future<void> _onAprobarProformaComercial(AprobarProformaComercialEvent event, Emitter<TicketState> emit) async {
+  // 1. ENCENDIDO DE BALIZA LUMINOSA
+  emit(state.copyWith(
+    status: TicketStatus.loading, 
+    message: 'Procesando documentos comerciales e iniciando transición...'
+  ));
+
+  List<String> urlsOrdenVenta = [];
+  List<String> urlsOrdenCompra = [];
+
+  // =========================================================
+  // 🚀 FASE 1: TELEMETRÍA DE ARCHIVOS (Subida a Storage)
+  // =========================================================
+  
+  // A. Subimos las Órdenes de Venta (Obligatorias según tu lógica)
+  if (event.ordenesVentaArchivos.isNotEmpty) {
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Subiendo Órdenes de Venta...'));
+    for (final file in event.ordenesVentaArchivos) {
+      final uploadResult = await subirEvidenciaUseCase(file, event.ticket.id); 
+      
+      uploadResult.fold(
+        (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+        (url) => urlsOrdenVenta.add(url),
+      );
+      if (state.status == TicketStatus.error) return; // Parada de emergencia
+    }
+  }
+
+  // B. Subimos las Órdenes de Compra del Cliente (Opcionales)
+  if (event.ordenesCompraArchivos.isNotEmpty) {
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Subiendo Órdenes de Compra...'));
+    for (final file in event.ordenesCompraArchivos) {
+      final uploadResult = await subirEvidenciaUseCase(file, event.ticket.id); 
+      
+      uploadResult.fold(
+        (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+        (url) => urlsOrdenCompra.add(url),
+      );
+      if (state.status == TicketStatus.error) return; // Parada de emergencia
+    }
+  }
+
+  // =========================================================
+  // ⚙️ FASE 2: ENSAMBLAJE DEL NUEVO ESTADO DEL TICKET
+  // =========================================================
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: 'APROBACIÓN COMERCIAL - Órdenes anexadas',
+    usuarioNombre: event.nombreUsuario,
+    usuarioRol: event.rolUsuario,
+    timestamp: DateTime.now(),
+  );
+
+  final ticketActualizado = event.ticket.copyWith(
+    estadoActual: EstadoTicket.aprobacionComercial, // 🔀 SALTO AL ESTADO PARALELO
+    codigoOrdenVenta: urlsOrdenVenta,
+    codigoOrdenCompra: urlsOrdenCompra,
+    historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+    
+    // 🔒 CERRAMOS VÁLVULAS: Reiniciamos los seguros por si el ticket regresó de un rechazo previo
+    isCostosCompletado: false, 
+    isComprasCompletado: false,
+  );
+
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Registrando mutación en base de datos...'));
+
+  // =========================================================
+  // 💾 FASE 3: ESCRITURA EN LA BASE DE DATOS
+  // =========================================================
+  // Asumo que tienes tu caso de uso genérico de actualizarTicket
+  final updateResult = await actualizarTicket(ticketActualizado); 
+  
+  updateResult.fold(
+    (failure) => emit(state.copyWith(
+      status: TicketStatus.error, 
+      message: 'Fallo al escribir en la base de datos: ${_mapFailureToMessage(failure)}'
+    )),
+    (ticketGuardado) {
+      // ⚙️ HOT SWAP: Actualizamos la RAM
+      final listaActualizada = state.historial.map((t) => 
+        t.id == ticketGuardado.id ? ticketGuardado : t
+      ).toList();
+
+      emit(state.copyWith(
+        status: TicketStatus.operationSuccess, 
+        message: 'Trámite comercial completado. Ticket derivado a Costos y Compras.',
+        historial: listaActualizada,
+        currentTicket: ticketGuardado,
+      ));
+    }
+  );
+}
+
+
+// =========================================================================
+// 🏭 RUTINA A: DEPARTAMENTO DE COSTOS
+// =========================================================================
+Future<void> _onCompletarCostos(CompletarFaseCostosEvent event, Emitter<TicketState> emit) async {
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Inyectando Código de Proyecto...'));
+
+  // 1. EVALUACIÓN DE LA COMPUERTA LÓGICA (AND GATE)
+  // Si Compras ya terminó antes que Costos, entonces este es el paso final.
+  final bool comprasYaTermino = event.ticket.isComprasCompletado;
+  final EstadoTicket nuevoEstado = comprasYaTermino ? EstadoTicket.bodega : event.ticket.estadoActual;
+
+  // 2. ENSAMBLAJE
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: 'FASE COSTOS - Código Proyecto Asignado: ${event.codigoProyecto}',
+    usuarioNombre: event.nombreUsuario,
+    usuarioRol: event.rolUsuario,
+    timestamp: DateTime.now(),
+  );
+
+  final ticketActualizado = event.ticket.copyWith(
+    codigoProyecto: event.codigoProyecto,
+    isCostosCompletado: true, // 🔒 Cerramos la válvula de Costos
+    estadoActual: nuevoEstado, // 🔀 Solo salta a bodega si Compras ya había acabado
+    historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+  );
+
+  // 3. PERSISTENCIA
+  final dbResult = await actualizarTicket(ticketActualizado);
+  
+  dbResult.fold(
+    (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+    (ticketGuardado) => emit(state.copyWith(
+      status: TicketStatus.operationSuccess, 
+      message: comprasYaTermino ? 'Costos finalizado. Ticket transferido a Bodega.' : 'Costos finalizado. Esperando a Compras.',
+      historial: state.historial.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+    ))
+  );
+}
+
+// =========================================================================
+// 🏭 RUTINA B: DEPARTAMENTO DE COMPRAS
+// =========================================================================
+Future<void> _onCompletarCompras(CompletarFaseComprasEvent event, Emitter<TicketState> emit) async {
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Procesando documentos de Compras...'));
+
+  List<String> urlsNuevas = [];
+
+  // 1. SUBIDA DE ARCHIVOS
+  if (event.ordenesCompraInternaArchivos.isNotEmpty) {
+    for (final file in event.ordenesCompraInternaArchivos) {
+      final uploadResult = await subirEvidenciaUseCase(file, event.ticket.id);
+      uploadResult.fold(
+        (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+        (url) => urlsNuevas.add(url),
+      );
+      if (state.status == TicketStatus.error) return; // Parada por error
+    }
+  }
+
+  // 2. EVALUACIÓN DE LA COMPUERTA LÓGICA (AND GATE)
+  // Si Costos ya terminó antes que Compras, entonces este es el paso final.
+  final bool costosYaTermino = event.ticket.isCostosCompletado;
+  final EstadoTicket nuevoEstado = costosYaTermino ? EstadoTicket.bodega : event.ticket.estadoActual;
+
+  // 3. ENSAMBLAJE
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: 'FASE COMPRAS - Órdenes Internas Anexadas',
+    usuarioNombre: event.nombreUsuario,
+    usuarioRol: event.rolUsuario,
+    timestamp: DateTime.now(),
+  );
+
+  // Ojo aquí: sumamos las URLs nuevas a las que ya pudieran existir
+  final ticketActualizado = event.ticket.copyWith(
+    codigoOrdenCompra: [...event.ticket.codigoOrdenCompra, ...urlsNuevas],
+    isComprasCompletado: true, // 🔒 Cerramos la válvula de Compras
+    estadoActual: nuevoEstado, // 🔀 Solo salta a bodega si Costos ya había acabado
+    historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+  );
+
+  // 4. PERSISTENCIA
+  final dbResult = await actualizarTicket(ticketActualizado);
+  
+  dbResult.fold(
+    (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+    (ticketGuardado) => emit(state.copyWith(
+      status: TicketStatus.operationSuccess, 
+      message: costosYaTermino ? 'Compras finalizado. Ticket transferido a Bodega.' : 'Compras finalizado. Esperando a Costos.',
+      historial: state.historial.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+    ))
+  );
+}
+
+
+
+
+
+
 Future<void> _onObtenerClientes(ObtenerClientesEvent event, Emitter<TicketState> emit) async {
     // Señal de arranque: Mantenemos lo que hay, pero pasamos a estado de carga
     emit(state.copyWith(status: TicketStatus.loading));

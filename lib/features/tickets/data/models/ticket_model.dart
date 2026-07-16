@@ -1,9 +1,10 @@
 import 'package:aquaspot_postventa/features/tickets/data/models/proforma_model.dart';
-
+import 'package:aquaspot_postventa/features/tickets/domain/entities/item_compra_entity.dart';
 import '../../domain/entities/ticket_entity.dart';
-import '../../../../core/enum/ticket_enums.dart'; // ⚙️ Ojo con la 's' en enums
+import '../../../../core/enum/ticket_enums.dart'; 
 import 'evaluacion_tecnica_model.dart';
 import 'evento_auditoria_model.dart';
+import 'item_compra_model.dart'; // 🔌 CONECTOR SOLDADO
 
 class TicketModel extends TicketEntity {
   const TicketModel({
@@ -27,11 +28,19 @@ class TicketModel extends TicketEntity {
     required super.tipoRequerimiento,
     required super.lugarAtencion,
     super.esRegistroCompleto = false, 
-    super.notasRecepcion, // 🔌 CONECTOR LISTO
-    super.proforma
+    super.notasRecepcion,
+    super.proforma,
+    super.marca = 'NO ESPECIFICADA',
+    super.codigoProyecto,
+    super.codigoOrdenVenta = const [],
+    super.codigoOrdenCompra = const [],
+    super.itemsCompra = const [], 
+    super.procesoTrabajoUrls = const [],
+    super.isCostosCompletado = false,
+    super.isComprasCompletado = false,
   });
 
-factory TicketModel.fromJson(Map<String, dynamic> json) {
+  factory TicketModel.fromJson(Map<String, dynamic> json) {
     return TicketModel(
       id: json['id'] ?? '',
       estadoActual: EstadoTicket.values.firstWhere(
@@ -76,10 +85,24 @@ factory TicketModel.fromJson(Map<String, dynamic> json) {
       ),
       esRegistroCompleto: json['esRegistroCompleto'] ?? false,
       notasRecepcion: json['notasRecepcion'],
-      // 🔌 NUEVO SENSOR COMERCIAL: Decodificador de la Proforma
       proforma: json['proforma'] != null
           ? ProformaModel.fromJson(json['proforma'])
           : null,
+      
+      // 🔌 LECTURA DE SENSORES INDUSTRIALES (Tolerancia a fallos)
+      marca: json['marca'] as String? ?? 'NO ESPECIFICADA',
+      codigoProyecto: json['codigoProyecto'] as String?,
+      codigoOrdenVenta: json['codigoOrdenVenta'] != null ? List<String>.from(json['codigoOrdenVenta']) : const [],
+      codigoOrdenCompra: json['codigoOrdenCompra'] != null ? List<String>.from(json['codigoOrdenCompra']) : const [],
+      
+      // 🚀 REPARACIÓN: Mapeo estricto a ItemCompraModel
+      itemsCompra: json['itemsCompra'] != null 
+          ? (json['itemsCompra'] as List).map((e) => ItemCompraModel.fromJson(e)).toList() 
+          : const [],
+          
+      procesoTrabajoUrls: json['procesoTrabajoUrls'] != null ? List<String>.from(json['procesoTrabajoUrls']) : const [],
+      isCostosCompletado: json['isCostosCompletado'] as bool? ?? false,
+      isComprasCompletado: json['isComprasCompletado'] as bool? ?? false,
     );
   }
 
@@ -109,9 +132,18 @@ factory TicketModel.fromJson(Map<String, dynamic> json) {
       tipoRequerimiento: entity.tipoRequerimiento,
       lugarAtencion: entity.lugarAtencion,
       esRegistroCompleto: entity.esRegistroCompleto,
-      // 🔄 MAPEO ENTIDAD -> MODELO
       notasRecepcion: entity.notasRecepcion,
-      proforma: entity.proforma 
+      proforma: entity.proforma,
+      
+      // 🔄 MAPEO DE NUEVOS PINES
+      marca: entity.marca,
+      codigoProyecto: entity.codigoProyecto,
+      codigoOrdenVenta: entity.codigoOrdenVenta,
+      codigoOrdenCompra: entity.codigoOrdenCompra,
+      itemsCompra: entity.itemsCompra,
+      procesoTrabajoUrls: entity.procesoTrabajoUrls,
+      isCostosCompletado: entity.isCostosCompletado,
+      isComprasCompletado: entity.isComprasCompletado,
     );
   }
 
@@ -141,9 +173,21 @@ factory TicketModel.fromJson(Map<String, dynamic> json) {
       'tipoRequerimiento': tipoRequerimiento.name,
       'lugarAtencion': lugarAtencion.name,
       'esRegistroCompleto': esRegistroCompleto,
-      // 📤 ESCRITURA HACIA FIREBASE
       'notasRecepcion': notasRecepcion,
       'proforma': proforma != null ? (proforma as ProformaModel).toJson() : null,
+      
+      // 📤 ESCRITURA HACIA FIREBASE
+      'marca': marca,
+      'codigoProyecto': codigoProyecto,
+      'codigoOrdenVenta': codigoOrdenVenta,
+      'codigoOrdenCompra': codigoOrdenCompra,
+      
+      // 🚀 REPARACIÓN: Empaquetado estricto a JSON (Evita Crash en Firebase)
+      'itemsCompra': (itemsCompra as List?)?.map((e) => ItemCompraModel.fromEntity(e as ItemCompraEntity).toJson()).toList() ?? [],
+      
+      'procesoTrabajoUrls': procesoTrabajoUrls,
+      'isCostosCompletado': isCostosCompletado,
+      'isComprasCompletado': isComprasCompletado,
     };
   }
 }
