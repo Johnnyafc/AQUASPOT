@@ -3,6 +3,8 @@ import * as admin from "firebase-admin";
 import * as nodemailer from "nodemailer";
 import * as logger from "firebase-functions/logger";
 import { onDocumentWritten } from "firebase-functions/v2/firestore"
+import * as xlsx from "xlsx";
+import { onObjectFinalized } from "firebase-functions/v2/storage";
 
 admin.initializeApp();
 
@@ -179,6 +181,87 @@ export const enviarCorreoActaCliente = onDocumentWritten(
       } catch (error) {
         logger.error("💥 Falla crítica en el actuador de correo SMTP:", error);
       }
+    }
+  }
+);
+
+
+
+// ============================================================================
+// ⚙️ MÓDULO: PROCESAMIENTO DOCUMENTAL COMERCIAL (EXCEL PARSER)
+// ============================================================================
+export const procesarExcelRepuestos = onObjectFinalized(
+  {
+    memory: "512MiB",
+    timeoutSeconds: 60 // Al descargar directo del bucket nativo, es mucho más rápido
+  },
+  async (event) => {
+    const filePath = event.data.name; // Ej: "tickets/REQ-00001/comercial/proforma_excel_123.xlsx"
+    const contentType = event.data.contentType;
+    const fileBucket = event.data.bucket;
+
+    // 1. CORTAFUEGOS (HARD INTERLOCK): Rechazo de intrusos
+    // Si no está en la carpeta 'comercial' o no es un Excel, cortamos el circuito en 5 milisegundos.
+    if (!filePath || !filePath.includes("/comercial/")) return;
+
+    if (!filePath.endsWith(".xlsx") && contentType !== "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
+        logger.info(`[Filtro] Archivo ignorado. No es el formato esperado (Probablemente un PDF): ${filePath}`);
+        return; 
+    }
+
+    // 2. PARSEO DE RUTA: Extracción del Ticket ID
+    // Dividimos la ruta "tickets/REQ-00001/comercial/..." por los slashes
+    const pathSegments = filePath.split('/');
+    const ticketId = pathSegments[1]; 
+
+    if (!ticketId) {
+        logger.error(`Error arquitectónico: No se pudo extraer el Ticket ID de la ruta: ${filePath}`);
+        return;
+    }
+
+    logger.info(`[Ticket ${ticketId}] Excel detectado en Storage. Iniciando extracción a RAM...`);
+
+    try {
+        // 3. DESCARGA NATIVA (Memoria a Memoria)
+        // Descargamos el archivo usando el Admin SDK sin exponer URLs públicas
+        const bucket = admin.storage().bucket(fileBucket);
+        const [fileBuffer] = await bucket.file(filePath).download();
+
+        // 4. MOTOR DE PARSEO ESTÁNDAR
+        const workbook = xlsx.read(fileBuffer, { type: "buffer" });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const rawData = xlsx.utils.sheet_to_json(worksheet, { defval: null });
+
+        // 5. CONTRATO COMERCIAL (Filtro de Integridad)
+        const repuestosValidos = rawData.filter((row: any) => {
+            const tieneCodigo = row["CODIGO"] !== null && String(row["CODIGO"]).trim() !== "";
+            const tieneCantidad = row["CANTIDAD"] !== null && Number(row["CANTIDAD"]) > 0;
+            return tieneCodigo && tieneCantidad;
+        });
+
+        if (repuestosValidos.length === 0) {
+            logger.warn(`[Ticket ${ticketId}] Operación abortada: La matriz de Excel está vacía o corrupta.`);
+            await admin.firestore().collection("tickets").doc(ticketId).update({
+                estadoProcesamientoExcel: "ERROR_FORMATO"
+            });
+            return;
+        }
+
+        // 6. INYECCIÓN ATÓMICA EN BASE DE DATOS
+        await admin.firestore().collection("tickets").doc(ticketId).update({
+            itemsCompra: admin.firestore.FieldValue.arrayUnion(...repuestosValidos),
+            estadoProcesamientoExcel: "COMPLETADO",
+            fechaProcesamientoExcel: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        logger.info(`✅ [Ticket ${ticketId}] ${repuestosValidos.length} repuestos insertados exitosamente desde Storage.`);
+
+    } catch (error) {
+        logger.error(`💥 [Ticket ${ticketId}] Fallo catastrófico en la rutina de procesamiento:`, error);
+        await admin.firestore().collection("tickets").doc(ticketId).update({
+            estadoProcesamientoExcel: "ERROR_SISTEMA"
+        });
     }
   }
 );

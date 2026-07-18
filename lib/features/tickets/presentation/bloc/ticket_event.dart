@@ -360,3 +360,30 @@ class AnularTicketEvent extends TicketEvent {
     required this.rolUsuario
   });
 }
+class SubirExcelComercialEvent extends TicketEvent {
+  final String ticketId;
+  final PlatformFile archivo;
+
+  const SubirExcelComercialEvent({
+    required this.ticketId,
+    required this.archivo,
+  });
+
+  @override
+  List<Object> get props => [ticketId, archivo];
+}
+
+/// Evento interno del BLoC disparado por el sensor (Stream) de Firestore.
+/// Informa si el actuador remoto (Node.js) terminó su trabajo con o sin fallas.
+class ExcelProcesadoEvento extends TicketEvent {
+  final bool exito;
+  final String? error;
+
+  const ExcelProcesadoEvento({
+    required this.exito,
+    this.error,
+  });
+
+  @override
+  List<Object?> get props => [exito, error];
+}

@@ -35,4 +35,5 @@ Future<Either<Failure, String>> subirActaPdfStorage(String ticketId, Uint8List p
   Future<Either<Failure, String>> subirOrdenCompra(XFile file, String ticketId);
   Future<Either<Failure, String>> subirOrdenVenta(XFile file, String ticketId);
   Future<Either<Failure, void>> anularTicket(String ticketId, Map<String, dynamic> data);
+  Stream<String?> escucharEstadoProcesamientoExcel(String ticketId);
 }

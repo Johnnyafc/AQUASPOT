@@ -1,6 +1,7 @@
 // lib/features/tickets/data/repositories/ticket_repository_impl.dart
 
 import 'package:aquaspot_postventa/features/tickets/data/models/proforma_model.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dartz/dartz.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -45,6 +46,19 @@ TicketRepositoryImpl({
   }
   // --- Operaciones CRUD ---
 
+
+@override
+  Stream<String?> escucharEstadoProcesamientoExcel(String ticketId) {
+    return FirebaseFirestore.instance
+        .collection('tickets')
+        .doc(ticketId)
+        .snapshots()
+        .map((snapshot) {
+          if (!snapshot.exists || snapshot.data() == null) return null;
+          // Extraemos estrictamente la variable de estado inyectada por el motor Node.js
+          return snapshot.data()!['estadoProcesamientoExcel'] as String?;
+        });
+  }
 
 @override
 Future<Either<Failure, void>> anularTicket(String ticketId, Map<String, dynamic> data) async {

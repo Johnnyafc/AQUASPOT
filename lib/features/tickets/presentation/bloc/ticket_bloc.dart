@@ -7,6 +7,7 @@ import 'package:aquaspot_postventa/features/tickets/data/models/ticket_model.dar
 import 'package:aquaspot_postventa/features/tickets/domain/entities/evaluacion_tecnica_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/proforma_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/SubirOrdenVentaUseCase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/escuchar_estado_excel_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_documento_comercial_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_documento_evaluacion_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_orden_compra_usecase.dart';
@@ -26,6 +27,7 @@ import '../../domain/usecases/notificar_y_generar_acta_usecase.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../../../core/enum/ticket_enums.dart';
 import 'dart:io';  
+import 'dart:async';
 import 'ticket_event.dart';
 import 'ticket_state.dart'; // Asegúrate de estar importando el nuevo TicketState unificado
 
@@ -43,6 +45,9 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
   final SubirDocumentoComercialUseCase subirDocumentoComercialUseCase;
   final SubirOrdenVentaUseCase subirOrdenVentaUseCase;
   final SubirOrdenCompraUseCase subirOrdenCompraUseCase;
+  StreamSubscription<String?>? _estadoExcelSubscription;
+  final EscucharEstadoExcelUseCase escucharEstadoExcelUseCase;
+  
 
   TicketBloc({
     required this.subirDocumentoEvaluacionUseCase,
@@ -57,7 +62,8 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     required this.notificarYGenerarActaUseCase,
     required this.subirDocumentoComercialUseCase,
     required this.subirOrdenVentaUseCase,
-    required this.subirOrdenCompraUseCase,
+    required this.subirOrdenCompraUseCase, 
+    required this.escucharEstadoExcelUseCase,
   }) : super(const TicketState()) { // Inicializamos con el estado base unificado
     on<ObtenerClientesEvent>(_onObtenerClientes);
     on<CrearTicketEvent>(_onCrearTicket);
@@ -77,9 +83,96 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     on<ConsumirRepuestosBodegaEvent>(_onConsumirRepuestosBodega);
     on<CompletarProcesoTrabajoEvent>(_onCompletarProcesoTrabajo);
     on<AnularTicketEvent>(_onAnularTicket);
-
+    on<SubirExcelComercialEvent>(_onSubirExcelComercial); // ⚙️ NUEVO
+    on<ExcelProcesadoEvento>(_onExcelProcesado);
     
   }
+
+  Future<void> _onSubirExcelComercial(
+    SubirExcelComercialEvent event, 
+    Emitter<TicketState> emit
+  ) async {
+    // 1. BALIZA DE CARGA (Bloqueo de HMI)
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Transmitiendo matriz comercial al servidor...'
+    ));
+
+    // 2. DISPARO DEL ACTUADOR (Subida física a Storage)
+    final resultSubida = await subirDocumentoComercialUseCase(
+      event.ticketId, 
+      event.archivo, 
+      'comercial'
+    );
+
+    resultSubida.fold(
+      (failure) {
+        // Falla en el actuador (Red, permisos, timeout)
+        emit(state.copyWith(
+          status: TicketStatus.error, 
+          message: 'Error de transmisión: ${_mapFailureToMessage(failure)}'
+        ));
+      },
+      (url) {
+        // 3. TRANSICIÓN DE FASE (Subida exitosa, inicia procesamiento en la nube)
+        emit(state.copyWith(
+          message: 'Archivo recibido. Esperando procesamiento del motor backend...'
+        ));
+
+        // 4. APERTURA DE LA VÁLVULA DE TELEMETRÍA (Lazo cerrado)
+        _estadoExcelSubscription?.cancel(); // Purgar escuchas fantasmas de memoria
+        
+        _estadoExcelSubscription = escucharEstadoExcelUseCase(event.ticketId).listen((estadoBackend) {
+          
+          // 5. EVALUACIÓN DEL SENSOR (Lógica dictaminada por Node.js)
+          if (estadoBackend == 'COMPLETADO') {
+            add(const ExcelProcesadoEvento(exito: true));
+            
+          } else if (estadoBackend == 'ERROR_FORMATO') {
+            add(const ExcelProcesadoEvento(
+              exito: false, 
+              error: 'La matriz no cumple con el estándar de 8 columnas o está corrupta.'
+            ));
+            
+          } else if (estadoBackend == 'ERROR_SISTEMA') {
+            add(const ExcelProcesadoEvento(
+              exito: false, 
+              error: 'Falla catastrófica en el microservicio de procesamiento.'
+            ));
+          }
+        });
+      }
+    );
+  }
+
+  Future<void> _onExcelProcesado(
+    ExcelProcesadoEvento event, 
+    Emitter<TicketState> emit
+  ) async {
+    // 1. CORTE DE TELEMETRÍA (Evitamos fugas de memoria y lecturas redundantes)
+    _estadoExcelSubscription?.cancel();
+
+    if (event.exito) {
+      // 2. HOT SWAP (Opcional, pero recomendado)
+      // Como el backend alteró los repuestos en Firestore, lo ideal es obtener 
+      // la última versión del ticket para que la HMI tenga la data fresca.
+      // Si tiene un UseCase para traer un ticket por ID, úselo aquí.
+      
+      emit(state.copyWith(
+        status: TicketStatus.operationSuccess,
+        message: '✅ Matriz comercial procesada e inyectada con éxito.',
+        // currentTicket: ticketActualizado (Si decidió hacer el fetch)
+      ));
+    } else {
+      // 3. REPORTE DE FALLO DE CÁLCULO
+      emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Rechazo del motor: ${event.error}'
+      ));
+    }
+  }
+
+  
 
 void _onSeleccionarTipoRequerimiento(
     SeleccionarTipoRequerimientoEvent event,

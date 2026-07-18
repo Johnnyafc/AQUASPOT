@@ -7,6 +7,7 @@ import 'package:aquaspot_postventa/features/clientes/domain/repositories/cliente
 import 'package:aquaspot_postventa/features/clientes/domain/usecases/registrar_cliente_usecase.dart';
 import 'package:aquaspot_postventa/features/clientes/presentation/bloc/cliente_bloc.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/SubirOrdenVentaUseCase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/escuchar_estado_excel_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_documento_comercial_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_documento_evaluacion_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_orden_compra_usecase.dart';
@@ -144,6 +145,7 @@ Future<void> init() async {
 
   sl.registerLazySingleton(() => SubirOrdenVentaUseCase(sl()));
 sl.registerLazySingleton(() => SubirOrdenCompraUseCase(sl()));
+sl.registerLazySingleton(() => EscucharEstadoExcelUseCase(sl()));
 
   // ===========================================================================
   // 5. CAPA DE PRESENTACIÓN (Blocs)
@@ -162,6 +164,7 @@ sl.registerLazySingleton(() => SubirOrdenCompraUseCase(sl()));
         subirDocumentoComercialUseCase: sl(),
         subirOrdenVentaUseCase: sl(), 
         subirOrdenCompraUseCase: sl(),
+        escucharEstadoExcelUseCase: sl(),
       ));
 
   sl.registerFactory(() => AuthBloc(

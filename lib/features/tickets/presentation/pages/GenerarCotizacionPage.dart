@@ -79,7 +79,7 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
     if (_pdfsSeleccionados.isEmpty && _excelsSeleccionados.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('La tolva documental está vacía. Adjunte al menos un archivo.'), 
+          content: Text('el campo documental está vacío. Adjunte al menos un archivo.'), 
           backgroundColor: Colors.red
         ),
       );
@@ -111,33 +111,79 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text('Cotización: ${widget.ticket.id}'), backgroundColor: Colors.green),
-      body: BlocListener<TicketBloc, TicketState>(
-        listener: (context, state) {
-          if (state.status == TicketStatus.operationSuccess) { // Ajusta a operationSuccess si es el que usas
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Cotización registrada. Sincronizando SCADA...'), 
-                backgroundColor: Colors.green,
-                duration: Duration(seconds: 2),
-              )
-            );
-            
-context.read<TicketBloc>().add(
-  const ObtenerHistorialTicketsEvent(
-    // ⚙️ Reemplaza 'SegmentoEnum' por el nombre real de tu clase enum
-    segmento: SegmentoOperativo .ninguno, 
-  ),
-);
-            
-            if (Navigator.canPop(context)) {
-              Navigator.pop(context);
-            }
-          } else if (state.status == TicketStatus.error) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.message), backgroundColor: Colors.red)
-            );
-          }
-        },
+      // Implementación de arreglo de relés (MultiBlocListener) para aislar señales
+      body: MultiBlocListener(
+        listeners: [
+          // ==========================================
+          // 📡 SENSOR 1: Transacciones Generales (Su lógica original)
+          // ==========================================
+          BlocListener<TicketBloc, TicketState>(
+            listener: (context, state) {
+              if (state.status == TicketStatus.operationSuccess) { 
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Cotización registrada. Sincronizando SCADA...'), 
+                    backgroundColor: Colors.green,
+                    duration: Duration(seconds: 2),
+                  )
+                );
+                
+                context.read<TicketBloc>().add(
+                  const ObtenerHistorialTicketsEvent(
+                    segmento: SegmentoOperativo.ninguno, 
+                  ),
+                );
+                
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                }
+              } else if (state.status == TicketStatus.error) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(state.message), backgroundColor: Colors.red)
+                );
+              }
+            },
+          ),
+
+          // ==========================================
+          // 📡 SENSOR 2: Telemetría de Excel (El nuevo actuador visual)
+          // ==========================================
+          BlocListener<TicketBloc, TicketState>(
+            // Filtro antiruido: Solo dispara el listener si la bandera específica del Excel muta.
+            listenWhen: (previous, current) {
+              return previous.currentTicket?.estadoProcesamientoExcel != current.currentTicket?.estadoProcesamientoExcel;
+            },
+            listener: (context, state) {
+              final estadoExcel = state.ticket?.estadoProcesamientoExcel;
+
+              if (estadoExcel == 'COMPLETADO') {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('✅ Matriz de repuestos procesada e inyectada exitosamente.'),
+                    backgroundColor: Colors.green,
+                    duration: Duration(seconds: 4),
+                  ),
+                );
+              } else if (estadoExcel == 'ERROR_FORMATO') {
+                 ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('⚠️ Falla de validación: El Excel está vacío o no tiene las columnas requeridas.'),
+                    backgroundColor: Colors.orange,
+                    duration: Duration(seconds: 5),
+                  ),
+                );
+              } else if (estadoExcel == 'ERROR_SISTEMA') {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('💥 Fallo catastrófico en el servidor al procesar el archivo Excel.'),
+                    backgroundColor: Colors.red,
+                    duration: Duration(seconds: 5),
+                  ),
+                );
+              }
+            },
+          ),
+        ],
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: ListView(
