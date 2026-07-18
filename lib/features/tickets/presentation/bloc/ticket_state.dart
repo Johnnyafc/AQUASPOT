@@ -32,6 +32,9 @@ class TicketState extends Equatable {
   final TipoRequerimiento tipoSeleccionado;
   final LugarAtencion lugarAtencion;
 
+  final List<String> codigoOrdenVenta;
+  final List<String> codigoOrdenCompra;
+
   const TicketState({
     this.status = TicketStatus.initial,
     this.tickets = const [],
@@ -44,6 +47,8 @@ class TicketState extends Equatable {
     // ⚙️ Valores neutros de fábrica para que el menú arranque cerrado
     this.tipoSeleccionado = TipoRequerimiento.ninguno,
     this.lugarAtencion = LugarAtencion.noAplica,
+    this.codigoOrdenVenta = const [],
+    this.codigoOrdenCompra = const [],
   });
 
   List<TicketEntity> get ticketsComerciales => 
@@ -64,6 +69,8 @@ class TicketState extends Equatable {
     // 🚀 Añadimos los parámetros al mutador
     TipoRequerimiento? tipoSeleccionado,
     LugarAtencion? lugarAtencion,
+    List<String>? codigoOrdenVenta,
+    List<String>? codigoOrdenCompra,
   }) {
     return TicketState(
       status: status ?? this.status,
@@ -77,6 +84,8 @@ class TicketState extends Equatable {
       // 🚀 Asignamos la mutación
       tipoSeleccionado: tipoSeleccionado ?? this.tipoSeleccionado,
       lugarAtencion: lugarAtencion ?? this.lugarAtencion,
+      codigoOrdenVenta: codigoOrdenVenta ?? this.codigoOrdenVenta,
+      codigoOrdenCompra: codigoOrdenCompra ?? this.codigoOrdenCompra,
     );
   }
 
@@ -93,5 +102,7 @@ class TicketState extends Equatable {
         // 🚀 Vital para que el AnimatedSwitcher del UI detecte el cambio y se mueva
         tipoSeleccionado,
         lugarAtencion,
+        codigoOrdenVenta,
+        codigoOrdenCompra,
       ];
 }

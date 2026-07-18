@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:aquaspot_postventa/core/enum/marca_equipo.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/item_compra_entity.dart';
 import 'package:equatable/equatable.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../domain/entities/ticket_entity.dart';
@@ -101,6 +103,7 @@ class CrearTicketEvent extends TicketEvent {
   final Map<String, bool>? accesoriosRecibidos;
   final bool esRegistroCompleto;
    final String? notasRecepcion;
+   final MarcaEquipo? marcaEquipo;
 
   const CrearTicketEvent({
     required this.sede,
@@ -121,6 +124,7 @@ class CrearTicketEvent extends TicketEvent {
     this.numeroSerie,
     this.accesoriosRecibidos,
     required this.esRegistroCompleto,
+    this.marcaEquipo,
     this.notasRecepcion
   });
 
@@ -129,7 +133,7 @@ class CrearTicketEvent extends TicketEvent {
         sede, clienteId, campamento, nombreContacto, telefonoContacto, 
         emailContacto, equipo, equipoDetalle, fallaReportada, 
         nombreUsuario, rolUsuario, evidencias,
-        tipoRequerimiento, lugarAtencion,numeroSerie,accesoriosRecibidos,esRegistroCompleto,notasRecepcion // 🚀 Añadidos a las props
+        tipoRequerimiento, lugarAtencion,numeroSerie,accesoriosRecibidos,esRegistroCompleto,marcaEquipo,notasRecepcion // 🚀 Añadidos a las props
       ];
 }
 
@@ -252,6 +256,7 @@ class AprobarProformaComercialEvent extends TicketEvent {
   final List<dynamic> ordenesCompraArchivos; // Archivos físicos opcionales
   final String nombreUsuario; // Para la baliza de auditoría
   final String rolUsuario;
+  final String numeroOrdenVenta;
 
   const AprobarProformaComercialEvent({
     required this.ticket,
@@ -259,6 +264,7 @@ class AprobarProformaComercialEvent extends TicketEvent {
     required this.ordenesCompraArchivos,
     required this.nombreUsuario,
     required this.rolUsuario,
+    required this.numeroOrdenVenta,
   });
 
   @override
@@ -268,6 +274,7 @@ class AprobarProformaComercialEvent extends TicketEvent {
         ordenesCompraArchivos,
         nombreUsuario,
         rolUsuario,
+        numeroOrdenVenta,
       ];
 }
 
@@ -305,4 +312,51 @@ class CompletarFaseComprasEvent extends TicketEvent {
 
   @override
   List<Object?> get props => [ticket, ordenesCompraInternaArchivos, nombreUsuario, rolUsuario];
+}
+
+class ConsumirRepuestosBodegaEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final List<ItemCompraEntity> itemsActualizados;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const ConsumirRepuestosBodegaEvent({
+    required this.ticket,
+    required this.itemsActualizados,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, itemsActualizados, nombreUsuario, rolUsuario];
+}
+
+class CompletarProcesoTrabajoEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final List<dynamic> evidenciasFinales; // Archivos físicos (Fotos/Videos)
+  final String notasFinales;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const CompletarProcesoTrabajoEvent({
+    required this.ticket,
+    required this.evidenciasFinales,
+    this.notasFinales = '',
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, evidenciasFinales, notasFinales, nombreUsuario, rolUsuario];
+}
+class AnularTicketEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const AnularTicketEvent({
+    required this.ticket, 
+    required this.nombreUsuario, 
+    required this.rolUsuario
+  });
 }

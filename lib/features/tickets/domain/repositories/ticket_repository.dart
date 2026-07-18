@@ -32,4 +32,7 @@ Future<Either<Failure, String>> subirActaPdfStorage(String ticketId, Uint8List p
   Future<Either<Failure, String>> subirArchivoDocumental(PlatformFile archivo, String ticketId, String subcarpeta);
   // 🔧 NUEVO CONTRATO COMERCIAL
   Future<Either<Failure, String>> subirDocumentoComercial(String ticketId, PlatformFile archivo, String tipoDocumento);
+  Future<Either<Failure, String>> subirOrdenCompra(XFile file, String ticketId);
+  Future<Either<Failure, String>> subirOrdenVenta(XFile file, String ticketId);
+  Future<Either<Failure, void>> anularTicket(String ticketId, Map<String, dynamic> data);
 }

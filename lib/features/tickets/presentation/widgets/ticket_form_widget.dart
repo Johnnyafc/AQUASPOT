@@ -1,5 +1,6 @@
 // lib/features/tickets/presentation/widgets/ticket_form_widget.dart
 
+import 'package:aquaspot_postventa/core/enum/marca_equipo.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../domain/entities/cliente_entity.dart';
@@ -43,6 +44,8 @@ class TicketForm extends StatelessWidget {
   final VoidCallback onSubmit;
   final TipoRequerimiento tipoRequerimiento;
   final LugarAtencion lugarAtencion;
+  final MarcaEquipo? marcaSeleccionada;
+ final ValueChanged<MarcaEquipo?> onMarcaChanged;
 
   const TicketForm({
     super.key,
@@ -74,6 +77,8 @@ class TicketForm extends StatelessWidget {
     required this.onSubmit,
     required this.tipoRequerimiento,
     required this.lugarAtencion,
+    required this.marcaSeleccionada,
+    required this.onMarcaChanged,
   });
 
 @override
@@ -130,6 +135,8 @@ class TicketForm extends StatelessWidget {
               onEquipoChanged: onEquipoChanged,
               onAccesorioChanged: onAccesorioChanged,
               mostrarAccesorios: mostrarAccesorios, // 🚀 Responde automáticamente a Taller/Campo
+              selectedMarca: marcaSeleccionada,
+              onMarcaChanged: onMarcaChanged,
             ),
             const Padding(padding: EdgeInsets.symmetric(vertical: 24.0), child: Divider(thickness: 1.5, color: Colors.black12)),
 

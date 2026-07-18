@@ -14,6 +14,8 @@ enum EstadoTicket {
   comercial,
   cotizado,
   aprobacionComercial,
+  costos,
+  compras,
   bodega,
   procesoTrabajo,
   finalizado,           // Cerrado y correo enviado

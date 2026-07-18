@@ -4,6 +4,7 @@ enum RolUsuario {
   supervisor,
   recepcion,
   admin,
-  comercial, 
+  comercial,
+  costos, 
   desconocido // Estado de fallo de seguridad
 }

@@ -1,4 +1,5 @@
 import 'dart:io'; 
+import 'package:aquaspot_postventa/core/enum/marca_equipo.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
@@ -40,6 +41,7 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
   String? _selectedClienteId; 
   Sede? _selectedSede;
   TipoEquipo? _selectedEquipo;
+  MarcaEquipo? _selectedMarca;
   Prioridad? _prioridad;
   final Map<String, bool> _accesoriosSeleccionados = {};
   final List<XFile> _archivosEvidencia = [];
@@ -77,10 +79,12 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
     _serieController.clear();
     _notasController.clear();
     
+    
     setState(() {
       _selectedSede = null;
       _selectedEquipo = null;
       _selectedClienteId = null;
+      _selectedMarca=null;
       _prioridad = null;
       _accesoriosSeleccionados.clear();
       _archivosEvidencia.clear();
@@ -104,6 +108,13 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
     // Guardas de seguridad explícitas para prevenir NullCheckErrors crónicos
     if (_selectedClienteId == null || _selectedClienteId!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⚠️ Seleccione un Cliente.'), backgroundColor: Colors.orange));
+      return;
+    }
+    if (_selectedMarca == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('⚠️ Especifique la Marca del Equipo.'), 
+        backgroundColor: Colors.orange
+      ));
       return;
     }
 
@@ -187,6 +198,7 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
       accesoriosRecibidos: _accesoriosSeleccionados.isEmpty ? null : Map<String, bool>.from(_accesoriosSeleccionados), 
       evidencias: List<XFile>.from(_archivosEvidencia), 
       
+      marcaEquipo: _selectedMarca,
       tipoRequerimiento: currentState.tipoSeleccionado,
       lugarAtencion: currentState.lugarAtencion,
       esRegistroCompleto: esRegistroCompleto, 
@@ -265,6 +277,11 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
                         archivosEvidencia: _archivosEvidencia,
                         tipoRequerimiento: state.tipoSeleccionado,
                         lugarAtencion: state.lugarAtencion,
+                        
+                        // ⚙️ TERMINALES DE LA MARCA CONECTADOS AL ESTADO LOCAL
+                        marcaSeleccionada: _selectedMarca,
+                        onMarcaChanged: (val) => setState(() => _selectedMarca = val),
+                        
                         onSedeChanged: (val) => setState(() => _selectedSede = val),
                         onEquipoChanged: (val) => setState(() {
                           _selectedEquipo = val;
@@ -285,7 +302,7 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
                           _archivosEvidencia.clear();
                           _archivosEvidencia.addAll(archivos);
                         }),
-                        onSubmit: _submitForm,
+                        onSubmit: _submitForm, // 🚀 SEÑAL DE ARRANQUE CABLEADA
                       ),
                     ),
                   ),

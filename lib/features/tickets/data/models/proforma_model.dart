@@ -16,6 +16,13 @@ class ProformaModel extends ProformaEntity {
     );
   }
 
+factory ProformaModel.fromEntity(ProformaEntity entity) {
+    return ProformaModel(
+      pdfUrls: entity.pdfUrls,
+      excelUrls: entity.excelUrls,
+      observacion: entity.observacion,
+    );
+  }
   Map<String, dynamic> toJson() {
     return {
       'pdfUrls': pdfUrls,

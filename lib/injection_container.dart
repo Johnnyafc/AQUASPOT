@@ -6,8 +6,10 @@ import 'package:aquaspot_postventa/features/clientes/data/repositories/cliente_r
 import 'package:aquaspot_postventa/features/clientes/domain/repositories/cliente_repository.dart';
 import 'package:aquaspot_postventa/features/clientes/domain/usecases/registrar_cliente_usecase.dart';
 import 'package:aquaspot_postventa/features/clientes/presentation/bloc/cliente_bloc.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/SubirOrdenVentaUseCase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_documento_comercial_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_documento_evaluacion_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_orden_compra_usecase.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -140,6 +142,9 @@ Future<void> init() async {
 
   sl.registerLazySingleton(() => SubirDocumentoComercialUseCase(sl()));
 
+  sl.registerLazySingleton(() => SubirOrdenVentaUseCase(sl()));
+sl.registerLazySingleton(() => SubirOrdenCompraUseCase(sl()));
+
   // ===========================================================================
   // 5. CAPA DE PRESENTACIÓN (Blocs)
   // ===========================================================================
@@ -155,6 +160,8 @@ Future<void> init() async {
         notificarYGenerarActaUseCase: sl(),
         subirDocumentoEvaluacionUseCase: sl(),
         subirDocumentoComercialUseCase: sl(),
+        subirOrdenVentaUseCase: sl(), 
+        subirOrdenCompraUseCase: sl(),
       ));
 
   sl.registerFactory(() => AuthBloc(

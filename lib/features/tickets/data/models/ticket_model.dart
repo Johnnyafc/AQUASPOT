@@ -38,6 +38,7 @@ class TicketModel extends TicketEntity {
     super.procesoTrabajoUrls = const [],
     super.isCostosCompletado = false,
     super.isComprasCompletado = false,
+    super.numeroOrdenVenta,
   });
 
   factory TicketModel.fromJson(Map<String, dynamic> json) {
@@ -103,6 +104,7 @@ class TicketModel extends TicketEntity {
       procesoTrabajoUrls: json['procesoTrabajoUrls'] != null ? List<String>.from(json['procesoTrabajoUrls']) : const [],
       isCostosCompletado: json['isCostosCompletado'] as bool? ?? false,
       isComprasCompletado: json['isComprasCompletado'] as bool? ?? false,
+      numeroOrdenVenta: json['numeroOrdenVenta'],
     );
   }
 
@@ -144,6 +146,7 @@ class TicketModel extends TicketEntity {
       procesoTrabajoUrls: entity.procesoTrabajoUrls,
       isCostosCompletado: entity.isCostosCompletado,
       isComprasCompletado: entity.isComprasCompletado,
+      numeroOrdenVenta: entity.numeroOrdenVenta,
     );
   }
 
@@ -188,6 +191,7 @@ class TicketModel extends TicketEntity {
       'procesoTrabajoUrls': procesoTrabajoUrls,
       'isCostosCompletado': isCostosCompletado,
       'isComprasCompletado': isComprasCompletado,
+       'numeroOrdenVenta': numeroOrdenVenta,
     };
   }
 }

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../clientes/data/models/cliente_model.dart';
 import '../models/ticket_model.dart';
 import '../../../../core/errors/exceptions.dart';
@@ -59,6 +60,43 @@ class TicketRemoteDataSourceImpl implements TicketRemoteDataSource {
   }
 
 
+// --- Subir Orden de Venta ---
+Future<String> subirOrdenVenta(XFile file, String ticketId) async {
+  return _subirA("ordenes_venta", file, ticketId);
+}
+
+// --- Subir Orden de Compra ---
+Future<String> subirOrdenCompra(XFile file, String ticketId) async {
+  return _subirA("ordenes_compra", file, ticketId);
+}
+
+// --- Motor privado de subida (La lógica es idéntica, solo cambia el destino) ---
+Future<String> _subirA(String carpetaDestino, XFile file, String ticketId) async {
+  try {
+    final fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
+    final ref = FirebaseStorage.instance.ref().child('tickets/$ticketId/$carpetaDestino/$fileName');
+
+    final uploadTask = await ref.putData(
+      await file.readAsBytes(),
+      SettableMetadata(contentType: 'application/pdf')
+    );
+    
+    return await uploadTask.ref.getDownloadURL();
+  } catch (e) {
+    throw ServerException('Falla en subida a $carpetaDestino: $e');
+  }
+}
+
+@override
+Future<void> anularTicket(String ticketId, Map<String, dynamic> data) async {
+  try {
+    await firestore.collection('tickets').doc(ticketId).update(data);
+  } catch (e) {
+    // Si falla la escritura, lanzamos la excepción que el Repo atrapará
+    throw ServerException('Error al anular en Firestore: $e');
+  }
+}
+
 @override
   Future<String> subirArchivoDocumental(PlatformFile archivo, String ticketId, String subcarpeta) async {
     try {
@@ -82,7 +120,6 @@ class TicketRemoteDataSourceImpl implements TicketRemoteDataSource {
       throw ServerException('Error de telemetría: $e'); 
     }
   }
-
 
 
 

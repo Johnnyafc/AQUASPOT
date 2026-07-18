@@ -38,55 +38,25 @@ TicketRepositoryImpl({
   });
 
   // --- Subrutina de Conversión Universal ---
-  TicketModel _entityToModel(TicketEntity entity) {
-    print('la variable tiene un valor de: ${entity.notasRecepcion}');
-    return TicketModel(
-      id: entity.id,
-      estadoActual: entity.estadoActual,
-      sede: entity.sede,
-      clienteId: entity.clienteId,
-      campamento: entity.campamento,
-      nombreContacto: entity.nombreContacto,
-      telefonoContacto: entity.telefonoContacto,
-      emailContacto: entity.emailContacto,
-      equipo: entity.equipo,
-      equipoDetalle: entity.equipoDetalle,
-      fallaReportada: entity.fallaReportada,
-      accesoriosRecibidos: entity.accesoriosRecibidos,
-      numeroSerie: entity.numeroSerie, 
-      
-      // ⚠️ ADVERTENCIA PREVENTIVA: 
-      // Si evaluacionTecnica crashea en el futuro, es porque tienes el mismo corto aquí. 
-      // Deberías mapearlo a EvaluacionTecnicaModel igual que la proforma.
-      evaluacionTecnica: entity.evaluacionTecnica, 
-      
-      tipoRequerimiento: entity.tipoRequerimiento,
-      lugarAtencion: entity.lugarAtencion, 
-      fotosUrls: entity.fotosUrls,
-      pdfActaUrl: entity.pdfActaUrl,
-      esRegistroCompleto: entity.esRegistroCompleto,
-      notasRecepcion: entity.notasRecepcion,
-      
-      // 🔌 REPARACIÓN DEL CORTO: Transformamos la Entidad en Modelo
-      proforma: entity.proforma != null
-          ? ProformaModel(
-              pdfUrls: entity.proforma!.pdfUrls,
-              excelUrls: entity.proforma!.excelUrls,
-              observacion: entity.proforma!.observacion,
-            )
-          : null,
-          
-      historialEventos: entity.historialEventos.map((e) => EventoAuditoriaModel(
-        accion: e.accion,
-        usuarioNombre: e.usuarioNombre,
-        usuarioRol: e.usuarioRol,
-        timestamp: e.timestamp,
-      )).toList(),
-    );
+ TicketModel _entityToModel(TicketEntity entity) {
+    // Usamos el Factory constructor que ya tenemos en el modelo
+    // Esto garantiza que todas las variables (incluyendo las nuevas) se mapeen correctamente.
+    return TicketModel.fromEntity(entity);
   }
   // --- Operaciones CRUD ---
 
 
+@override
+Future<Either<Failure, void>> anularTicket(String ticketId, Map<String, dynamic> data) async {
+  try {
+    await firebaseDataSource.anularTicket(ticketId, data);
+    return const Right(null); // Retornamos éxito (vacío porque solo actualizamos)
+  } on ServerException catch (e) {
+    return Left(ServerFailure(e.message));
+  } catch (e) {
+    return Left(ServerFailure('Error inesperado: $e'));
+  }
+}
 
 @override
   Future<Either<Failure, String>> subirDocumentoComercial(
@@ -208,6 +178,27 @@ Future<Either<Failure, List<TicketEntity>>> obtenerTickets(SegmentoOperativo seg
       return const Left(NetworkFailure('Operación abortada: No hay conexión a internet para subir archivos pesados.'));
     }
   }
+
+  // En TicketRepositoryImpl
+@override
+Future<Either<Failure, String>> subirOrdenVenta(XFile file, String ticketId) async {
+  try {
+    final url = await firebaseDataSource.subirOrdenVenta(file, ticketId);
+    return Right(url);
+  } catch (e) {
+    return Left(ServerFailure(e.toString()));
+  }
+}
+
+@override
+Future<Either<Failure, String>> subirOrdenCompra(XFile file, String ticketId) async {
+  try {
+    final url = await firebaseDataSource.subirOrdenCompra(file, ticketId);
+    return Right(url);
+  } catch (e) {
+    return Left(ServerFailure(e.toString()));
+  }
+}
 
 
   @override

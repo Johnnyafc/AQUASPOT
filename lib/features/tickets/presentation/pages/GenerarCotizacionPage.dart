@@ -241,6 +241,33 @@ context.read<TicketBloc>().add(
                           onPressed: () => _eliminarArchivo(_pdfsSeleccionados, file),
                         ),
                       )),
+
+                      const SizedBox(height: 16), // Separador espacial
+                      const Divider(), // Aislamiento visual entre módulos
+                      
+                      // 📊 SECCIÓN EXCEL
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Archivos Excel', style: TextStyle(fontWeight: FontWeight.w600)),
+                          ElevatedButton.icon(
+                            onPressed: _seleccionarExcels, // Su actuador ya definido
+                            icon: const Icon(Icons.add), 
+                            label: const Text('Añadir Excel')
+                          ),
+                        ],
+                      ),
+                      if (_excelsSeleccionados.isEmpty)
+                        const Padding(padding: EdgeInsets.symmetric(vertical: 8.0), child: Text('Sin Excels cargados.', style: TextStyle(color: Colors.grey))),
+                      ..._excelsSeleccionados.map((file) => ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.table_chart, color: Colors.green), // Identificador visual estándar
+                        title: Text(file.name, overflow: TextOverflow.ellipsis),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                          onPressed: () => _eliminarArchivo(_excelsSeleccionados, file),
+                        ),
+                      )),
                       
                     ],
                   ),

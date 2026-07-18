@@ -60,6 +60,7 @@ final String marca; // 🚨 El que te habías olvidado
   final String? notasRecepcion;
   final ProformaEntity? proforma;
   final List<ItemCompraEntity>? itemsCompra;
+  final String? numeroOrdenVenta;
 
 const TicketEntity({
     required this.id,
@@ -93,6 +94,7 @@ const TicketEntity({
     this.procesoTrabajoUrls = const [],
     this.isCostosCompletado = false,
     this.isComprasCompletado = false,
+    this.numeroOrdenVenta,
   });
 
   // ⚙️ CLONADOR INDUSTRIAL CORREGIDO (Mutación Segura)
@@ -128,6 +130,7 @@ const TicketEntity({
     List<String>? procesoTrabajoUrls,
     bool? isCostosCompletado,
     bool? isComprasCompletado,
+    String? numeroOrdenVenta,
   }) {
     return TicketEntity(
       id: id ?? this.id,
@@ -161,6 +164,7 @@ const TicketEntity({
       procesoTrabajoUrls: procesoTrabajoUrls ?? this.procesoTrabajoUrls,
       isCostosCompletado: isCostosCompletado ?? this.isCostosCompletado,
       isComprasCompletado: isComprasCompletado ?? this.isComprasCompletado,
+      numeroOrdenVenta: numeroOrdenVenta ?? this.numeroOrdenVenta,
     );
   }
 
@@ -197,6 +201,7 @@ const TicketEntity({
         procesoTrabajoUrls,
         isCostosCompletado,
         isComprasCompletado,
+        numeroOrdenVenta,
       ];
 }
 

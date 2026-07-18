@@ -3,6 +3,7 @@
 import 'package:aquaspot_postventa/core/enum/segmento_operativo.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_bloc.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_event.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaCostosPage.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaProformasEnviadasPage.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_comercial_Page.dart';
 import 'package:flutter/material.dart';
@@ -197,6 +198,17 @@ class _InicioView extends StatelessWidget {
         ),
       ));
     }
+
+    if (operador.rol == RolUsuario.costos) {
+    modules.add(_buildCardOption(
+    title: 'Crear proyecto',
+    icon: Icons.account_balance_wallet, // Ícono financiero
+    color: Colors.orange[800]!, // Color industrial de alerta/gestión
+    onTap: () => Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const BandejaCostosPage())
+    ),
+  ));
+}
 
     return modules;
   } 

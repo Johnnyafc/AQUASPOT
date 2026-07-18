@@ -1,3 +1,4 @@
+import 'package:aquaspot_postventa/core/enum/marca_equipo.dart';
 import 'package:flutter/material.dart';
 import '../../../../../core/enum/ticket_enums.dart';
 import '../custom_dropdown.dart';
@@ -14,6 +15,8 @@ class ConfirmacionEquipoSection extends StatelessWidget {
   final TextEditingController fallaController;
   final ValueChanged<TipoEquipo?> onEquipoChanged;
   final Function(String, bool) onAccesorioChanged;
+  final MarcaEquipo? selectedMarca;
+  final ValueChanged<MarcaEquipo?> onMarcaChanged;
   
   // 🚀 EL NUEVO RELÉ LÓGICO
   final bool mostrarAccesorios; 
@@ -28,6 +31,8 @@ class ConfirmacionEquipoSection extends StatelessWidget {
     required this.onEquipoChanged,
     required this.onAccesorioChanged,
     required this.mostrarAccesorios, // ⚙️ Parámetro requerido
+    this.selectedMarca,
+    required this.onMarcaChanged,
   });
 
   @override
@@ -37,10 +42,12 @@ class ConfirmacionEquipoSection extends StatelessWidget {
       children: [
         const SectionTitleWidget(title: '2. Confirmación de equipo'),
         const SizedBox(height: 16),
+        
         CustomDropdownField<TipoEquipo>(
           label: 'Tipo de Equipo', icon: Icons.precision_manufacturing, items: TipoEquipo.values,
           value: selectedEquipo, onChanged: onEquipoChanged, validator: (value) => null,
         ),
+        
         AnimatedSize(
           duration: const Duration(milliseconds: 300),
           child: selectedEquipo == TipoEquipo.Otros
@@ -51,6 +58,18 @@ class ConfirmacionEquipoSection extends StatelessWidget {
               : const SizedBox.shrink(),
         ),
         const SizedBox(height: 16),
+
+        // 🚀 INYECCIÓN DEL CATÁLOGO DE MARCAS (Opcional)
+        CustomDropdownField<MarcaEquipo>(
+          label: 'Marca del Equipo (Opcional)', 
+          icon: Icons.sell_outlined, // Ícono de etiqueta para la marca
+          items: MarcaEquipo.values,
+          value: selectedMarca, // ⚠️ Requiere declarar: MarcaEquipo? selectedMarca;
+          onChanged: onMarcaChanged, // ⚠️ Requiere declarar: void Function(MarcaEquipo?) onMarcaChanged;
+          validator: (value) => null, // Sin cortocircuitos aquí, es opcional.
+        ),
+        const SizedBox(height: 16),
+
         CustomInputFieldWidget(label: 'Número de Serie', controller: serieController, icon: Icons.qr_code_scanner,validator: (value) => null,),
         const SizedBox(height: 16),
         
