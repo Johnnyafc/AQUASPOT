@@ -1,5 +1,7 @@
 // lib/features/tickets/domain/entities/ticket_entity.dart
 
+import 'package:aquaspot_postventa/features/tickets/domain/entities/evidencia_trabajo_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/gestion_compras_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/item_compra_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/proforma_entity.dart';
 import 'package:equatable/equatable.dart';
@@ -61,6 +63,8 @@ final String marca; // 🚨 El que te habías olvidado
   final ProformaEntity? proforma;
   final List<ItemCompraEntity>? itemsCompra;
   final String? numeroOrdenVenta;
+  final GestionComprasEntity? gestionCompras;
+  final EvidenciaTrabajoEntity? evidenciaTrabajo;
 
 const TicketEntity({
     required this.id,
@@ -95,6 +99,8 @@ const TicketEntity({
     this.isCostosCompletado = false,
     this.isComprasCompletado = false,
     this.numeroOrdenVenta,
+    this.gestionCompras,
+    this.evidenciaTrabajo,
   });
 
   // ⚙️ CLONADOR INDUSTRIAL CORREGIDO (Mutación Segura)
@@ -131,6 +137,8 @@ const TicketEntity({
     bool? isCostosCompletado,
     bool? isComprasCompletado,
     String? numeroOrdenVenta,
+    GestionComprasEntity? gestionCompras,
+    EvidenciaTrabajoEntity? evidenciaTrabajo,
   }) {
     return TicketEntity(
       id: id ?? this.id,
@@ -165,6 +173,8 @@ const TicketEntity({
       isCostosCompletado: isCostosCompletado ?? this.isCostosCompletado,
       isComprasCompletado: isComprasCompletado ?? this.isComprasCompletado,
       numeroOrdenVenta: numeroOrdenVenta ?? this.numeroOrdenVenta,
+      gestionCompras: gestionCompras ?? this.gestionCompras,
+      evidenciaTrabajo: evidenciaTrabajo ?? this.evidenciaTrabajo
     );
   }
 
@@ -202,6 +212,8 @@ const TicketEntity({
         isCostosCompletado,
         isComprasCompletado,
         numeroOrdenVenta,
+        gestionCompras,
+        evidenciaTrabajo,
       ];
 }
 

@@ -182,23 +182,55 @@ context.read<TicketBloc>().add(
                         ),
                         const SizedBox(height: 12),
 
+                        // ==========================================
+                        // 🔍 LECTURA DE TELEMETRÍA (Nuevos canales separados)
+                        // ==========================================
                         const Text('Archivos Adjuntos de Evaluación:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                        if (widget.ticket.evaluacionTecnica!.documentosUrls.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 8.0),
-                            child: Text('El técnico no subió documentos.', style: TextStyle(color: Colors.grey)),
-                          )
-                        else
-                          ...widget.ticket.evaluacionTecnica!.documentosUrls.map((url) {
-                            return ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.file_present, color: Colors.blue),
-                              title: const Text('Ver Documento Técnico', style: TextStyle(decoration: TextDecoration.underline, color: Colors.blue)),
-                              trailing: const Icon(Icons.open_in_new, size: 20),
-                              onTap: () => _abrirEnlaceTecnico(url),
+                        
+                        Builder(
+                          builder: (context) {
+                            final evaluacion = widget.ticket.evaluacionTecnica!;
+                            // Evaluación determinista de los canales
+                            final bool tieneExcel = evaluacion.urlProformaExcel != null && evaluacion.urlProformaExcel!.isNotEmpty;
+                            final bool tienePdfs = evaluacion.urlsAdjuntosPdf.isNotEmpty;
+
+                            // 1. Verificación de tanque vacío
+                            if (!tieneExcel && !tienePdfs) {
+                              return const Padding(
+                                padding: EdgeInsets.only(top: 8.0),
+                                child: Text('El técnico no subió documentos estructurales.', style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
+                              );
+                            }
+
+                            return Column(
+                              children: [
+                                // 2. Extracción del Canal Exclusivo (Proforma Excel)
+                                if (tieneExcel)
+                                  ListTile(
+                                    dense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: const Icon(Icons.table_view, color: Colors.green),
+                                    title: const Text('Descargar Proforma Técnica Base', style: TextStyle(decoration: TextDecoration.underline, color: Colors.blue, fontWeight: FontWeight.bold)),
+                                    trailing: const Icon(Icons.download, size: 20),
+                                    onTap: () => _abrirEnlaceTecnico(evaluacion.urlProformaExcel!),
+                                  ),
+
+                                // 3. Extracción del Canal General (Evidencia PDF)
+                                if (tienePdfs)
+                                  ...evaluacion.urlsAdjuntosPdf.map((url) {
+                                    return ListTile(
+                                      dense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                      leading: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
+                                      title: const Text('Ver Evidencia Documental (PDF)', style: TextStyle(decoration: TextDecoration.underline, color: Colors.blue)),
+                                      trailing: const Icon(Icons.open_in_new, size: 20),
+                                      onTap: () => _abrirEnlaceTecnico(url),
+                                    );
+                                  }),
+                              ],
                             );
-                          }),
+                          }
+                        ),
                       ],
                     ),
                   ),

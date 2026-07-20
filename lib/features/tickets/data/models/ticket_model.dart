@@ -1,3 +1,4 @@
+import 'package:aquaspot_postventa/features/tickets/data/models/GestionComprasModel.dart';
 import 'package:aquaspot_postventa/features/tickets/data/models/proforma_model.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/item_compra_entity.dart';
 import '../../domain/entities/ticket_entity.dart';
@@ -39,6 +40,8 @@ class TicketModel extends TicketEntity {
     super.isCostosCompletado = false,
     super.isComprasCompletado = false,
     super.numeroOrdenVenta,
+    super.gestionCompras,
+    super.evidenciaTrabajo,
   });
 
   factory TicketModel.fromJson(Map<String, dynamic> json) {
@@ -105,6 +108,12 @@ class TicketModel extends TicketEntity {
       isCostosCompletado: json['isCostosCompletado'] as bool? ?? false,
       isComprasCompletado: json['isComprasCompletado'] as bool? ?? false,
       numeroOrdenVenta: json['numeroOrdenVenta'],
+      gestionCompras: json['gestionCompras'] != null 
+          ? GestionComprasModel.fromJson(json['gestionCompras'] as Map<String, dynamic>) 
+          : null,
+      
+
+      
     );
   }
 
@@ -147,7 +156,12 @@ class TicketModel extends TicketEntity {
       isCostosCompletado: entity.isCostosCompletado,
       isComprasCompletado: entity.isComprasCompletado,
       numeroOrdenVenta: entity.numeroOrdenVenta,
+      gestionCompras: entity.gestionCompras != null
+          ? GestionComprasModel.fromEntity(entity.gestionCompras!)
+          : null,
+          
     );
+
   }
 
   Map<String, dynamic> toJson() {
@@ -192,6 +206,9 @@ class TicketModel extends TicketEntity {
       'isCostosCompletado': isCostosCompletado,
       'isComprasCompletado': isComprasCompletado,
        'numeroOrdenVenta': numeroOrdenVenta,
+        'gestionCompras': gestionCompras != null 
+          ? (gestionCompras as GestionComprasModel).toJson() 
+          : null,
     };
   }
 }

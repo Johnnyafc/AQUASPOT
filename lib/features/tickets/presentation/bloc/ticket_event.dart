@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:aquaspot_postventa/core/enum/marca_equipo.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/item_compra_entity.dart';
 import 'package:equatable/equatable.dart';
+import 'package:file_picker/file_picker.dart' as fp;
 import 'package:image_picker/image_picker.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../../../core/enum/ticket_enums.dart'; 
@@ -187,21 +188,30 @@ class SeleccionarLugarAtencionEvent extends TicketEvent {
 // 🚀 EVENTO: Procesar la evaluación técnica y subir documentos
 class ProcesarEvaluacionDocumentalEvent extends TicketEvent {
   final TicketEntity ticket;
-  final List<PlatformFile> documentos;
+  final fp.PlatformFile? proformaExcel; // 📦 Canal exclusivo (Opcional)
+  final List<fp.PlatformFile> documentosPdf; // 📂 Canal general
   final String observacion;
   final String nombreUsuario; 
   final String rolUsuario;
 
   const ProcesarEvaluacionDocumentalEvent({
     required this.ticket,
-    required this.documentos,
+    required this.proformaExcel,
+    required this.documentosPdf,
     required this.observacion,
     required this.nombreUsuario,
     required this.rolUsuario,
   });
 
-  @override
-List<Object?> get props => [ticket, documentos, observacion, nombreUsuario, rolUsuario];
+@override
+  List<Object?> get props => [
+        ticket, 
+        proformaExcel, 
+        documentosPdf, 
+        observacion, 
+        nombreUsuario, 
+        rolUsuario
+      ];
 }
 
 class ProcesarCotizacionEvent extends TicketEvent {
@@ -359,4 +369,42 @@ class AnularTicketEvent extends TicketEvent {
     required this.nombreUsuario, 
     required this.rolUsuario
   });
+}
+
+// lib/features/tickets/presentation/bloc/ticket_event.dart
+
+
+
+class ProcesarGestionComprasEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final XFile archivoOrdenCompra; // ⚙️ CAMBIO A XFILE
+  final String observacion;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const ProcesarGestionComprasEvent({
+    required this.ticket,
+    required this.archivoOrdenCompra,
+    required this.observacion,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object> get props => [ticket, archivoOrdenCompra, observacion, nombreUsuario, rolUsuario];
+}
+// Añada esta clase a su archivo de eventos
+class ProcesarBodegaEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const ProcesarBodegaEvent({
+    required this.ticket,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object> get props => [ticket, nombreUsuario, rolUsuario];
 }

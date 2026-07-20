@@ -1,9 +1,16 @@
-class EvaluacionTecnicaEntity {
-  final List<String> documentosUrls;
-  final String observacion; // 🔌 Nuevo pin de datos
+import 'package:equatable/equatable.dart';
+
+class EvaluacionTecnicaEntity extends Equatable {
+  final String? urlProformaExcel;     // 🎯 Canal exclusivo para Compras
+  final List<String> urlsAdjuntosPdf; // 📂 Canal de respaldo técnico
+  final String observacion;
 
   const EvaluacionTecnicaEntity({
-    required this.documentosUrls,
-    this.observacion = '', // Inicializado en vacío por si no escriben nada
+    this.urlProformaExcel,
+    required this.urlsAdjuntosPdf,
+    this.observacion = '',
   });
+
+  @override
+  List<Object?> get props => [urlProformaExcel, urlsAdjuntosPdf, observacion];
 }

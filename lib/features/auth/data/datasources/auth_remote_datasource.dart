@@ -49,6 +49,8 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
          return RolUsuario.comercial;
       case 'COSTOS':
          return RolUsuario.costos;
+      case 'COMPRAS':
+         return RolUsuario.compras;
       default:
         return RolUsuario.desconocido;
     }

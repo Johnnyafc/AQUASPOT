@@ -3,9 +3,12 @@
 import 'package:aquaspot_postventa/core/enum/segmento_operativo.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_bloc.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_event.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaBodegaPage.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaCostosPage.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaProformasEnviadasPage.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaTrabajosPage.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_comercial_Page.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_compras_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/auth_bloc.dart';
@@ -83,20 +86,24 @@ class _MainMenuPageState extends State<MainMenuPage> {
             selectedItemColor: const Color(0xFF005A9C),
             unselectedItemColor: Colors.grey,
             onTap: (index) {
-              // El índice 2 es el botón de salir. No es una vista.
+              // 1. Condición de salida (Acción sin cambio de vista)
               if (index == 2) {
                 _logout();
-              } else {
-                setState(() => _selectedIndex = index);
+                return; // <-- CRÍTICO: Abortamos la ejecución aquí. El estado no se toca.
               }
+
+              // 2. Disparos de eventos específicos por módulo
               if (index == 1) {
-    // DISPARO DE ORDEN DE RECARGA GLOBAL
-    // Usamos 'ninguno' para abrir la válvula de filtrado en el DataSource
-              context.read<TicketBloc>().add(
-              const ObtenerHistorialTicketsEvent(segmento: SegmentoOperativo.ninguno)
+                // DISPARO DE ORDEN DE RECARGA GLOBAL
+                context.read<TicketBloc>().add(
+                  const ObtenerHistorialTicketsEvent(segmento: SegmentoOperativo.ninguno)
                 );
-                 }
-                 setState(() => _selectedIndex = index);
+              }
+
+              // 3. Mutación de estado controlada (Solo llegará aquí si index es 0 o 1)
+              setState(() {
+                _selectedIndex = index;
+              });
             },
             items: const [
               BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Inicio'),
@@ -169,6 +176,15 @@ class _InicioView extends StatelessWidget {
       ));
     }
 
+    if (operador.rol == RolUsuario.supervisor) {
+      modules.add(_buildCardOption(
+        title: 'Proceso de trabajo',
+        icon: Icons.toll,
+        color: Colors.orange,
+       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaTrabajosPage())),
+      ));
+    }
+
 // 🔒 ACCESO EXCLUSIVO PARA SUPER ADMINISTRADORES
     if (operador.rol == RolUsuario.admin) {
       modules.add(_buildCardOption(
@@ -179,6 +195,77 @@ class _InicioView extends StatelessWidget {
           MaterialPageRoute(builder: (_) => const RegistroUsuarioPage())
         ),
       ));
+
+        modules.add(_buildCardOption(
+        title: 'Crear Ticket',
+        icon: Icons.add_box,
+        color: Colors.blue,
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CreacionTicketPage())),
+      ));
+
+      modules.add(_buildCardOption(
+        title: 'Tickets',
+        icon: Icons.inventory_outlined, // Ícono industrial de inventario/recepción
+        color: Colors.teal, 
+        onTap: () {
+          // TODO: Descomentar cuando la vista BandejaRecepcionPage esté creada
+           Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaRecepcionPage()));
+        },
+      ));
+
+    modules.add(_buildCardOption(
+        title: 'Evaluaciones Técnicas',
+        icon: Icons.handyman,
+        color: Colors.orange,
+       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaEvaluacionesPage())),
+      ));
+     modules.add(_buildCardOption(
+        title: 'Crear proforma',
+        icon: Icons.business_center,
+        color: Colors.green, // Color asociado a transacciones comerciales
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const BandejaComercialPage())
+        ),
+      ));
+
+            modules.add(_buildCardOption(
+        title: 'Proformas enviadas',
+        icon: Icons.access_alarm,
+        color: Colors.blue, // Color asociado a transacciones comerciales
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const BandejaProformasEnviadasPage())
+        ),
+      ));
+
+
+      modules.add(_buildCardOption(
+    title: 'Crear proyecto',
+    icon: Icons.account_balance_wallet, // Ícono financiero
+    color: Colors.orange[800]!, // Color industrial de alerta/gestión
+    onTap: () => Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const BandejaCostosPage())
+    ),
+  ));
+
+
+   modules.add(_buildCardOption(
+    title: 'Compras',
+    icon: Icons.account_balance_wallet, // Ícono financiero
+    color: Colors.orange[800]!, // Color industrial de alerta/gestión
+    onTap: () => Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const BandejaComprasPage())
+    ),
+  ));
+
+  modules.add(_buildCardOption(
+    title: 'Validación Bodega',
+    icon: Icons.factory, // Ícono financiero
+    color: Colors.blue[800]!, // Color industrial de alerta/gestión
+    onTap: () => Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const BandejaBodegaPage())
+    ),
+  ));
+
     }
     if (operador.rol == RolUsuario.comercial) {
       modules.add(_buildCardOption(
@@ -209,6 +296,28 @@ class _InicioView extends StatelessWidget {
     ),
   ));
 }
+
+if (operador.rol == RolUsuario.compras) {
+    modules.add(_buildCardOption(
+    title: 'Compras',
+    icon: Icons.account_balance_wallet, // Ícono financiero
+    color: Colors.orange[800]!, // Color industrial de alerta/gestión
+    onTap: () => Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const BandejaComprasPage())
+    ),
+  ));
+
+  modules.add(_buildCardOption(
+    title: 'Validación Bodega',
+    icon: Icons.factory, // Ícono financiero
+    color: Colors.blue[800]!, // Color industrial de alerta/gestión
+    onTap: () => Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const BandejaBodegaPage())
+    ),
+  ));
+}
+
+
 
     return modules;
   } 

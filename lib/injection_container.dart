@@ -162,6 +162,8 @@ sl.registerLazySingleton(() => SubirOrdenCompraUseCase(sl()));
         subirDocumentoComercialUseCase: sl(),
         subirOrdenVentaUseCase: sl(), 
         subirOrdenCompraUseCase: sl(),
+        ticketRepository: sl(),
+        
       ));
 
   sl.registerFactory(() => AuthBloc(

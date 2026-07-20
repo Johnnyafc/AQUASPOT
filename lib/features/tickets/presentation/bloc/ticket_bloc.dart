@@ -2,10 +2,13 @@
 
 import 'dart:typed_data';
 import 'package:aquaspot_postventa/core/errors/exceptions.dart';
+import 'package:aquaspot_postventa/features/tickets/data/models/GestionComprasModel.dart';
 import 'package:aquaspot_postventa/features/tickets/data/models/proforma_model.dart';
 import 'package:aquaspot_postventa/features/tickets/data/models/ticket_model.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/evaluacion_tecnica_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/gestion_compras_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/proforma_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/repositories/ticket_repository.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/SubirOrdenVentaUseCase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_documento_comercial_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_documento_evaluacion_usecase.dart';
@@ -43,7 +46,8 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
   final SubirDocumentoComercialUseCase subirDocumentoComercialUseCase;
   final SubirOrdenVentaUseCase subirOrdenVentaUseCase;
   final SubirOrdenCompraUseCase subirOrdenCompraUseCase;
-
+  final ITicketRepository ticketRepository;
+  
   TicketBloc({
     required this.subirDocumentoEvaluacionUseCase,
     required this.obtenerClientes,
@@ -58,6 +62,8 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     required this.subirDocumentoComercialUseCase,
     required this.subirOrdenVentaUseCase,
     required this.subirOrdenCompraUseCase,
+    required this.ticketRepository,
+    required 
   }) : super(const TicketState()) { // Inicializamos con el estado base unificado
     on<ObtenerClientesEvent>(_onObtenerClientes);
     on<CrearTicketEvent>(_onCrearTicket);
@@ -77,8 +83,8 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     on<ConsumirRepuestosBodegaEvent>(_onConsumirRepuestosBodega);
     on<CompletarProcesoTrabajoEvent>(_onCompletarProcesoTrabajo);
     on<AnularTicketEvent>(_onAnularTicket);
-
-    
+    on<ProcesarGestionComprasEvent>(_onProcesarGestionCompras);
+    on<ProcesarBodegaEvent>(_onProcesarBodega);
   }
 
 void _onSeleccionarTipoRequerimiento(
@@ -189,7 +195,7 @@ Future<void> _onSubirEvidencia(SubirEvidenciaEvent event, Emitter<TicketState> e
     );
   }
 
-  Future<void> _onProcesarEvaluacionDocumental(
+Future<void> _onProcesarEvaluacionDocumental(
     ProcesarEvaluacionDocumentalEvent event, 
     Emitter<TicketState> emit
   ) async {
@@ -198,27 +204,50 @@ Future<void> _onSubirEvidencia(SubirEvidenciaEvent event, Emitter<TicketState> e
       message: 'Transmitiendo documentos técnicos a la nube...'
     ));
 
-    List<String> urlsSubidas = [];
+    String? urlExcelSubido;
+    List<String> urlsPdfsSubidos = [];
     bool huboFalla = false;
     String mensajeError = '';
 
-    // 1. SUBIDA DE ARCHIVOS BINARIOS A STORAGE
-    if (event.documentos.isNotEmpty) {
-      for (final file in event.documentos) {
-        // ⚠️ ATENCIÓN: Aquí usas tu método real del repositorio/usecase para subir a Storage.
-        // Ejemplo: final result = await subirDocumentoUseCase(file, event.ticket.id);
-       final result = await subirDocumentoEvaluacionUseCase(file, event.ticket.id, 'evaluaciones');
+    // ==========================================
+    // 1A. SUBIDA DEL CANAL EXCLUSIVO (PROFORMA EXCEL)
+    // ==========================================
+    if (event.proformaExcel != null) {
+      // Opcional: Puede enviar a una subcarpeta 'evaluaciones/proformas' para más orden en Storage
+      final result = await subirDocumentoEvaluacionUseCase(event.proformaExcel!, event.ticket.id, 'evaluaciones');
+      
+      result.fold(
+        (failure) {
+          huboFalla = true;
+          mensajeError = _mapFailureToMessage(failure);
+        },
+        (url) => urlExcelSubido = url,
+      );
+
+      if (huboFalla) {
+        emit(state.copyWith(status: TicketStatus.error, message: 'Falla al subir Proforma: $mensajeError'));
+        return; // 🛑 Aborto de emergencia
+      }
+    }
+
+    // ==========================================
+    // 1B. SUBIDA DEL CANAL GENERAL (EVIDENCIA PDF)
+    // ==========================================
+    if (event.documentosPdf.isNotEmpty) {
+      for (final file in event.documentosPdf) {
+        final result = await subirDocumentoEvaluacionUseCase(file, event.ticket.id, 'evaluaciones');
+        
         result.fold(
           (failure) {
             huboFalla = true;
             mensajeError = _mapFailureToMessage(failure);
           },
-          (url) => urlsSubidas.add(url),
+          (url) => urlsPdfsSubidos.add(url),
         );
 
         if (huboFalla) {
-          emit(state.copyWith(status: TicketStatus.error, message: 'Falla al subir archivo: $mensajeError'));
-          return; // Abortar secuencia
+          emit(state.copyWith(status: TicketStatus.error, message: 'Falla al subir PDF: $mensajeError'));
+          return; // 🛑 Aborto de emergencia
         }
       }
     }
@@ -228,29 +257,34 @@ Future<void> _onSubirEvidencia(SubirEvidenciaEvent event, Emitter<TicketState> e
       message: 'Ensamblando reporte y consolidando base de datos...'
     ));
 
-    // 2. ENSAMBLAJE DE LAS NUEVAS ENTIDADES
+    // ==========================================
+    // 2. ENSAMBLAJE DE LAS NUEVAS ENTIDADES (Estructura Determinista)
+    // ==========================================
     final evaluacion = EvaluacionTecnicaEntity(
-      documentosUrls: urlsSubidas,
+      urlProformaExcel: urlExcelSubido, // Puede ser null, la entidad lo acepta
+      urlsAdjuntosPdf: urlsPdfsSubidos, // Arreglo, puede estar vacío
       observacion: event.observacion,
     );
 
-    // TODO: Extraer usuario real si tienes AuthBloc inyectado en este BLoC. 
-    // Si no, pon valores por defecto temporales o inyecta el nombre en el evento.
     final eventoAuditoria = EventoAuditoriaEntity(
       accion: 'EVALUACIÓN TÉCNICA Y DOCUMENTAL REGISTRADA',
-      usuarioNombre: event.nombreUsuario, // Cambiar por usuario real
+      usuarioNombre: event.nombreUsuario, 
       usuarioRol: event.rolUsuario,
       timestamp: DateTime.now(),
     );
 
+    // ==========================================
     // 3. MUTACIÓN DEL TICKET (El Troquelado)
+    // ==========================================
     final ticketActualizado = event.ticket.copyWith(
       evaluacionTecnica: evaluacion,
-      estadoActual: EstadoTicket.comercial, // 🚀 TRASPASO AL NUEVO ESTADO
+      estadoActual: EstadoTicket.comercial, // 🚀 TRASPASO DE ESTACIÓN
       historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
     );
 
+    // ==========================================
     // 4. PERSISTENCIA EN FIRESTORE
+    // ==========================================
     final dbResult = await actualizarTicket(ticketActualizado);
 
     dbResult.fold(
@@ -259,7 +293,7 @@ Future<void> _onSubirEvidencia(SubirEvidenciaEvent event, Emitter<TicketState> e
         message: 'Error al guardar la evaluación: ${_mapFailureToMessage(failure)}'
       )),
       (ticketGuardado) {
-        // 5. HOT SWAP: Actualizamos la memoria RAM (Lazo cerrado para el HMI)
+        // 5. HOT SWAP: Lazo cerrado para actualizar la HMI
         final listaActualizada = state.historial.map((t) => 
           t.id == ticketGuardado.id ? ticketGuardado : t
         ).toList();
@@ -274,6 +308,150 @@ Future<void> _onSubirEvidencia(SubirEvidenciaEvent event, Emitter<TicketState> e
     );
   }
 
+Future<void> _onProcesarBodega(
+  ProcesarBodegaEvent event, 
+  Emitter<TicketState> emit
+) async {
+  emit(state.copyWith(
+    status: TicketStatus.loading,
+    message: 'Validando orden de compra y liberando equipo...'
+  ));
+
+  // ==========================================
+  // 1. ENSAMBLAJE DE LA AUDITORÍA (Estándar de la Planta)
+  // ==========================================
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: 'ORDEN DE COMPRA VALIDADA EN BODEGA',
+    usuarioNombre: event.nombreUsuario, 
+    usuarioRol: event.rolUsuario,
+    timestamp: DateTime.now(),
+  );
+
+  // ==========================================
+  // 2. MUTACIÓN DEL TICKET (El Troquelado)
+  // ==========================================
+  final ticketActualizado = event.ticket.copyWith(
+    estadoActual: EstadoTicket.procesoTrabajo, // 🚀 TRASPASO DE ESTACIÓN
+    historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+  );
+
+  // ==========================================
+  // 3. PERSISTENCIA EN FIRESTORE
+  // ==========================================
+  final dbResult = await actualizarTicket(ticketActualizado);
+
+  dbResult.fold(
+    (failure) => emit(state.copyWith(
+      status: TicketStatus.error, 
+      message: 'Error al conmutar estado en Bodega: ${_mapFailureToMessage(failure)}'
+    )),
+    (ticketGuardado) {
+      // ==========================================
+      // 4. HOT SWAP: Lazo cerrado para actualizar la HMI
+      // ==========================================
+      final listaActualizada = state.historial.map((t) => 
+        t.id == ticketGuardado.id ? ticketGuardado : t
+      ).toList();
+
+      emit(state.copyWith(
+        status: TicketStatus.operationSuccess,
+        message: 'Equipo liberado para proceso de trabajo exitosamente.',
+        historial: listaActualizada,
+        currentTicket: ticketGuardado,
+      ));
+    }
+  );
+}
+
+Future<void> _onProcesarGestionCompras(
+    ProcesarGestionComprasEvent event, 
+    Emitter<TicketState> emit
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Transmitiendo Orden de Compra a la nube...'
+    ));
+
+    String? urlOrdenSubida;
+    bool huboFalla = false;
+    String mensajeError = '';
+
+    // ==========================================
+    // 1. SUBIDA DEL DOCUMENTO DE COMPRA
+    // ==========================================
+    // ⚙️ EMPALME CORREGIDO: (XFile, ticketId)
+    final result = await subirOrdenCompraUseCase(
+      event.archivoOrdenCompra, 
+      event.ticket.id
+    );
+    
+    result.fold(
+      (failure) {
+        huboFalla = true;
+        mensajeError = _mapFailureToMessage(failure);
+      },
+      (url) => urlOrdenSubida = url,
+    );
+
+    if (huboFalla || urlOrdenSubida == null) {
+      emit(state.copyWith(status: TicketStatus.error, message: 'Falla al subir Orden de Compra: $mensajeError'));
+      return; 
+    }
+
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Ensamblando orden y consolidando base de datos...'
+    ));
+
+    // ==========================================
+    // 2. ENSAMBLAJE DE LAS NUEVAS ENTIDADES
+    // ==========================================
+    final gestionCompras = GestionComprasEntity(
+      urlOrdenCompra: urlOrdenSubida!, 
+      observacion: event.observacion,
+    );
+
+    final eventoAuditoria = EventoAuditoriaEntity(
+      accion: 'ORDEN DE COMPRA REGISTRADA',
+      usuarioNombre: event.nombreUsuario, 
+      usuarioRol: event.rolUsuario,
+      timestamp: DateTime.now(),
+    );
+
+    // ==========================================
+    // 3. MUTACIÓN DEL TICKET (El Troquelado)
+    // ==========================================
+    final ticketActualizado = event.ticket.copyWith(
+      gestionCompras: gestionCompras,
+      estadoActual: EstadoTicket.bodega, 
+      isComprasCompletado: true,         
+      historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+    );
+
+    // ==========================================
+    // 4. PERSISTENCIA EN FIRESTORE
+    // ==========================================
+    final dbResult = await actualizarTicket(ticketActualizado);
+
+    dbResult.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error, 
+        message: 'Cortocircuito al guardar la compra: ${_mapFailureToMessage(failure)}'
+      )),
+      (ticketGuardado) {
+        final listaActualizada = state.historial.map((t) => 
+          t.id == ticketGuardado.id ? ticketGuardado : t
+        ).toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: 'Orden de compra transferida a Bodega.',
+          historial: listaActualizada,
+          currentTicket: ticketGuardado,
+        ));
+      }
+    );
+  }
 
 Future<void> _onNotificarYGenerarActa(NotificarYGenerarActaEvent event, Emitter<TicketState> emit) async {
     emit(state.copyWith(
