@@ -1,19 +1,17 @@
 // lib/features/tickets/domain/entities/ticket_enums.dart
 
-enum Sede { DURAN, EL_GUABO }
+enum Sede { DURAN, EL_GUABO, NINGUNO }
 
 enum TipoEquipo { Caracol, Cosechadora, Contador, Otros}
 
 enum Prioridad { baja, media, alta }
 
 enum EstadoTicket { 
-  creado,
-  recibido,              
-  evaluacionTecnica,   
+  creado, 
+  enCamino,            
   recepcionFisica,
   comercial,
   cotizado,
-  aprobacionComercial,
   costos,
   compras,
   bodega,

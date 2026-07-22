@@ -1,4 +1,5 @@
 import 'package:aquaspot_postventa/features/tickets/data/models/GestionComprasModel.dart';
+import 'package:aquaspot_postventa/features/tickets/data/models/evidencia_trabajo_model.dart';
 import 'package:aquaspot_postventa/features/tickets/data/models/proforma_model.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/item_compra_entity.dart';
 import '../../domain/entities/ticket_entity.dart';
@@ -112,7 +113,9 @@ class TicketModel extends TicketEntity {
           ? GestionComprasModel.fromJson(json['gestionCompras'] as Map<String, dynamic>) 
           : null,
       
-
+     evidenciaTrabajo: json['evidenciaTrabajo'] != null
+          ? EvidenciaTrabajoModel.fromJson(json['evidenciaTrabajo'] as Map<String, dynamic>)
+          : null,
       
     );
   }
@@ -158,6 +161,10 @@ class TicketModel extends TicketEntity {
       numeroOrdenVenta: entity.numeroOrdenVenta,
       gestionCompras: entity.gestionCompras != null
           ? GestionComprasModel.fromEntity(entity.gestionCompras!)
+          : null,
+
+      evidenciaTrabajo: entity.evidenciaTrabajo != null
+          ? EvidenciaTrabajoModel.fromEntity(entity.evidenciaTrabajo!)
           : null,
           
     );
@@ -208,6 +215,10 @@ class TicketModel extends TicketEntity {
        'numeroOrdenVenta': numeroOrdenVenta,
         'gestionCompras': gestionCompras != null 
           ? (gestionCompras as GestionComprasModel).toJson() 
+          : null,
+
+      'evidenciaTrabajo': evidenciaTrabajo != null
+          ? EvidenciaTrabajoModel.fromEntity(evidenciaTrabajo!).toJson()
           : null,
     };
   }

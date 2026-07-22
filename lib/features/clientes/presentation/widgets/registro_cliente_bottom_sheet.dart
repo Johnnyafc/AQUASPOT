@@ -104,7 +104,7 @@ class _RegistroClienteBottomSheetState extends State<RegistroClienteBottomSheet>
 
                   // 1. SEDE (SubSector)
                   DropdownButtonFormField<String>(
-                    decoration: _inputStyle('Sede Operativa', Icons.business),
+                    decoration: _inputStyle('Lugar de recepción', Icons.business),
                     value: _subSector,
                     items: _sedesDisponibles.map((sede) {
                       return DropdownMenuItem(value: sede, child: Text(sede));

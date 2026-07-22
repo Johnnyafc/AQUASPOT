@@ -1,11 +1,13 @@
 // lib/features/tickets/presentation/pages/main_menu_page.dart
 
 import 'package:aquaspot_postventa/core/enum/segmento_operativo.dart';
+import 'package:aquaspot_postventa/features/clientes/presentation/widgets/registro_cliente_bottom_sheet.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_bloc.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_event.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaBodegaPage.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaCostosPage.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaProformasEnviadasPage.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaRecepcionGuaboPage.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaTrabajosPage.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_comercial_Page.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_compras_page.dart';
@@ -36,7 +38,7 @@ class _MainMenuPageState extends State<MainMenuPage> {
     context.read<AuthBloc>().add(CerrarSesionEvent());
   }
 
-  @override
+ @override
   Widget build(BuildContext context) {
     return BlocConsumer<AuthBloc, AuthState>(
       listener: (context, state) {
@@ -58,13 +60,25 @@ class _MainMenuPageState extends State<MainMenuPage> {
           const HistorialTicketsPage(), // ✅ SEÑAL CONECTADA AL PUERTO 2
         ];
 
-        return Scaffold(
+     return Scaffold(
           backgroundColor: const Color(0xFFF4F7F6),
           appBar: AppBar(
             backgroundColor: Colors.white,
             elevation: 0,
             title: const Text("Aquaspot", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
             actions: [
+              // ⚙️ COMPUERTA LÓGICA: Acceso restringido a Comerciales
+              if (operador.rol.name.toLowerCase() == 'comercial')
+                IconButton(
+                  icon: const Icon(Icons.person_add_alt_1, color: Colors.black54), // Color atenuado para no ser invasivo
+                  tooltip: 'Registrar Cliente',
+                  onPressed: () async {
+                    // 🚀 DISPARO DEL BOTTOM SHEET (USANDO EL MÉTODO ESTÁTICO CORREGIDO)
+                    // Esto evita el ProviderNotFoundException al inyectar su propio BLoC.
+                    await RegistroClienteBottomSheet.show(context);
+                  },
+                ),
+                
               IconButton(icon: const Icon(Icons.notifications_none, color: Colors.black), onPressed: () {}),
               Padding(
                 padding: const EdgeInsets.only(right: 16.0),
@@ -161,13 +175,22 @@ class _InicioView extends StatelessWidget {
         icon: Icons.inventory_outlined, // Ícono industrial de inventario/recepción
         color: Colors.teal, 
         onTap: () {
-          // TODO: Descomentar cuando la vista BandejaRecepcionPage esté creada
+          
            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaRecepcionPage()));
         },
       ));
     }
 
     if (operador.rol == RolUsuario.tecnico || operador.rol == RolUsuario.supervisor) {
+    
+    modules.add(_buildCardOption(
+        title: 'Recepción del Guabo',
+        icon: Icons.car_rental,
+        color: Colors.lightBlue,
+       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaRecepcionGuaboPage())),
+      ));
+
+
       modules.add(_buildCardOption(
         title: 'Evaluaciones Técnicas',
         icon: Icons.handyman,
@@ -175,6 +198,7 @@ class _InicioView extends StatelessWidget {
        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaEvaluacionesPage())),
       ));
     }
+
 
     if (operador.rol == RolUsuario.supervisor) {
       modules.add(_buildCardOption(

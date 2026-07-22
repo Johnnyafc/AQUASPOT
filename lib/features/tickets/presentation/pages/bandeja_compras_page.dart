@@ -12,7 +12,7 @@ import '../../domain/entities/ticket_entity.dart';
 class BandejaComprasPage extends StatelessWidget {
   const BandejaComprasPage({Key? key}) : super(key: key);
 
-  @override
+ @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -25,9 +25,8 @@ class BandejaComprasPage extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
 
-          // ⚙️ FILTRO SCADA: Capturamos los tickets en tránsito (Costos) y los listos (Compras)
+          // ⚙️ FILTRO SCADA: Capturamos los tickets en tránsito o listos
           final ticketsCompras = state.historial.where((t) {
-            // Reemplace 'costos' y 'compras' por los valores reales de su enum EstadoTicket
             return t.estadoActual == EstadoTicket.costos || 
                    t.estadoActual == EstadoTicket.compras;
           }).toList();
@@ -47,28 +46,27 @@ class BandejaComprasPage extends StatelessWidget {
             itemBuilder: (context, index) {
               final ticket = ticketsCompras[index];
               
-              // 🔒 Lógica de Enclavamiento
-              // Si está en compras O el flag de costos está activo, se libera el seguro.
-              final bool estaHabilitado = ticket.estadoActual == EstadoTicket.compras || 
-                                          ticket.isCostosCompletado;
+              // 🔍 LECTURA DE ESTADO (Solo para HMI visual, sin enclavamiento de navegación)
+              final bool procesadoPorCostos = ticket.estadoActual == EstadoTicket.compras || 
+                                              ticket.isCostosCompletado;
 
               return Card(
-                elevation: estaHabilitado ? 4 : 1, // Resalta los que requieren acción
+                elevation: procesadoPorCostos ? 4 : 2, 
                 margin: const EdgeInsets.only(bottom: 12),
                 shape: RoundedRectangleBorder(
                   side: BorderSide(
-                    color: estaHabilitado ? Colors.teal : Colors.grey.shade300, 
-                    width: estaHabilitado ? 1.5 : 1
+                    color: procesadoPorCostos ? Colors.teal : Colors.red.shade300, 
+                    width: 1.5
                   ),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: ListTile(
                   contentPadding: const EdgeInsets.all(16),
                   leading: CircleAvatar(
-                    backgroundColor: estaHabilitado ? Colors.teal.shade100 : Colors.grey.shade200,
+                    backgroundColor: procesadoPorCostos ? Colors.teal.shade100 : Colors.red.shade50,
                     child: Icon(
-                      estaHabilitado ? Icons.shopping_cart_checkout : Icons.lock_clock,
-                      color: estaHabilitado ? Colors.teal.shade800 : Colors.grey.shade600,
+                      procesadoPorCostos ? Icons.shopping_cart_checkout : Icons.warning_amber_rounded, 
+                      color: procesadoPorCostos ? Colors.teal.shade800 : Colors.red.shade700
                     ),
                   ),
                   title: Text(
@@ -86,22 +84,23 @@ class BandejaComprasPage extends StatelessWidget {
                         )
                       ),
                       const SizedBox(height: 8),
-                      // 🚦 Semáforo de Estado
+                      
+                      // 🚦 SEMÁFORO DE ESTADO LOGÍSTICO
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: estaHabilitado ? Colors.green.shade50 : Colors.amber.shade50,
+                          color: procesadoPorCostos ? Colors.green.shade50 : Colors.red.shade50,
                           borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: estaHabilitado ? Colors.green : Colors.amber),
+                          border: Border.all(color: procesadoPorCostos ? Colors.green : Colors.red.shade400),
                         ),
                         child: Text(
-                          estaHabilitado 
+                          procesadoPorCostos 
                               ? '🟢 HABILITADO PARA COMPRA' 
-                              : '🟡 ESPERANDO A COSTOS',
+                              : '🔴 COSTOS NO PROCESADO',
                           style: TextStyle(
                             fontSize: 12, 
                             fontWeight: FontWeight.bold,
-                            color: estaHabilitado ? Colors.green.shade700 : Colors.amber.shade800,
+                            color: procesadoPorCostos ? Colors.green.shade700 : Colors.red.shade800,
                           ),
                         ),
                       ),
@@ -109,24 +108,13 @@ class BandejaComprasPage extends StatelessWidget {
                   ),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                   onTap: () {
-                    if (estaHabilitado) {
-                      // 🚀 Válvula abierta: Transición a la estación de compras
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => GestionComprasPage(ticket: ticket),
-                        ),
-                      );
-                    } else {
-                      // 🛑 Válvula cerrada: Enclavamiento de seguridad
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('ACCESO DENEGADO: El departamento de Costos aún no genera el proyecto.'),
-                          backgroundColor: Colors.red,
-                          behavior: SnackBarBehavior.floating,
-                        )
-                      );
-                    }
+                    // 🚀 Válvula de inspección abierta: Acceso a detalles sin restricción
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => GestionComprasPage(ticket: ticket),
+                      ),
+                    );
                   },
                 ),
               );

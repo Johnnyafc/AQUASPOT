@@ -48,7 +48,7 @@ class DatosClienteSection extends StatelessWidget {
         // ⚙️ COMPUERTA LÓGICA: Solo se renderiza si el estado es 'true'
         if (showSede) ...[
           CustomDropdownField<Sede>(
-            label: 'Sede Operativa', 
+            label: 'Lugar de recepción', 
             icon: Icons.business, 
             items: Sede.values,
             value: selectedSede, 
@@ -70,7 +70,7 @@ class DatosClienteSection extends StatelessWidget {
             return CustomInputField(
               controller: internalController, 
               focusNode: focusNode, 
-              label: 'Razón Social / Cliente (Buscar...)', 
+              label: 'Grupo donde pertenece la camaronera', 
               icon: Icons.search,
               validator: (value) => (value == null || value.isEmpty || selectedClienteId == null) ? 'Seleccione un cliente' : null,
               onChanged: (val) { if (selectedClienteId != null) onClienteCleared(); },

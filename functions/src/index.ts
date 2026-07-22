@@ -110,75 +110,144 @@ export const notificarRecepcion = onDocumentUpdated(
 // ============================================================================
 // ✉️ MÓDULO 3: ACTA DE RECEPCIÓN AL CLIENTE (EMAIL SMTP)
 // ============================================================================
-export const enviarCorreoActaCliente = onDocumentWritten(
+export const orquestadorNotificacionesTicket = onDocumentWritten(
   "tickets/{ticketId}",
   async (event) => {
     const snap = event.data;
     
-    // 1. HARD INTERLOCK: Si no hay snapshot o el documento fue eliminado (Delete), cortamos el circuito
+    // 1. HARD INTERLOCK: Cortamos circuito si no hay datos o es un Delete
     if (!snap || !snap.after.exists) return;
 
     const docAfter = snap.after.data() as any;
-    // 2. Extracción segura: Evaluamos si existía un estado previo
     const docBefore = snap.before.exists ? snap.before.data() as any : null;
 
     const estadoNuevo = docAfter.estadoActual;
     const estadoAnterior = docBefore ? docBefore.estadoActual : null;
-    const urlPdf = docAfter.pdfActaUrl;
+    
+    // ⚠️ FILTRO DE RUIDO: Si el estado no cambió (ej. solo editaron un texto), abortamos.
+    if (estadoNuevo === estadoAnterior) return;
+
     const emailCliente = docAfter.emailContacto;
     const nombreContacto = docAfter.nombreContacto || "Cliente";
+    const ticketId = event.params.ticketId;
+
+    if (!emailCliente) {
+      logger.warn(`[Ticket ${ticketId}] Operación abortada: El equipo no tiene correo asociado.`);
+      return;
+    }
 
     // =========================================================
-    // 🔀 COMPUERTA LÓGICA OR (Detección de Origen)
+    // 🔀 MÁQUINA DE ESTADOS (Enrutador Principal)
     // =========================================================
-    
-    // Condición A: El ticket nace desde la app en campo ya completo
-    const esCreacionDirecta = !docBefore && estadoNuevo === "recepcionFisica";
-    
-    // Condición B: El ticket transiciona en el taller (pasó de 'creado' a 'recepcionFisica')
-    const esTransicionTaller = docBefore && estadoNuevo === "recepcionFisica" && estadoAnterior !== "recepcionFisica";
 
-    // 3. ACTUADOR PRINCIPAL
-    if (esCreacionDirecta || esTransicionTaller) {
-      
-      if (!urlPdf || !emailCliente) {
-        logger.warn(`[Ticket ${event.params.ticketId}] Operación abortada: Falta PDF o correo del cliente.`);
+    try {
+      // 🟢 ESTADO A: INGRESO / RECEPCIÓN FÍSICA
+      const esCreacionDirecta = !docBefore && estadoNuevo === "recepcionFisica";
+      const esTransicionTaller = docBefore && estadoNuevo === "recepcionFisica";
+
+      if (esCreacionDirecta || esTransicionTaller) {
+        const urlPdf = docAfter.pdfActaUrl;
+        
+        if (!urlPdf) {
+          logger.warn(`[Ticket ${ticketId}] Sin PDF de acta. No se puede enviar correo de recepción.`);
+          return;
+        }
+
+        logger.info(`Despachando telemetría de RECEPCIÓN para ticket ${ticketId}`);
+        await transporter.sendMail({
+          from: '"Soporte Técnico" <ingenieria2@aquaspot.ec>',
+          to: emailCliente,
+          subject: `Acuse de Recepción Técnica - Ticket #${ticketId}`,
+          html: _generarPlantillaRecepcion(nombreContacto, urlPdf)
+        });
         return;
       }
 
-      logger.info(`Iniciando telemetría SMTP para ticket ${event.params.ticketId} hacia ${emailCliente}`);
-
-      const mailOptions = {
-        from: '"Soporte Técnico Aquaspot" <ingenieria2@aquaspot.ec>', // ⚠️ DEBE COINCIDIR CON EL CORREO EN AUTH
-        to: emailCliente,
-        subject: `Acuse de Recepción Técnica - Ticket #${event.params.ticketId}`,
-        html: `
-          <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: auto; border: 1px solid #ddd; border-radius: 8px;">
-              <div style="background-color: #008080; padding: 20px; text-align: center;">
-                  <h2 style="color: white; margin: 0;">Confirmación de Ingreso</h2>
-              </div>
-              <div style="padding: 30px;">
-                  <p>Estimado/a <strong>${nombreContacto}</strong>,</p>
-                  <p>Le notificamos de manera oficial que su equipo ha sido ingresado a nuestro laboratorio para su inspección.</p>
-                  <p>Puede descargar su acta de recepción (con registro fotográfico) en el siguiente enlace seguro:</p>
-                  <div style="text-align: center; margin: 40px 0;">
-                      <a href="${urlPdf}" style="background-color: #008080; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold;">
-                          📄 Descargar Acta PDF
-                      </a>
-                  </div>
-                  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-                  <p style="font-size: 12px; color: #777; text-align: center;">Atentamente,<br>Ingeniería Aquaspot</p>
-              </div>
-          </div>
-        `,
-      };
-
-      try {
-        await transporter.sendMail(mailOptions);
-        logger.info(`✅ Acta del ticket ${event.params.ticketId} despachada exitosamente al cliente.`);
-      } catch (error) {
-        logger.error("💥 Falla crítica en el actuador de correo SMTP:", error);
+      // 🔵 ESTADO B: TRABAJO FINALIZADO (Transición desde procesoTrabajo)
+      if (estadoNuevo === "finalizado" && estadoAnterior === "procesoTrabajo") {
+        logger.info(`Despachando telemetría de FINALIZACIÓN para ticket ${ticketId}`);
+        await transporter.sendMail({
+          from: '"Soporte Técnico" <ingenieria2@aquaspot.ec>',
+          to: emailCliente,
+          subject: `✅ Equipo Listo para Retiro - Ticket #${ticketId}`,
+          html: _generarPlantillaFinalizado(nombreContacto, ticketId, docAfter)
+        });
+        return;
       }
+
+    } catch (error) {
+      logger.error(`💥 Falla crítica en el actuador SMTP para el ticket ${ticketId}:`, error);
     }
   }
 );
+
+// =========================================================
+// ⚙️ SUBMÓDULOS DE RENDERIZADO HTML (HMI)
+// =========================================================
+
+function _generarPlantillaRecepcion(nombre: string, urlPdf: string): string {
+  return `
+    <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: auto; border: 1px solid #ddd; border-radius: 8px;">
+        <div style="background-color: #005A9C; padding: 20px; text-align: center;">
+            <h2 style="color: white; margin: 0;">Confirmación de Ingreso</h2>
+        </div>
+        <div style="padding: 30px;">
+            <p>Estimado/a <strong>${nombre}</strong>,</p>
+            <p>Le notificamos de manera oficial que su equipo ha sido ingresado a nuestro laboratorio para su inspección.</p>
+            <div style="text-align: center; margin: 40px 0;">
+                <a href="${urlPdf}" style="background-color: #005A9C; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                    📄 Descargar Acta PDF
+                </a>
+            </div>
+        </div>
+    </div>
+  `;
+}
+
+function _generarPlantillaFinalizado(nombre: string, ticketId: string, datos: any): string {
+  // Extracción segura para evitar "undefined" en la vista del cliente
+  const equipo = datos.equipo || "No especificado";
+  const marca = datos.marca || "No especificada";
+  const serie = datos.numeroSerie || "N/A";
+  const falla = datos.fallaReportada || "N/A";
+  const lugar = datos.lugarAtencion?.toUpperCase() || "TALLER";
+
+  return `
+    <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: auto; border: 1px solid #ddd; border-radius: 8px;">
+        <div style="background-color: #28a745; padding: 20px; text-align: center;">
+            <h2 style="color: white; margin: 0;">🛠️ Su equipo está listo</h2>
+        </div>
+        <div style="padding: 30px;">
+            <p>Estimado/a <strong>${nombre}</strong>,</p>
+            <p>Nos complace informarle que los trabajos de mantenimiento para el ticket <strong>#${ticketId}</strong> han concluido exitosamente.</p>
+            
+            <h3 style="border-bottom: 2px solid #28a745; padding-bottom: 5px; margin-top: 30px;">Resumen Técnico</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee; width: 35%;"><strong>Equipo:</strong></td>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee;">${equipo}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee;"><strong>Marca:</strong></td>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee;">${marca}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee;"><strong>Número de Serie:</strong></td>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee;">${serie}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee;"><strong>Falla Reportada:</strong></td>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee;">${falla}</td>
+                </tr>
+            </table>
+
+            <p style="font-size: 15px; text-align: center; margin-top: 30px;">
+                Su equipo se encuentra en <strong>${lugar}</strong> y está listo para ser despachado o retirado.
+            </p>
+            
+            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+            <p style="font-size: 12px; color: #777; text-align: center;">Atentamente,<br>Departamento de Ingeniería</p>
+        </div>
+    </div>
+  `;
+}

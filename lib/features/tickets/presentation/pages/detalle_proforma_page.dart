@@ -253,7 +253,7 @@ Widget build(BuildContext context) {
             _buildDatoRow('Estado Actual:', ticket.estadoActual.name.toUpperCase()),
             const Divider(),
             _buildDatoRow('Equipo:', ticket.equipo.name.toUpperCase()),
-            _buildDatoRow('Sede Operativa:', ticket.sede.name.toUpperCase()),
+            _buildDatoRow('Lugar de recepción:', ticket.sede.name.toUpperCase()),
             const Divider(),
             _buildDatoRow('Cliente:', ticket.clienteId),
             _buildDatoRow('Campamento:', ticket.campamento),

@@ -19,7 +19,7 @@ class AceptarProformaComercialUseCase {
     final ticketActualizado = ticket.copyWith(
       codigoOrdenVenta: ordenesVentaUrls,
       codigoOrdenCompra: ordenesCompraUrls,
-      estadoActual: EstadoTicket.aprobacionComercial, // 🔀 Lo manda al paralelismo
+      estadoActual: EstadoTicket.cotizado, // 🔀 Lo manda al paralelismo
       isCostosCompletado: false, // Cerramos válvulas por seguridad
       isComprasCompletado: false,
     );

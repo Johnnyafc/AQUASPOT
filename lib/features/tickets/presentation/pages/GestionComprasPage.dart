@@ -1,5 +1,6 @@
 // lib/features/tickets/presentation/pages/gestion_compras_page.dart
 
+import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_event.dart';
@@ -293,21 +294,57 @@ context.read<TicketBloc>().add(
                 builder: (context, state) {
                   final bool procesando = state.status == TicketStatus.loading;
                   
-                  return ElevatedButton.icon(
-                    onPressed: procesando ? null : _ejecutarPasoABodega,
-                    icon: procesando 
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : const Icon(Icons.move_to_inbox),
-                    label: Text(
-                      procesando ? 'TRANSMITIENDO...' : 'REGISTRAR ORDEN Y ENVIAR A BODEGA', 
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal.shade700,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      disabledBackgroundColor: Colors.grey,
-                    ),
+                  // 🔒 SENSOR DE SEGURIDAD: Verificamos si Costos ya hizo su trabajo
+                  // Reemplace los enums por los suyos si se llaman distinto
+                  final bool procesadoPorCostos = widget.ticket.estadoActual == EstadoTicket.compras || 
+                                                  widget.ticket.isCostosCompletado;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // ⚠️ ALARMA VISUAL SI ESTÁ BLOQUEADO
+                      if (!procesadoPorCostos)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            border: Border.all(color: Colors.red.shade300),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.lock, color: Colors.red),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'ACCIÓN BLOQUEADA: El departamento de Costos debe generar el código de proyecto y aprobar la proforma antes de enviar a Bodega.',
+                                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      // 🎛️ ACTUADOR PRINCIPAL
+                      ElevatedButton.icon(
+                        // EL ENCLAVAMIENTO: Solo funciona si no está procesando Y si Costos ya lo liberó
+                        onPressed: (procesando || !procesadoPorCostos) ? null : _ejecutarPasoABodega,
+                        icon: procesando 
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : const Icon(Icons.move_to_inbox),
+                        label: Text(
+                          procesando ? 'TRANSMITIENDO...' : 'REGISTRAR ORDEN Y ENVIAR A BODEGA', 
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal.shade700,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          disabledBackgroundColor: Colors.grey.shade400,
+                        ),
+                      ),
+                    ],
                   );
                 },
               ),

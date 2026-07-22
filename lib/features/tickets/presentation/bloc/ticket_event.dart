@@ -408,3 +408,45 @@ class ProcesarBodegaEvent extends TicketEvent {
   @override
   List<Object> get props => [ticket, nombreUsuario, rolUsuario];
 }
+
+
+
+class ProcesarEvidenciaTrabajoEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final List<PlatformFile> fotos;
+  final List<PlatformFile> videos;
+  final String? notasTecnicas;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const ProcesarEvidenciaTrabajoEvent({
+    required this.ticket,
+    required this.fotos,
+    required this.videos,
+    this.notasTecnicas,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, fotos, videos, notasTecnicas, nombreUsuario, rolUsuario];
+}
+
+class ActualizarEstadoTicketEvent extends TicketEvent {
+  final TicketEntity ticket; // ⚙️ Recibimos el equipo completo
+  final EstadoTicket nuevoEstado;
+  final String accionAuditoria;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const ActualizarEstadoTicketEvent({
+    required this.ticket,
+    required this.nuevoEstado,
+    required this.accionAuditoria,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object> get props => [ticket, nuevoEstado, accionAuditoria, nombreUsuario, rolUsuario];
+}

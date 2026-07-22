@@ -1,6 +1,7 @@
 import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_bloc.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/pages/subir_evidencia_trabajo_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 // ⚠️ Conecte sus buses de datos correctamente
@@ -53,7 +54,7 @@ class BandejaTrabajosPage extends StatelessWidget {
                   Icon(Icons.precision_manufacturing_outlined, size: 80, color: Colors.blueGrey.shade300),
                   const SizedBox(height: 16),
                   Text(
-                    'Línea de ensamblaje inactiva.\nNo hay equipos en proceso de trabajo.',
+                    'No hay equipos en proceso de trabajo.',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 16, color: Colors.blueGrey.shade600),
                   ),
@@ -127,12 +128,12 @@ class BandejaTrabajosPage extends StatelessWidget {
                       ),
                       onPressed: () {
                         // 🚀 ENRUTAMIENTO HACIA LA ESTACIÓN DE RECOLECCIÓN DE EVIDENCIA
-                        // Navigator.push(
-                        //   context,
-                        //   MaterialPageRoute(
-                        //     builder: (_) => EstacionEjecucionTrabajoPage(ticket: ticket),
-                        //   ),
-                        // );
+                         Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                           builder: (_) => SubirEvidenciaTrabajoPage(ticket: ticket),
+                           ),
+                         );
                       },
                     ),
                   ),

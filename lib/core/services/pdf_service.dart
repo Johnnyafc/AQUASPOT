@@ -57,7 +57,7 @@ class PdfService {
               "Razón Social / Cliente": ticket.clienteId,
               "Persona que entrega": ticket.nombreContacto,
               "Teléfono de Contacto": ticket.telefonoContacto ?? 'N/A',
-              "Sede Operativa": ticket.sede.name.toUpperCase(),
+              "Lugar de recepción": ticket.sede.name.toUpperCase(),
             }),
             pw.SizedBox(height: 15),
             

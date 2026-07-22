@@ -79,7 +79,7 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
     if (_pdfsSeleccionados.isEmpty && _excelsSeleccionados.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('La tolva documental está vacía. Adjunte al menos un archivo.'), 
+          content: Text('el campo documental está vacío. Adjunte al menos un archivo.'), 
           backgroundColor: Colors.red
         ),
       );
@@ -107,27 +107,27 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
     );
   }
 
-  @override
+ @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text('Cotización: ${widget.ticket.id}'), backgroundColor: Colors.green),
+      // 🔧 CIRCUITO LIMPIO: Un solo sensor conectado directamente al flujo principal
       body: BlocListener<TicketBloc, TicketState>(
         listener: (context, state) {
-          if (state.status == TicketStatus.operationSuccess) { // Ajusta a operationSuccess si es el que usas
+          if (state.status == TicketStatus.operationSuccess) { 
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Cotización registrada. Sincronizando SCADA...'), 
+                content: Text('Cotización registrada exitosamente. Documentos en Storage.'), 
                 backgroundColor: Colors.green,
                 duration: Duration(seconds: 2),
               )
             );
             
-context.read<TicketBloc>().add(
-  const ObtenerHistorialTicketsEvent(
-    // ⚙️ Reemplaza 'SegmentoEnum' por el nombre real de tu clase enum
-    segmento: SegmentoOperativo .ninguno, 
-  ),
-);
+            context.read<TicketBloc>().add(
+              const ObtenerHistorialTicketsEvent(
+                segmento: SegmentoOperativo.ninguno, 
+              ),
+            );
             
             if (Navigator.canPop(context)) {
               Navigator.pop(context);
@@ -183,18 +183,16 @@ context.read<TicketBloc>().add(
                         const SizedBox(height: 12),
 
                         // ==========================================
-                        // 🔍 LECTURA DE TELEMETRÍA (Nuevos canales separados)
+                        // 🔍 LECTURA DE EVIDENCIA
                         // ==========================================
                         const Text('Archivos Adjuntos de Evaluación:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                         
                         Builder(
                           builder: (context) {
                             final evaluacion = widget.ticket.evaluacionTecnica!;
-                            // Evaluación determinista de los canales
                             final bool tieneExcel = evaluacion.urlProformaExcel != null && evaluacion.urlProformaExcel!.isNotEmpty;
                             final bool tienePdfs = evaluacion.urlsAdjuntosPdf.isNotEmpty;
 
-                            // 1. Verificación de tanque vacío
                             if (!tieneExcel && !tienePdfs) {
                               return const Padding(
                                 padding: EdgeInsets.only(top: 8.0),
@@ -204,7 +202,6 @@ context.read<TicketBloc>().add(
 
                             return Column(
                               children: [
-                                // 2. Extracción del Canal Exclusivo (Proforma Excel)
                                 if (tieneExcel)
                                   ListTile(
                                     dense: true,
@@ -215,7 +212,6 @@ context.read<TicketBloc>().add(
                                     onTap: () => _abrirEnlaceTecnico(evaluacion.urlProformaExcel!),
                                   ),
 
-                                // 3. Extracción del Canal General (Evidencia PDF)
                                 if (tienePdfs)
                                   ...evaluacion.urlsAdjuntosPdf.map((url) {
                                     return ListTile(
@@ -274,8 +270,8 @@ context.read<TicketBloc>().add(
                         ),
                       )),
 
-                      const SizedBox(height: 16), // Separador espacial
-                      const Divider(), // Aislamiento visual entre módulos
+                      const SizedBox(height: 16), 
+                      const Divider(), 
                       
                       // 📊 SECCIÓN EXCEL
                       Row(
@@ -283,7 +279,7 @@ context.read<TicketBloc>().add(
                         children: [
                           const Text('Archivos Excel', style: TextStyle(fontWeight: FontWeight.w600)),
                           ElevatedButton.icon(
-                            onPressed: _seleccionarExcels, // Su actuador ya definido
+                            onPressed: _seleccionarExcels,
                             icon: const Icon(Icons.add), 
                             label: const Text('Añadir Excel')
                           ),
@@ -293,7 +289,7 @@ context.read<TicketBloc>().add(
                         const Padding(padding: EdgeInsets.symmetric(vertical: 8.0), child: Text('Sin Excels cargados.', style: TextStyle(color: Colors.grey))),
                       ..._excelsSeleccionados.map((file) => ListTile(
                         dense: true,
-                        leading: const Icon(Icons.table_chart, color: Colors.green), // Identificador visual estándar
+                        leading: const Icon(Icons.table_chart, color: Colors.green), 
                         title: Text(file.name, overflow: TextOverflow.ellipsis),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete_outline, color: Colors.redAccent),

@@ -101,23 +101,73 @@ Future<void> anularTicket(String ticketId, Map<String, dynamic> data) async {
   Future<String> subirArchivoDocumental(PlatformFile archivo, String ticketId, String subcarpeta) async {
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final nombreUnico = '${timestamp}_${archivo.name}';
+      // Normalizamos el nombre para evitar caracteres extraños en la URL
+      final nombreSeguro = archivo.name.replaceAll(RegExp(r'[^a-zA-Z0-9\.]'), '_');
+      final nombreUnico = '${timestamp}_$nombreSeguro';
       final ref = FirebaseStorage.instance.ref().child('tickets/$ticketId/$subcarpeta/$nombreUnico');
       
+      // 🏷️ ETIQUETADO INDUSTRIAL (MIME TYPE)
+      // Extraemos la extensión para decirle al Storage qué tipo de archivo es.
+      final extension = archivo.extension?.toLowerCase() ?? '';
+      final String contentType = _determinarContentType(extension);
+      
+      final metadata = SettableMetadata(
+        contentType: contentType,
+        customMetadata: {
+          'subido_por': 'sistema_tecnico',
+          'fecha': DateTime.now().toIso8601String(),
+        }
+      );
+
       UploadTask uploadTask;
 
       // ⚙️ COMPUERTA LÓGICA DE ENTORNO
       if (kIsWeb) {
-        // En WEB no hay rutas, inyectamos los bytes binarios directamente
-        uploadTask = ref.putData(archivo.bytes!);
+        if (archivo.bytes == null) throw ServerException('Fallo de sensor: Bytes nulos en entorno WEB');
+        
+        // ⚠️ ALERTA DE CARGA: Si suben videos pesados en WEB, esto consumirá mucha RAM local.
+        uploadTask = ref.putData(archivo.bytes!, metadata);
       } else {
-        // En MOBILE leemos la ruta física del disco
-        uploadTask = ref.putFile(File(archivo.path!));
+        if (archivo.path == null) throw ServerException('Fallo de sensor: Ruta nula en entorno MOBILE');
+        
+        uploadTask = ref.putFile(File(archivo.path!), metadata);
       }
       
       return await (await uploadTask).ref.getDownloadURL();
     } catch (e) {
-      throw ServerException('Error de telemetría: $e'); 
+      throw ServerException('Error catastrófico de telemetría en Storage: $e'); 
+    }
+  }
+
+  // ==========================================
+  // 🔬 SENSOR AUXILIAR: ANALIZADOR DE ESPECTRO (MIME)
+  // ==========================================
+  String _determinarContentType(String extension) {
+    switch (extension) {
+      // 📷 Fotos
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      // 🎥 Videos
+      case 'mp4':
+        return 'video/mp4';
+      case 'mov':
+        return 'video/quicktime';
+      case 'avi':
+        return 'video/x-msvideo';
+      // 📄 Documentos
+      case 'pdf':
+        return 'application/pdf';
+      case 'xls':
+      case 'xlsx':
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      default:
+        // Si no lo reconoce, usa el estándar genérico
+        return 'application/octet-stream';
     }
   }
 

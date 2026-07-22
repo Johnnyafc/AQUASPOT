@@ -6,6 +6,7 @@ import 'package:aquaspot_postventa/features/tickets/data/models/GestionComprasMo
 import 'package:aquaspot_postventa/features/tickets/data/models/proforma_model.dart';
 import 'package:aquaspot_postventa/features/tickets/data/models/ticket_model.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/evaluacion_tecnica_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/evidencia_trabajo_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/gestion_compras_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/proforma_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/repositories/ticket_repository.dart';
@@ -29,6 +30,7 @@ import '../../domain/usecases/notificar_y_generar_acta_usecase.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../../../core/enum/ticket_enums.dart';
 import 'dart:io';  
+import 'dart:async';
 import 'ticket_event.dart';
 import 'ticket_state.dart'; // Asegúrate de estar importando el nuevo TicketState unificado
 
@@ -63,7 +65,6 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     required this.subirOrdenVentaUseCase,
     required this.subirOrdenCompraUseCase,
     required this.ticketRepository,
-    required 
   }) : super(const TicketState()) { // Inicializamos con el estado base unificado
     on<ObtenerClientesEvent>(_onObtenerClientes);
     on<CrearTicketEvent>(_onCrearTicket);
@@ -85,7 +86,95 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     on<AnularTicketEvent>(_onAnularTicket);
     on<ProcesarGestionComprasEvent>(_onProcesarGestionCompras);
     on<ProcesarBodegaEvent>(_onProcesarBodega);
+    on<ProcesarEvidenciaTrabajoEvent>(_onProcesarEvidenciaTrabajo);
+    on<ActualizarEstadoTicketEvent>(_onActualizarEstadoTicket);
   }
+
+ 
+
+
+ Future<void> _onProcesarEvidenciaTrabajo(
+  ProcesarEvidenciaTrabajoEvent event, 
+  Emitter<TicketState> emit
+) async {
+  emit(state.copyWith(
+    status: TicketStatus.loading,
+    message: 'Transmitiendo evidencia multimedia (Esto puede demorar)...'
+  ));
+
+  List<String> fotosSubidas = [];
+  List<String> videosSubidos = [];
+  bool huboFalla = false;
+  String mensajeError = '';
+
+  // 1. SUBIDA DE FOTOS
+  for (final foto in event.fotos) {
+    // ⚠️ Reemplace 'subirArchivoUseCase' por el nombre de su UseCase real
+    final result = await subirDocumentoEvaluacionUseCase(foto, event.ticket.id, 'evidencia_trabajo/fotos');
+    result.fold(
+      (failure) { huboFalla = true; mensajeError = failure.message; },
+      (url) => fotosSubidas.add(url),
+    );
+    if (huboFalla) break;
+  }
+
+  // 2. SUBIDA DE VIDEOS (Si no fallaron las fotos)
+  if (!huboFalla) {
+    for (final video in event.videos) {
+      final result = await subirDocumentoEvaluacionUseCase(video, event.ticket.id, 'evidencia_trabajo/videos');
+      result.fold(
+        (failure) { huboFalla = true; mensajeError = failure.message; },
+        (url) => videosSubidos.add(url),
+      );
+      if (huboFalla) break;
+    }
+  }
+
+  if (huboFalla) {
+    emit(state.copyWith(status: TicketStatus.error, message: 'Falla de telemetría: $mensajeError'));
+    return; // Aborto de emergencia
+  }
+
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Consolidando base de datos...'));
+
+  // 3. ENSAMBLAJE DE ENTIDADES Y AUDITORÍA
+  final evidencia = EvidenciaTrabajoEntity(
+    fotosUrls: fotosSubidas,
+    videosUrls: videosSubidos,
+    notasTecnicas: event.notasTecnicas,
+  );
+
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: 'EVIDENCIA DE TRABAJO REGISTRADA. EQUIPO LISTO.',
+    usuarioNombre: event.nombreUsuario, 
+    usuarioRol: event.rolUsuario,
+    timestamp: DateTime.now(),
+  );
+
+  // 4. MUTACIÓN DEL TICKET 
+  final ticketActualizado = event.ticket.copyWith(
+    evidenciaTrabajo: evidencia,
+    estadoActual: EstadoTicket.finalizado, // 🚀 TRASPASO AL SIGUIENTE ESTADO LOGICO
+    historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+  );
+
+  // 5. PERSISTENCIA Y HOT SWAP
+  final dbResult = await actualizarTicket(ticketActualizado);
+
+  dbResult.fold(
+    (failure) => emit(state.copyWith(status: TicketStatus.error, message: 'Error al actualizar Firestore')),
+    (ticketGuardado) {
+      final listaActualizada = state.historial.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+      emit(state.copyWith(
+        status: TicketStatus.operationSuccess,
+        message: 'Evidencia procesada correctamente.',
+        historial: listaActualizada,
+        currentTicket: ticketGuardado,
+      ));
+    }
+  );
+}
+  
 
 void _onSeleccionarTipoRequerimiento(
     SeleccionarTipoRequerimientoEvent event,
@@ -630,7 +719,7 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
 
   final ticketBase = TicketEntity(
     id: 'TEMP', // 🔌 Será reemplazado por la Transacción en Firebase
-    // 🚨 CORRECCIÓN 1: Nace SIEMPRE como 'creado' para preparar el salto de estado en el backend
+    // 🚨 Nace SIEMPRE como 'creado' para preparar el salto de estado en el backend
     estadoActual: EstadoTicket.creado, 
     sede: event.sede, 
     clienteId: event.clienteId,
@@ -649,7 +738,7 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
     esRegistroCompleto: event.esRegistroCompleto,
     tipoRequerimiento: event.tipoRequerimiento,
     lugarAtencion: event.lugarAtencion,
-    fotosUrls: const [], // Aún no hay URLs
+    fotosUrls: const [], 
     pdfActaUrl: '',
   );
 
@@ -720,12 +809,18 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
     );
     if (state.status == TicketStatus.error) return;
 
+    // 🧠 UNIDAD DE CONTROL LÓGICO: Ruteo Dinámico por Sede
+    final stringSede = event.sede.name.toLowerCase();
+    final EstadoTicket estadoDestino = (stringSede == 'elguabo' || stringSede == 'el_guabo')
+        ? EstadoTicket.enCamino
+        : EstadoTicket.recepcionFisica;
+
     // C. ACTUALIZACIÓN FINAL EN BASE DE DATOS (El detonador de la Cloud Function)
     final ticketFinalActualizado = ticketOficial.copyWith(
       fotosUrls: urlsSubidas,
       pdfActaUrl: urlPdfFinal,
-      // 🚀 CORRECCIÓN 2: INYECCIÓN DEL SALTO DE ESTADO. Aquí el backend detecta la transición.
-      estadoActual: EstadoTicket.recepcionFisica, 
+      // 🚀 INYECCIÓN DEL SALTO DE ESTADO CALCULADO
+      estadoActual: estadoDestino, 
     );
 
     final updateResult = await actualizarTicket(ticketFinalActualizado);
@@ -733,22 +828,21 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
     updateResult.fold(
       (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
       (ticketGuardado) {
-        // 🚀 SEÑAL DIRECTA AL HMI (El backend despacha el correo en paralelo)
         emit(state.copyWith(
           status: TicketStatus.operationSuccess,
           message: '✅ $idReal registrado. El servidor despachará el correo.',
           historial: [ticketGuardado, ...state.historial],
           currentTicket: ticketGuardado,
-          pdfBytes: bytesGenerados, // Transportamos el binario para imprimir
+          pdfBytes: bytesGenerados, 
         ));
       },
     );
 
   } else {
-    // ⚙️ RUTA B: INCOMPLETO (Restaurada tu lógica de ahorro de escrituras)
+    // ⚙️ RUTA B: INCOMPLETO
     if (urlsSubidas.isNotEmpty) {
       final ticketParcialActualizado = ticketOficial.copyWith(fotosUrls: urlsSubidas);
-      await actualizarTicket(ticketParcialActualizado); // Solo escribimos si hay fotos nuevas
+      await actualizarTicket(ticketParcialActualizado);
       
       emit(state.copyWith(
         status: TicketStatus.operationSuccess, 
@@ -765,6 +859,48 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
       ));
     }
   }
+}
+
+Future<void> _onActualizarEstadoTicket(ActualizarEstadoTicketEvent event, Emitter<TicketState> emit) async {
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Actualizando estado a ${event.nuevoEstado.name}...'));
+
+  // ⚙️ 1. Ensamblaje de Auditoría (El mismo troquel que usa para anular y crear)
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: event.accionAuditoria,
+    usuarioNombre: event.nombreUsuario,
+    usuarioRol: event.rolUsuario,
+    timestamp: DateTime.now(),
+  );
+
+  // ⚙️ 2. Clonación Inmutable del Payload (Uso directo de su copyWith)
+  final ticketActualizado = event.ticket.copyWith(
+    estadoActual: event.nuevoEstado,
+    historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+  );
+
+  // 📡 3. Transmisión Directa a BD (Sin capas de traducción inútiles)
+  final updateResult = await actualizarTicket(ticketActualizado); 
+
+  // 🔀 4. Evaluación de la respuesta
+  updateResult.fold(
+    (failure) => emit(state.copyWith(
+      status: TicketStatus.error, 
+      message: 'Fallo al actualizar: ${_mapFailureToMessage(failure)}'
+    )),
+    (ticketGuardado) {
+      // 🔄 5. Refresco del búfer de memoria local
+      final listaActualizada = state.historial.map((t) => 
+        t.id == ticketGuardado.id ? ticketGuardado : t
+      ).toList();
+
+      emit(state.copyWith(
+        status: TicketStatus.operationSuccess,
+        message: '✅ Estado del ticket actualizado a ${event.nuevoEstado.name}.',
+        historial: listaActualizada,
+        currentTicket: ticketGuardado,
+      ));
+    }
+  );
 }
 
 Future<void> _onAnularTicket(AnularTicketEvent event, Emitter<TicketState> emit) async {
@@ -1235,9 +1371,16 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
       timestamp: DateTime.now(),
     );
 
+    // 🧠 UNIDAD DE CONTROL LÓGICO: Ruteo Dinámico por Sede
+    // Evaluamos el sensor de ubicación para desviar el flujo
+    final stringSede = event.ticket.sede.name.toLowerCase();
+    final EstadoTicket estadoDestino = (stringSede == 'elguabo' || stringSede == 'el_guabo')
+        ? EstadoTicket.enCamino
+        : EstadoTicket.recepcionFisica;
+
     // ⚙️ AQUÍ SE HACE LA INGENIERÍA: Ensamblamos TODAS las piezas nuevas en la entidad
     final ticketActualizado = event.ticket.copyWith(
-      estadoActual: EstadoTicket.recepcionFisica, // 🚀 TRASPASO DE ESTADO
+      estadoActual: estadoDestino, // 🔀 TRASPASO DE ESTADO DINÁMICO
       numeroSerie: event.numeroSerie,        
       fallaReportada: event.fallaReportada, 
       accesoriosRecibidos: event.accesoriosRecibidos, 

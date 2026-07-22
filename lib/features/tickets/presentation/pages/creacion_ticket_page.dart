@@ -98,7 +98,13 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
  // Este método ahora recibe la señal de completitud como parámetro
 
  // ⚙️ Convertimos la función a asíncrona
-  void _submitForm() async {
+void _submitForm() async {
+    // =========================================================
+    // 🧠 0. LECTURA DE SENSORES DE ESTADO
+    // =========================================================
+    // Leemos la memoria del autómata PRIMERO para poder usar sus variables en el triage
+    final currentState = context.read<TicketBloc>().state;
+
     // =========================================================
     // 🛑 1. VALIDACIÓN ESTRICTA (Hard Interlocks)
     // =========================================================
@@ -110,6 +116,7 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⚠️ Seleccione un Cliente.'), backgroundColor: Colors.orange));
       return;
     }
+    
     if (_selectedMarca == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('⚠️ Especifique la Marca del Equipo.'), 
@@ -118,8 +125,9 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
       return;
     }
 
-    if (_selectedSede == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⚠️ Especifique la Sede Operativa.'), backgroundColor: Colors.orange));
+    // ⚙️ COMPUERTA CONDICIONAL: Sede obligatoria SOLO si el trabajo NO es en campo
+    if (currentState.lugarAtencion != LugarAtencion.campo && _selectedSede == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⚠️ Especifique el lugar de recepción.'), backgroundColor: Colors.orange));
       return;
     }
 
@@ -128,8 +136,6 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
       return;
     }
 
-    final currentState = context.read<TicketBloc>().state;
-    
     if (currentState.tipoSeleccionado == TipoRequerimiento.ninguno) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('🛑 Seleccione el Tipo de Requerimiento.'), backgroundColor: Colors.red));
       return;
@@ -148,10 +154,9 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
     final bool tieneSerie = _serieController.text.trim().isNotEmpty;
     final bool tieneEvidencia = _archivosEvidencia.isNotEmpty;
     
-    // Ecuación lógica limpia (eliminamos la variable muerta de prioridad)
+    // Ecuación lógica limpia
     final bool esRegistroCompleto = tieneSerie && tieneEvidencia;
     
-
     // =========================================================
     // 🛑 3. ENCLAVAMIENTO DE CONFIRMACIÓN MODULAR
     // =========================================================
@@ -182,13 +187,17 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
 
     // Despacho de la trama de datos limpia y tipada al BLoC
     context.read<TicketBloc>().add(CrearTicketEvent(
-      sede: _selectedSede!, // Ahora es 100% seguro usar el operador !
+      // ⚠️ ALARMA ARQUITECTÓNICA: Si es campo, _selectedSede es nulo. 
+      // Si el evento CrearTicketEvent exige un tipo "Sede" no nulo, debe pasar un valor nominal por defecto 
+      // (ej. Sede.ninguno o Sede.campo). Ajuste esta variable según la estructura de su entidad.
+      sede: _selectedSede ?? Sede.NINGUNO, // <-- No fuerce el "!" si permitió que fuera nulo arriba.
+      
       clienteId: _selectedClienteId!, 
       campamento: _campamentoController.text.trim(),
       nombreContacto: _nombreContactoController.text.trim(),
       telefonoContacto: _telefonoController.text.trim(),
       emailContacto: _emailController.text.trim(),
-      equipo: _selectedEquipo!, // Ahora es 100% seguro usar el operador !
+      equipo: _selectedEquipo!, 
       equipoDetalle: (_selectedEquipo == TipoEquipo.Otros) ? _customEquipoController.text.trim() : null, 
       fallaReportada: _fallaController.text.trim(),
       nombreUsuario: nombreOperario,
@@ -311,17 +320,6 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
             ),
           );
         },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final operacionExitosa = await RegistroClienteBottomSheet.show(context);
-          if (operacionExitosa == true && context.mounted) {
-            context.read<TicketBloc>().add(ObtenerClientesEvent()); 
-          }
-        },
-        backgroundColor: Colors.orange, foregroundColor: Colors.white, elevation: 4,
-        icon: const Icon(Icons.person_add_alt_1),
-        label: const Text('NUEVO CLIENTE', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
       ),
     );
   }
