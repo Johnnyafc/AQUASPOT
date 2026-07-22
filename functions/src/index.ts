@@ -3,6 +3,8 @@ import * as admin from "firebase-admin";
 import * as nodemailer from "nodemailer";
 import * as logger from "firebase-functions/logger";
 import { onDocumentWritten } from "firebase-functions/v2/firestore"
+import * as xlsx from "xlsx";
+import { onObjectFinalized } from "firebase-functions/v2/storage";
 
 admin.initializeApp();
 

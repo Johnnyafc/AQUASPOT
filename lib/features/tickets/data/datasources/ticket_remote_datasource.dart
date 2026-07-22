@@ -26,4 +26,5 @@ abstract class TicketRemoteDataSource {
   Future<String> subirOrdenVenta(XFile file, String ticketId);
 Future<String> subirOrdenCompra(XFile file, String ticketId);
 Future<void> anularTicket(String ticketId, Map<String, dynamic> data);
+Stream<String?> escucharEstadoExcel(String ticketId);
 }

@@ -15,11 +15,14 @@
   },
   "main": "lib/index.js",
   "dependencies": {
+    "busboy": "^1.6.0",
     "firebase-admin": "^11.8.0",
     "firebase-functions": "^4.3.0",
-    "nodemailer": "^9.0.1"
+    "nodemailer": "^9.0.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@types/busboy": "^1.5.4",
     "@types/node": "18.19.0",
     "@types/nodemailer": "^8.0.1",
     "firebase-functions-test": "^3.1.0",

@@ -97,6 +97,20 @@ Future<void> anularTicket(String ticketId, Map<String, dynamic> data) async {
   }
 }
 
+
+Stream<String?> escucharEstadoExcel(String ticketId) {
+  return FirebaseFirestore.instance
+      .collection('tickets')
+      .doc(ticketId)
+      .snapshots() // <--- Este es el sensor en tiempo real
+      .map((snapshot) {
+        if (!snapshot.exists || snapshot.data() == null) return null;
+        
+        // Extraemos solo la variable de control que inyecta nuestro backend Node.js
+        return snapshot.data()!['estadoProcesamientoExcel'] as String?;
+      });
+}
+
 @override
   Future<String> subirArchivoDocumental(PlatformFile archivo, String ticketId, String subcarpeta) async {
     try {

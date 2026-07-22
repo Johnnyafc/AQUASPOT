@@ -11,6 +11,7 @@ import 'package:aquaspot_postventa/features/tickets/domain/entities/gestion_comp
 import 'package:aquaspot_postventa/features/tickets/domain/entities/proforma_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/repositories/ticket_repository.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/SubirOrdenVentaUseCase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/escuchar_estado_excel_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_documento_comercial_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_documento_evaluacion_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_orden_compra_usecase.dart';
