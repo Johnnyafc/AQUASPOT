@@ -82,62 +82,65 @@ class TicketForm extends StatelessWidget {
   });
 
 @override
-  Widget build(BuildContext context) {
-    // 🧠 ECUACIÓN LÓGICA INTERNA (PROCESAMIENTO DE SEÑALES)
-    
-    // 1. CONTACTOR MAESTRO (Modificado): ¿Es Reparación O Garantía, y ya tiene ubicación definida?
-    final bool esServicioTecnicoDefinido = 
-        (tipoRequerimiento == TipoRequerimiento.reparacion || tipoRequerimiento == TipoRequerimiento.reclamoGarantia) && 
-        (lugarAtencion == LugarAtencion.taller || lugarAtencion == LugarAtencion.campo);
+Widget build(BuildContext context) {
+  // 🧠 ECUACIÓN LÓGICA INTERNA (PROCESAMIENTO DE SEÑALES)
+  
+  // 1. CONTACTOR MAESTRO (Modificado): ¿Es Reparación O Garantía, y ya tiene ubicación definida?
+  final bool esServicioTecnicoDefinido = 
+      (tipoRequerimiento == TipoRequerimiento.reparacion || tipoRequerimiento == TipoRequerimiento.reclamoGarantia) && 
+      (lugarAtencion == LugarAtencion.taller || lugarAtencion == LugarAtencion.campo);
 
-    // 2. RELÉ DE ACCESORIOS: Solo se energiza si el equipo ingresa físicamente al Taller
-    final bool mostrarAccesorios = lugarAtencion == LugarAtencion.taller;
+  // 2. RELÉ DE ACCESORIOS: Solo se energiza si el equipo ingresa físicamente al Taller
+  final bool mostrarAccesorios = lugarAtencion == LugarAtencion.taller;
 
-    return Form(
-      key: formKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // 🚀 MÓDULO DINÁMICO (Panel Principal de Control)
-          const Text('REQUERIMIENTO', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Color(0xFF005A9C))),
-          const SizedBox(height: 16),
-          const SelectorRequerimientoWidget(), 
+  return Form(
+    key: formKey,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 🚀 MÓDULO DINÁMICO (Panel Principal de Control)
+        const Text('REQUERIMIENTO', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Color(0xFF005A9C))),
+        const SizedBox(height: 16),
+        const SelectorRequerimientoWidget(), 
+        const Padding(padding: EdgeInsets.symmetric(vertical: 24.0), child: Divider(thickness: 1.5, color: Colors.black12)),
+
+        // 🛑 VÁLVULA DE SEGURIDAD (LOTO)
+        // Deja pasar la corriente si es Reparación o Garantía (con ubicación confirmada)
+        if (esServicioTecnicoDefinido) ...[
+          
+          // ⚙️ MÓDULO A: CLIENTE
+          DatosClienteSection(
+            listaClientes: listaClientes,
+            selectedSede: selectedSede,
+            selectedClienteId: selectedClienteId,
+            clienteController: clienteController,
+            campamentoController: campamentoController,
+            nombreContactoController: nombreContactoController,
+            emailController: emailController,
+            telefonoController: telefonoController,
+            onSedeChanged: onSedeChanged,
+            onClienteSelected: onClienteSelected,
+            onClienteCleared: onClienteCleared,
+            showSede: lugarAtencion != LugarAtencion.campo,
+          ),
           const Padding(padding: EdgeInsets.symmetric(vertical: 24.0), child: Divider(thickness: 1.5, color: Colors.black12)),
 
-          // 🛑 VÁLVULA DE SEGURIDAD (LOTO)
-          // Deja pasar la corriente si es Reparación o Garantía (con ubicación confirmada)
-          if (esServicioTecnicoDefinido) ...[
-            
-            // ⚙️ MÓDULO A: CLIENTE
-            DatosClienteSection(
-              listaClientes: listaClientes,
-              selectedSede: selectedSede,
-              selectedClienteId: selectedClienteId,
-              clienteController: clienteController,
-              campamentoController: campamentoController,
-              nombreContactoController: nombreContactoController,
-              emailController: emailController,
-              telefonoController: telefonoController,
-              onSedeChanged: onSedeChanged,
-              onClienteSelected: onClienteSelected,
-              onClienteCleared: onClienteCleared,
-              showSede: lugarAtencion != LugarAtencion.campo,
-            ),
-            const Padding(padding: EdgeInsets.symmetric(vertical: 24.0), child: Divider(thickness: 1.5, color: Colors.black12)),
-
-            // ⚙️ MÓDULO B: EQUIPO 
-            ConfirmacionEquipoSection(
-              selectedEquipo: selectedEquipo,
-              accesoriosSeleccionados: accesoriosSeleccionados,
-              customEquipoController: customEquipoController,
-              serieController: serieController,
-              fallaController: fallaController,
-              onEquipoChanged: onEquipoChanged,
-              onAccesorioChanged: onAccesorioChanged,
-              mostrarAccesorios: mostrarAccesorios, // 🚀 Responde automáticamente a Taller/Campo
-              selectedMarca: marcaSeleccionada,
-              onMarcaChanged: onMarcaChanged,
-            ),
+          // ⚙️ MÓDULO B: EQUIPO 
+          ConfirmacionEquipoSection(
+            selectedEquipo: selectedEquipo,
+            accesoriosSeleccionados: accesoriosSeleccionados,
+            customEquipoController: customEquipoController,
+            serieController: serieController,
+            fallaController: fallaController,
+            onEquipoChanged: onEquipoChanged,
+            onAccesorioChanged: onAccesorioChanged,
+            mostrarAccesorios: mostrarAccesorios, // 🚀 Responde automáticamente a Taller/Campo
+            selectedMarca: marcaSeleccionada,
+            onMarcaChanged: onMarcaChanged,
+          ),
+          
+          // 🚪 COMPUERTA DE AISLAMIENTO: Ocultar Parámetros y Telemetría en Campo
+          if (lugarAtencion != LugarAtencion.campo) ...[
             const Padding(padding: EdgeInsets.symmetric(vertical: 24.0), child: Divider(thickness: 1.5, color: Colors.black12)),
 
             // ⚙️ MÓDULO C: PARÁMETROS
@@ -150,48 +153,50 @@ class TicketForm extends StatelessWidget {
             const SectionTitleWidget(title: '4. Evidencia Fotográfica'),
             const SizedBox(height: 16),
             CameraManagerWidget(archivosEvidencia: archivosEvidencia, onArchivosActualizados: onArchivosActualizados),
-            const SizedBox(height: 32),
+          ],
 
-            // ⚡ TRANSMISOR
-            SizedBox(
-              width: double.infinity, height: 55,
-              child: ElevatedButton(
-                onPressed: isProcessing ? null : onSubmit,
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF005A9C), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                child: isProcessing ? const CircularProgressIndicator(color: Colors.orange) : const Text('REGISTRAR INGRESO', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-              ),
+          const SizedBox(height: 32),
+
+          // ⚡ TRANSMISOR
+          SizedBox(
+            width: double.infinity, height: 55,
+            child: ElevatedButton(
+              onPressed: isProcessing ? null : onSubmit,
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF005A9C), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              child: isProcessing ? const CircularProgressIndicator(color: Colors.orange) : const Text('REGISTRAR INGRESO', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
             ),
-            
-          ] else if (tipoRequerimiento != TipoRequerimiento.ninguno && lugarAtencion != LugarAtencion.pendiente) ...[
-            // ⚠️ ADVERTENCIA DE MÓDULO EN CONSTRUCCIÓN (Para Venta y Alquiler)
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange),
-              ),
-              child: const Column(
-                children: [
-                  Icon(Icons.construction, color: Colors.orange, size: 48),
-                  SizedBox(height: 16),
-                  Text(
-                    'MÓDULO EN CONSTRUCCIÓN',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange),
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'El formulario para este tipo de requerimiento está siendo calibrado y estará disponible en la próxima actualización.',
-                    style: TextStyle(color: Colors.black54),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            )
-          ]
-        ],
-      ),
-    );
-  }
+          ),
+          
+        ] else if (tipoRequerimiento != TipoRequerimiento.ninguno && lugarAtencion != LugarAtencion.pendiente) ...[
+          // ⚠️ ADVERTENCIA DE MÓDULO EN CONSTRUCCIÓN (Para Venta y Alquiler)
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange),
+            ),
+            child: const Column(
+              children: [
+                Icon(Icons.construction, color: Colors.orange, size: 48),
+                SizedBox(height: 16),
+                Text(
+                  'MÓDULO EN CONSTRUCCIÓN',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'El formulario para este tipo de requerimiento está siendo calibrado y estará disponible en la próxima actualización.',
+                  style: TextStyle(color: Colors.black54),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          )
+        ]
+      ],
+    ),
+  );
+}
 }

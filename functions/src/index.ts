@@ -3,8 +3,6 @@ import * as admin from "firebase-admin";
 import * as nodemailer from "nodemailer";
 import * as logger from "firebase-functions/logger";
 import { onDocumentWritten } from "firebase-functions/v2/firestore"
-import * as xlsx from "xlsx";
-import { onObjectFinalized } from "firebase-functions/v2/storage";
 
 admin.initializeApp();
 
@@ -143,19 +141,30 @@ export const orquestadorNotificacionesTicket = onDocumentWritten(
     // =========================================================
 
     try {
-      // 🟢 ESTADO A: INGRESO / RECEPCIÓN FÍSICA
-      const esCreacionDirecta = !docBefore && estadoNuevo === "recepcionFisica";
-      const esTransicionTaller = docBefore && estadoNuevo === "recepcionFisica";
-
-      if (esCreacionDirecta || esTransicionTaller) {
+      // 🟢 ESTADO A: INGRESO / RECEPCIÓN (Bifurcado por Lugar de Atención)
+      if (estadoNuevo === "recepcionFisica") {
+        const lugarAtencion = docAfter.lugarAtencion;
+           logger.info(`Despachando telemetría de RECEPCIÓN EN CAMPO para ticket ${lugarAtencion}`);
+        // Rama 1: Operación en Campo
+        if (lugarAtencion === "campo") {
+          logger.info(`Despachando telemetría de RECEPCIÓN EN CAMPO para ticket ${ticketId}`);
+          await transporter.sendMail({
+            from: '"Soporte Técnico" <ingenieria2@aquaspot.ec>',
+            to: emailCliente,
+            subject: `📅 Requerimiento de Visita en Campo - Ticket #${ticketId}`,
+            html: _generarPlantillaRecepcionCampo(nombreContacto, ticketId, docAfter)
+          });
+          return;
+        } 
+                // Rama 2: Operación en Taller / Laboratorio (Lógica Original)
         const urlPdf = docAfter.pdfActaUrl;
         
         if (!urlPdf) {
-          logger.warn(`[Ticket ${ticketId}] Sin PDF de acta. No se puede enviar correo de recepción.`);
+          logger.warn(`[Ticket ${ticketId}] Sin PDF de acta. Cortando transmisión para recepción en taller.`);
           return;
         }
 
-        logger.info(`Despachando telemetría de RECEPCIÓN para ticket ${ticketId}`);
+        logger.info(`Despachando telemetría de RECEPCIÓN EN TALLER para ticket ${ticketId}`);
         await transporter.sendMail({
           from: '"Soporte Técnico" <ingenieria2@aquaspot.ec>',
           to: emailCliente,
@@ -186,6 +195,37 @@ export const orquestadorNotificacionesTicket = onDocumentWritten(
 // =========================================================
 // ⚙️ SUBMÓDULOS DE RENDERIZADO HTML (HMI)
 // =========================================================
+
+
+function _generarPlantillaRecepcionCampo(nombre: string, ticketId: string, datos: any): string {
+  const equipo = datos.equipo || "No especificado";
+  const problema = datos.fallaReportada || "Inspección general";
+  const sede = datos.sede || "Ubicación pendiente";
+
+  return `
+    <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: auto; border: 1px solid #ddd; border-radius: 8px;">
+        <div style="background-color: #E67E22; padding: 20px; text-align: center;">
+            <h2 style="color: white; margin: 0;">🚜 Requerimiento de Visita Técnica</h2>
+        </div>
+        <div style="padding: 30px;">
+            <p>Estimado/a <strong>${nombre}</strong>,</p>
+            <p>Hemos recibido correctamente su solicitud de asistencia técnica en campo. Se ha generado el ticket de servicio <strong>#${ticketId}</strong>.</p>
+            
+            <div style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #E67E22; margin: 20px 0;">
+                <p style="margin: 5px 0;"><strong>Sede / Ubicación:</strong> ${sede}</p>
+                <p style="margin: 5px 0;"><strong>Equipo:</strong> ${equipo}</p>
+                <p style="margin: 5px 0;"><strong>Motivo de Visita:</strong> ${problema}</p>
+            </div>
+
+            <p>Nuestro equipo de ingeniería se pondrá en contacto a la brevedad para coordinar la fecha y hora exacta de la movilización de nuestros técnicos a sus instalaciones.</p>
+            
+            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+            <p style="font-size: 12px; color: #777; text-align: center;">Atentamente,<br>Departamento de Operaciones en Campo</p>
+        </div>
+    </div>
+  `;
+}
+
 
 function _generarPlantillaRecepcion(nombre: string, urlPdf: string): string {
   return `

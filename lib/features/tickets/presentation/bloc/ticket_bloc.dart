@@ -782,44 +782,55 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
   // 🔀 FASE 3: COMPUERTA LÓGICA DE DERIVACIÓN
   // =========================================================
   if (event.esRegistroCompleto) {
-    emit(state.copyWith(status: TicketStatus.loading, message: 'Generando PDF para $idReal...'));
-
-    // A. Fabricación local del PDF en RAM
-    final pdfBytesResult = await generarActaPdfUseCase(
-      ticket: ticketOficial,
-      tipoRequerimiento: event.tipoRequerimiento.name, 
-      descripcion: event.fallaReportada, 
-      evidencias: event.evidencias,
-    );
-
-    Uint8List? bytesGenerados;
-    pdfBytesResult.fold(
-      (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
-      (bytes) => bytesGenerados = bytes,
-    );
-    if (state.status == TicketStatus.error) return;
-
-    // B. Subida del Acta PDF al Storage
-    emit(state.copyWith(status: TicketStatus.loading, message: 'Subiendo PDF al servidor...'));
-    final pdfUploadResult = await subirActaPdfUseCase(idReal, bytesGenerados!);
+    // 1. Sensor de entorno: ¿Es operación en campo?
+    final bool esOperacionEnCampo = event.lugarAtencion == LugarAtencion.campo;
     
     String urlPdfFinal = '';
-    pdfUploadResult.fold(
-      (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
-      (url) => urlPdfFinal = url,
-    );
-    if (state.status == TicketStatus.error) return;
+    Uint8List? bytesGenerados;
 
-    // 🧠 UNIDAD DE CONTROL LÓGICO: Ruteo Dinámico por Sede
+    // 2. Válvula de PDF: Solo operamos si NO es campo
+    if (!esOperacionEnCampo) {
+      emit(state.copyWith(status: TicketStatus.loading, message: 'Generando PDF para $idReal...'));
+
+      // A. Fabricación local del PDF en RAM
+      final pdfBytesResult = await generarActaPdfUseCase(
+        ticket: ticketOficial,
+        tipoRequerimiento: event.tipoRequerimiento.name, 
+        descripcion: event.fallaReportada, 
+        evidencias: event.evidencias,
+      );
+
+      pdfBytesResult.fold(
+        (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+        (bytes) => bytesGenerados = bytes,
+      );
+      if (state.status == TicketStatus.error) return;
+
+      // B. Subida del Acta PDF al Storage
+      emit(state.copyWith(status: TicketStatus.loading, message: 'Subiendo PDF al servidor...'));
+      final pdfUploadResult = await subirActaPdfUseCase(idReal, bytesGenerados!);
+      
+      pdfUploadResult.fold(
+        (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+        (url) => urlPdfFinal = url,
+      );
+      if (state.status == TicketStatus.error) return;
+    }
+
+    // 🧠 UNIDAD DE CONTROL LÓGICO: Ruteo Dinámico
     final stringSede = event.sede.name.toLowerCase();
-    final EstadoTicket estadoDestino = (stringSede == 'elguabo' || stringSede == 'el_guabo')
+    
+    // Si es campo, forzamos el estado a recepcionFisica para detonar el trigger de correo de Firebase
+    final EstadoTicket estadoDestino = (stringSede == 'elguabo' || stringSede == 'el_guabo') && !esOperacionEnCampo
         ? EstadoTicket.enCamino
         : EstadoTicket.recepcionFisica;
+
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Cerrando registro de $idReal...'));
 
     // C. ACTUALIZACIÓN FINAL EN BASE DE DATOS (El detonador de la Cloud Function)
     final ticketFinalActualizado = ticketOficial.copyWith(
       fotosUrls: urlsSubidas,
-      pdfActaUrl: urlPdfFinal,
+      pdfActaUrl: urlPdfFinal, // Si fue en campo, pasará vacío ('')
       // 🚀 INYECCIÓN DEL SALTO DE ESTADO CALCULADO
       estadoActual: estadoDestino, 
     );
@@ -831,10 +842,12 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
       (ticketGuardado) {
         emit(state.copyWith(
           status: TicketStatus.operationSuccess,
-          message: '✅ $idReal registrado. El servidor despachará el correo.',
+          message: esOperacionEnCampo 
+            ? '✅ $idReal registrado. Agendamiento de campo solicitado.'
+            : '✅ $idReal registrado. El servidor despachará el acta.',
           historial: [ticketGuardado, ...state.historial],
           currentTicket: ticketGuardado,
-          pdfBytes: bytesGenerados, 
+          pdfBytes: bytesGenerados, // Será null si es campo, la UI debe manejar esto
         ));
       },
     );

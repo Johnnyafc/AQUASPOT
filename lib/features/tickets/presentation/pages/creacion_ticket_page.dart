@@ -149,13 +149,19 @@ void _submitForm() async {
     }
 
     // =========================================================
-    // 🧠 2. ALGORITMO DE COMPLETITUD (TRIAGE)
+   // 🧠 2. ALGORITMO DE COMPLETITUD (TRIAGE)
     // =========================================================
+    final bool esOperacionEnCampo = currentState.lugarAtencion == LugarAtencion.campo;
+    
     final bool tieneSerie = _serieController.text.trim().isNotEmpty;
     final bool tieneEvidencia = _archivosEvidencia.isNotEmpty;
     
-    // Ecuación lógica limpia
-    final bool esRegistroCompleto = tieneSerie && tieneEvidencia;
+    // ⚙️ ECUACIÓN LÓGICA BIFURCADA:
+    // Taller: Requiere Serie + Evidencia (Ambos sensores en HIGH).
+    // Campo (Agrícola): Nace completo si tiene Serie (Ignora el sensor de Evidencia porque fue deshabilitado en UI).
+    final bool esRegistroCompleto = esOperacionEnCampo 
+        ? tieneSerie 
+        : (tieneSerie && tieneEvidencia);
     
     // =========================================================
     // 🛑 3. ENCLAVAMIENTO DE CONFIRMACIÓN MODULAR
@@ -236,9 +242,11 @@ void _submitForm() async {
             // ⚙️ COMPUERTA LÓGICA DE SEGURIDAD
             final ticketReciente = state.currentTicket;
             final bool esTicketCompleto = ticketReciente != null && ticketReciente.esRegistroCompleto;
+            // 📡 SENSOR DE ENTORNO RÁPIDO
+            final bool esOperacionEnCampo = state.lugarAtencion == LugarAtencion.campo;
 
-            // 🖨️ INTERLOCK DE IMPRESIÓN
-            if (esTicketCompleto && state.pdfBytes != null && state.pdfBytes!.isNotEmpty) {
+            // 🖨️ INTERLOCK DE IMPRESIÓN (Bypass activado para campo)
+            if (esTicketCompleto && !esOperacionEnCampo && state.pdfBytes != null && state.pdfBytes!.isNotEmpty) {
               await Printing.layoutPdf(
                 onLayout: (format) async => state.pdfBytes!,
                 name: 'Acta_Ingreso_Directo.pdf',
@@ -249,7 +257,7 @@ void _submitForm() async {
             // 1. Revisamos que el contexto exista (OBLIGATORIO DESPUÉS DE UN AWAIT)
             if (!context.mounted) return; 
             
-            // 2. Demolición de la ruta (NO uses _limpiarFormulario, deja que el Garbage Collector de Flutter libere la RAM)
+            // 2. Demolición de la ruta
             Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
           }
         },
