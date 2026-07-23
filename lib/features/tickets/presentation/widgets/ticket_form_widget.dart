@@ -46,6 +46,7 @@ class TicketForm extends StatelessWidget {
   final LugarAtencion lugarAtencion;
   final MarcaEquipo? marcaSeleccionada;
  final ValueChanged<MarcaEquipo?> onMarcaChanged;
+ final TipoGarantia tipoGarantia;
 
   const TicketForm({
     super.key,
@@ -79,19 +80,30 @@ class TicketForm extends StatelessWidget {
     required this.lugarAtencion,
     required this.marcaSeleccionada,
     required this.onMarcaChanged,
+    required this.tipoGarantia
   });
 
 @override
 Widget build(BuildContext context) {
   // 🧠 ECUACIÓN LÓGICA INTERNA (PROCESAMIENTO DE SEÑALES)
   
-  // 1. CONTACTOR MAESTRO (Modificado): ¿Es Reparación O Garantía, y ya tiene ubicación definida?
-  final bool esServicioTecnicoDefinido = 
-      (tipoRequerimiento == TipoRequerimiento.reparacion || tipoRequerimiento == TipoRequerimiento.reclamoGarantia) && 
-      (lugarAtencion == LugarAtencion.taller || lugarAtencion == LugarAtencion.campo);
+  // 1. CONTACTOR MAESTRO (Calibrado con interlock de garantía):
+  final bool esReparacion = tipoRequerimiento == TipoRequerimiento.reparacion && 
+                            (lugarAtencion == LugarAtencion.taller || lugarAtencion == LugarAtencion.campo);
+                            
+  final bool esGarantia = tipoRequerimiento == TipoRequerimiento.reclamoGarantia && 
+                          (lugarAtencion == LugarAtencion.taller || lugarAtencion == LugarAtencion.campo) && 
+                          tipoGarantia != TipoGarantia.pendiente; // 🛑 El bloqueo estricto ocurre aquí
+
+  final bool esServicioTecnicoDefinido = esReparacion || esGarantia;
 
   // 2. RELÉ DE ACCESORIOS: Solo se energiza si el equipo ingresa físicamente al Taller
   final bool mostrarAccesorios = lugarAtencion == LugarAtencion.taller;
+
+  // 🚀 3. SENSOR DE MÓDULOS EN DESARROLLO (Nueva compuerta estricta)
+  final bool esModuloEnConstruccion = tipoRequerimiento == TipoRequerimiento.ventaRepuesto || 
+                                      tipoRequerimiento == TipoRequerimiento.alquilerPrueba || 
+                                      tipoRequerimiento == TipoRequerimiento.ventaMaquina;
 
   return Form(
     key: formKey,
@@ -105,7 +117,7 @@ Widget build(BuildContext context) {
         const Padding(padding: EdgeInsets.symmetric(vertical: 24.0), child: Divider(thickness: 1.5, color: Colors.black12)),
 
         // 🛑 VÁLVULA DE SEGURIDAD (LOTO)
-        // Deja pasar la corriente si es Reparación o Garantía (con ubicación confirmada)
+        // Deja pasar la corriente si es Reparación o Garantía (con ubicación y tipo de garantía confirmados)
         if (esServicioTecnicoDefinido) ...[
           
           // ⚙️ MÓDULO A: CLIENTE
@@ -167,7 +179,8 @@ Widget build(BuildContext context) {
             ),
           ),
           
-        ] else if (tipoRequerimiento != TipoRequerimiento.ninguno && lugarAtencion != LugarAtencion.pendiente) ...[
+        // ⚙️ ESTA ES LA REPARACIÓN: Solo mostramos la advertencia si el sensor de construcción da positivo
+        ] else if (esModuloEnConstruccion) ...[
           // ⚠️ ADVERTENCIA DE MÓDULO EN CONSTRUCCIÓN (Para Venta y Alquiler)
           Container(
             padding: const EdgeInsets.all(24),

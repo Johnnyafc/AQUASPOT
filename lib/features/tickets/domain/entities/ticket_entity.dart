@@ -65,6 +65,9 @@ final String marca; // 🚨 El que te habías olvidado
   final String? numeroOrdenVenta;
   final GestionComprasEntity? gestionCompras;
   final EvidenciaTrabajoEntity? evidenciaTrabajo;
+  final String? tipoGarantia;
+  final String? responsableFacturacion;
+  final bool? esGarantia;
 
 const TicketEntity({
     required this.id,
@@ -101,6 +104,9 @@ const TicketEntity({
     this.numeroOrdenVenta,
     this.gestionCompras,
     this.evidenciaTrabajo,
+    this.tipoGarantia,
+    this.responsableFacturacion,
+    this.esGarantia,
   });
 
   // ⚙️ CLONADOR INDUSTRIAL CORREGIDO (Mutación Segura)
@@ -139,6 +145,9 @@ const TicketEntity({
     String? numeroOrdenVenta,
     GestionComprasEntity? gestionCompras,
     EvidenciaTrabajoEntity? evidenciaTrabajo,
+    String? tipoGarantia,
+    String? responsableFacturacion,
+    bool? esGarantia,
   }) {
     return TicketEntity(
       id: id ?? this.id,
@@ -174,7 +183,10 @@ const TicketEntity({
       isComprasCompletado: isComprasCompletado ?? this.isComprasCompletado,
       numeroOrdenVenta: numeroOrdenVenta ?? this.numeroOrdenVenta,
       gestionCompras: gestionCompras ?? this.gestionCompras,
-      evidenciaTrabajo: evidenciaTrabajo ?? this.evidenciaTrabajo
+      evidenciaTrabajo: evidenciaTrabajo ?? this.evidenciaTrabajo,
+      tipoGarantia: tipoGarantia ?? this.tipoGarantia,
+      responsableFacturacion: responsableFacturacion ?? this.responsableFacturacion,
+      esGarantia: esGarantia ?? this.esGarantia,
     );
   }
 
@@ -214,6 +226,9 @@ const TicketEntity({
         numeroOrdenVenta,
         gestionCompras,
         evidenciaTrabajo,
+        tipoGarantia,
+        responsableFacturacion,
+        esGarantia,
       ];
 }
 

@@ -105,6 +105,9 @@ class CrearTicketEvent extends TicketEvent {
   final bool esRegistroCompleto;
    final String? notasRecepcion;
    final MarcaEquipo? marcaEquipo;
+   final String? tipoGarantia;
+   final String? resposableFacturacion;
+   
 
   const CrearTicketEvent({
     required this.sede,
@@ -126,7 +129,10 @@ class CrearTicketEvent extends TicketEvent {
     this.accesoriosRecibidos,
     required this.esRegistroCompleto,
     this.marcaEquipo,
-    this.notasRecepcion
+    this.notasRecepcion,
+    this.tipoGarantia,
+    this.resposableFacturacion,
+    
   });
 
   @override
@@ -134,7 +140,7 @@ class CrearTicketEvent extends TicketEvent {
         sede, clienteId, campamento, nombreContacto, telefonoContacto, 
         emailContacto, equipo, equipoDetalle, fallaReportada, 
         nombreUsuario, rolUsuario, evidencias,
-        tipoRequerimiento, lugarAtencion,numeroSerie,accesoriosRecibidos,esRegistroCompleto,marcaEquipo,notasRecepcion // 🚀 Añadidos a las props
+        tipoRequerimiento, lugarAtencion,numeroSerie,accesoriosRecibidos,esRegistroCompleto,marcaEquipo,notasRecepcion, tipoGarantia,resposableFacturacion // 🚀 Añadidos a las props
       ];
 }
 
@@ -449,4 +455,34 @@ class ActualizarEstadoTicketEvent extends TicketEvent {
 
   @override
   List<Object> get props => [ticket, nuevoEstado, accionAuditoria, nombreUsuario, rolUsuario];
+}
+
+class SeleccionarTipoGarantiaEvent extends TicketEvent {
+  final TipoGarantia tipo;
+
+  const SeleccionarTipoGarantiaEvent(this.tipo);
+
+  @override
+  List<Object?> get props => [tipo];
+}
+
+/// Evento disparado para purgar el panel y volver al inicio
+class ResetearRequerimientoEvent extends TicketEvent {
+  // Un evento de reseteo no necesita payload
+  @override
+  List<Object?> get props => [];
+}
+
+class DictaminarGarantiaEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final bool esGarantia; // true = Aprobado (Garantía válida), false = Rechazado (Pasa a cobro cliente)
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const DictaminarGarantiaEvent({
+    required this.ticket,
+    required this.esGarantia,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
 }

@@ -11,6 +11,7 @@ import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaRe
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaTrabajosPage.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_comercial_Page.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_compras_page.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_revisiones_garantias_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/auth_bloc.dart';
@@ -206,6 +207,13 @@ class _InicioView extends StatelessWidget {
         icon: Icons.toll,
         color: Colors.orange,
        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaTrabajosPage())),
+      ));
+
+      modules.add(_buildCardOption(
+        title: 'Revisión de garantias',
+        icon: Icons.perm_contact_cal_outlined,
+        color: Colors.green,
+       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaRevisionesGarantiasPage())),
       ));
     }
 

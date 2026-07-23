@@ -48,6 +48,7 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
   IconData _getIconoPorEstado(EstadoTicket estado) {
     switch (estado) {
       case EstadoTicket.creado: return Icons.fiber_new;
+      case EstadoTicket.revisionGarantia: return Icons.fiber_new;
       case EstadoTicket.recepcionFisica: return Icons.handyman;
       case EstadoTicket.enCamino: return Icons.handyman;
       case EstadoTicket.comercial: return Icons.point_of_sale;

@@ -21,7 +21,8 @@ class TicketState extends Equatable {
   final List<TicketEntity> tickets;
   final List<ClienteEntity> clientes;
   final List<TicketEntity> historial;
-  
+  final TipoGarantia tipoGarantia;
+  final ResponsableFacturacion responsableFacturacion;
   // Datos transitorios
   final String message;
   final TicketEntity? currentTicket;
@@ -49,7 +50,26 @@ class TicketState extends Equatable {
     this.lugarAtencion = LugarAtencion.noAplica,
     this.codigoOrdenVenta = const [],
     this.codigoOrdenCompra = const [],
+    this.tipoGarantia = TipoGarantia.pendiente,
+    this.responsableFacturacion=ResponsableFacturacion.cliente,
   });
+
+  // ⚙️ INYECTE ESTO EN SU TicketState
+bool get esSeleccionValida {
+  if (tipoSeleccionado == TipoRequerimiento.ninguno) return false;
+  
+  if (tipoSeleccionado == TipoRequerimiento.reparacion) {
+    return lugarAtencion != LugarAtencion.pendiente;
+  }
+  
+  if (tipoSeleccionado == TipoRequerimiento.reclamoGarantia) {
+    return lugarAtencion != LugarAtencion.pendiente && 
+           tipoGarantia != TipoGarantia.pendiente && 
+           tipoGarantia != TipoGarantia.noAplica;
+  }
+  
+  return true; // Para Venta o Alquiler, con el tipo basta
+}
 
   List<TicketEntity> get ticketsComerciales => 
       historial.where((t) => t.estadoActual == EstadoTicket.comercial).toList();
@@ -71,6 +91,7 @@ class TicketState extends Equatable {
     LugarAtencion? lugarAtencion,
     List<String>? codigoOrdenVenta,
     List<String>? codigoOrdenCompra,
+    TipoGarantia? tipoGarantia,
   }) {
     return TicketState(
       status: status ?? this.status,
@@ -86,6 +107,7 @@ class TicketState extends Equatable {
       lugarAtencion: lugarAtencion ?? this.lugarAtencion,
       codigoOrdenVenta: codigoOrdenVenta ?? this.codigoOrdenVenta,
       codigoOrdenCompra: codigoOrdenCompra ?? this.codigoOrdenCompra,
+      tipoGarantia: tipoGarantia ?? this.tipoGarantia,
     );
   }
 
@@ -104,5 +126,6 @@ class TicketState extends Equatable {
         lugarAtencion,
         codigoOrdenVenta,
         codigoOrdenCompra,
+        tipoGarantia,
       ];
 }

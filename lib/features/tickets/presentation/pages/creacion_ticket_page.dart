@@ -149,20 +149,28 @@ void _submitForm() async {
     }
 
     // =========================================================
-   // 🧠 2. ALGORITMO DE COMPLETITUD (TRIAGE)
+  // 🧠 2. ALGORITMO DE COMPLETITUD Y COSTOS (TRIAGE)
     // =========================================================
     final bool esOperacionEnCampo = currentState.lugarAtencion == LugarAtencion.campo;
-    
     final bool tieneSerie = _serieController.text.trim().isNotEmpty;
     final bool tieneEvidencia = _archivosEvidencia.isNotEmpty;
     
-    // ⚙️ ECUACIÓN LÓGICA BIFURCADA:
-    // Taller: Requiere Serie + Evidencia (Ambos sensores en HIGH).
-    // Campo (Agrícola): Nace completo si tiene Serie (Ignora el sensor de Evidencia porque fue deshabilitado en UI).
     final bool esRegistroCompleto = esOperacionEnCampo 
         ? tieneSerie 
         : (tieneSerie && tieneEvidencia);
-    
+        
+    // 📍 >>> PEGUE EL BLOQUE EXACTAMENTE AQUÍ <<< 📍
+    // ⚙️ ENRUTADOR DE FACTURACIÓN AUTOMÁTICA
+    ResponsableFacturacion responsableAsignado = ResponsableFacturacion.cliente;
+
+    // Conmutación basada en el tipo de garantía
+    if (currentState.tipoSeleccionado == TipoRequerimiento.reclamoGarantia) {
+      if (currentState.tipoGarantia == TipoGarantia.maquinaNueva) {
+        responsableAsignado = ResponsableFacturacion.agripotsa;
+      } else if (currentState.tipoGarantia == TipoGarantia.servicio) {
+        responsableAsignado = ResponsableFacturacion.tallerInterno;
+      }
+    }
     // =========================================================
     // 🛑 3. ENCLAVAMIENTO DE CONFIRMACIÓN MODULAR
     // =========================================================
@@ -190,7 +198,7 @@ void _submitForm() async {
       nombreOperario = authState.usuario.nombre; 
       rolOperario = authState.usuario.rol.name.toUpperCase();
     }
-
+    print('El valor es ${responsableAsignado.name}');
     // Despacho de la trama de datos limpia y tipada al BLoC
     context.read<TicketBloc>().add(CrearTicketEvent(
       // ⚠️ ALARMA ARQUITECTÓNICA: Si es campo, _selectedSede es nulo. 
@@ -217,6 +225,8 @@ void _submitForm() async {
       tipoRequerimiento: currentState.tipoSeleccionado,
       lugarAtencion: currentState.lugarAtencion,
       esRegistroCompleto: esRegistroCompleto, 
+      tipoGarantia: currentState.tipoGarantia.name,
+      resposableFacturacion: responsableAsignado.name,
     ));
   }
 
@@ -294,6 +304,7 @@ void _submitForm() async {
                         archivosEvidencia: _archivosEvidencia,
                         tipoRequerimiento: state.tipoSeleccionado,
                         lugarAtencion: state.lugarAtencion,
+                        tipoGarantia: state.tipoGarantia,
                         
                         // ⚙️ TERMINALES DE LA MARCA CONECTADOS AL ESTADO LOCAL
                         marcaSeleccionada: _selectedMarca,

@@ -43,6 +43,9 @@ class TicketModel extends TicketEntity {
     super.numeroOrdenVenta,
     super.gestionCompras,
     super.evidenciaTrabajo,
+    super.responsableFacturacion,
+    super.tipoGarantia,
+    super.esGarantia,
   });
 
   factory TicketModel.fromJson(Map<String, dynamic> json) {
@@ -89,6 +92,7 @@ class TicketModel extends TicketEntity {
         orElse: () => LugarAtencion.noAplica,
       ),
       esRegistroCompleto: json['esRegistroCompleto'] ?? false,
+      esGarantia: json['esGarantia'] ?? false,
       notasRecepcion: json['notasRecepcion'],
       proforma: json['proforma'] != null
           ? ProformaModel.fromJson(json['proforma'])
@@ -116,7 +120,8 @@ class TicketModel extends TicketEntity {
      evidenciaTrabajo: json['evidenciaTrabajo'] != null
           ? EvidenciaTrabajoModel.fromJson(json['evidenciaTrabajo'] as Map<String, dynamic>)
           : null,
-      
+      tipoGarantia: json['tipoGarantia'] ?? '',
+      responsableFacturacion: json['responsableFacturacion'] ?? '',
     );
   }
 
@@ -146,6 +151,7 @@ class TicketModel extends TicketEntity {
       tipoRequerimiento: entity.tipoRequerimiento,
       lugarAtencion: entity.lugarAtencion,
       esRegistroCompleto: entity.esRegistroCompleto,
+      esGarantia: entity.esGarantia,
       notasRecepcion: entity.notasRecepcion,
       proforma: entity.proforma,
       
@@ -166,7 +172,8 @@ class TicketModel extends TicketEntity {
       evidenciaTrabajo: entity.evidenciaTrabajo != null
           ? EvidenciaTrabajoModel.fromEntity(entity.evidenciaTrabajo!)
           : null,
-          
+    tipoGarantia:entity.tipoGarantia,
+    responsableFacturacion:entity.responsableFacturacion,      
     );
 
   }
@@ -197,6 +204,7 @@ class TicketModel extends TicketEntity {
       'tipoRequerimiento': tipoRequerimiento.name,
       'lugarAtencion': lugarAtencion.name,
       'esRegistroCompleto': esRegistroCompleto,
+      'esGarantia':esGarantia,
       'notasRecepcion': notasRecepcion,
       'proforma': proforma != null ? (proforma as ProformaModel).toJson() : null,
       
@@ -208,7 +216,9 @@ class TicketModel extends TicketEntity {
       
       // 🚀 REPARACIÓN: Empaquetado estricto a JSON (Evita Crash en Firebase)
       'itemsCompra': (itemsCompra as List?)?.map((e) => ItemCompraModel.fromEntity(e as ItemCompraEntity).toJson()).toList() ?? [],
-      
+      'tipoGarantia':tipoGarantia,
+      'responsableFacturacion':responsableFacturacion,
+
       'procesoTrabajoUrls': procesoTrabajoUrls,
       'isCostosCompletado': isCostosCompletado,
       'isComprasCompletado': isComprasCompletado,

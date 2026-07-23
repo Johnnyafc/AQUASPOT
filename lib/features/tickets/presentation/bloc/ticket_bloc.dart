@@ -89,6 +89,8 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     on<ProcesarBodegaEvent>(_onProcesarBodega);
     on<ProcesarEvidenciaTrabajoEvent>(_onProcesarEvidenciaTrabajo);
     on<ActualizarEstadoTicketEvent>(_onActualizarEstadoTicket);
+    on<SeleccionarTipoGarantiaEvent>(_onSeleccionarTipoGarantia);
+    on<ResetearRequerimientoEvent>(_onResetearTodo);
   }
 
  
@@ -175,6 +177,24 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     }
   );
 }
+
+
+
+void _onSeleccionarTipoGarantia(SeleccionarTipoGarantiaEvent event, Emitter<TicketState> emit) {
+    // Mutamos el estado inyectando el tipo de garantía
+    emit(state.copyWith(tipoGarantia: event.tipo));
+
+  }
+
+  void _onResetearTodo(ResetearRequerimientoEvent event, Emitter<TicketState> emit) {
+    // Purgamos la memoria de selección devolviendo los enums a su valor neutral
+    emit(state.copyWith(
+      tipoSeleccionado: TipoRequerimiento.ninguno,
+      lugarAtencion: LugarAtencion.pendiente,
+      tipoGarantia: TipoGarantia.pendiente, 
+    ));
+  }
+
   
 
 void _onSeleccionarTipoRequerimiento(
@@ -364,14 +384,24 @@ Future<void> _onProcesarEvaluacionDocumental(
     );
 
     // ==========================================
-    // 3. MUTACIÓN DEL TICKET (El Troquelado)
+    //3. MUTACIÓN DEL TICKET (El Troquelado y Enrutamiento)
     // ==========================================
+    
+    // ⚙️ RELÉ DE CONMUTACIÓN DE ESTADOS
+    // Estado por defecto si es una reparación normal o mantenimiento
+    EstadoTicket siguienteEstado = EstadoTicket.comercial; 
+
+    // Si el sensor detecta que el ticket ingresó como reclamo de garantía, 
+    // desviamos el flujo hacia el departamento correspondiente.
+    if (event.ticket.tipoRequerimiento == TipoRequerimiento.reclamoGarantia) {
+      siguienteEstado = EstadoTicket.revisionGarantia;
+    }
+
     final ticketActualizado = event.ticket.copyWith(
       evaluacionTecnica: evaluacion,
-      estadoActual: EstadoTicket.comercial, // 🚀 TRASPASO DE ESTACIÓN
+      estadoActual: siguienteEstado, // 🚀 TRASPASO DE ESTACIÓN DINÁMICO
       historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
     );
-
     // ==========================================
     // 4. PERSISTENCIA EN FIRESTORE
     // ==========================================
@@ -741,6 +771,8 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
     lugarAtencion: event.lugarAtencion,
     fotosUrls: const [], 
     pdfActaUrl: '',
+    tipoGarantia: event.tipoGarantia,
+    responsableFacturacion: event.resposableFacturacion
   );
 
   // =========================================================
