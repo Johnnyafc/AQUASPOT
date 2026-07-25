@@ -26,7 +26,9 @@ class CreacionTicketPage extends StatefulWidget {
 class _CreacionTicketPageState extends State<CreacionTicketPage> {
   final _formKey = GlobalKey<FormState>();
   
-  // Banco de Controladores (Controller Bank)
+  // =========================================================
+  // 🗄️ BANCO DE CONTROLADORES (Controller Bank)
+  // =========================================================
   final TextEditingController _clienteController = TextEditingController();
   final TextEditingController _customEquipoController = TextEditingController();
   final TextEditingController _campamentoController = TextEditingController();
@@ -36,6 +38,9 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
   final TextEditingController _fallaController = TextEditingController();
   final TextEditingController _serieController = TextEditingController();
   final TextEditingController _notasController = TextEditingController();
+  
+  // 🔌 NUEVO SENSOR: Controlador para el horómetro de maquinaria agrícola
+  final TextEditingController _horometroController = TextEditingController();
 
   // Memoria Volátil (Volatile Memory)
   String? _selectedClienteId; 
@@ -45,6 +50,7 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
   Prioridad? _prioridad;
   final Map<String, bool> _accesoriosSeleccionados = {};
   final List<XFile> _archivosEvidencia = [];
+  final List<XFile> _archivosEvidenciaGarantia = [];
 
   @override
   void initState() {
@@ -54,6 +60,7 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
 
   @override
   void dispose() {
+    // Innegociable: Destrucción de todos los punteros en memoria
     _clienteController.dispose();
     _customEquipoController.dispose();
     _campamentoController.dispose();
@@ -63,6 +70,7 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
     _fallaController.dispose();
     _serieController.dispose();
     _notasController.dispose();
+    _horometroController.dispose(); // 🧹 Limpieza del nuevo sensor
     super.dispose();
   }
 
@@ -78,13 +86,13 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
     _fallaController.clear();
     _serieController.clear();
     _notasController.clear();
-    
+    _horometroController.clear(); // 🧹 Purga de la lectura anterior
     
     setState(() {
       _selectedSede = null;
       _selectedEquipo = null;
       _selectedClienteId = null;
-      _selectedMarca=null;
+      _selectedMarca = null;
       _prioridad = null;
       _accesoriosSeleccionados.clear();
       _archivosEvidencia.clear();
@@ -94,24 +102,62 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
     _formKey.currentState?.reset();
   }
 
+  // 📷 SUBRUTINA DE ACTUADOR MULTIMEDIA
+Future<void> _abrirSelectorMultimedia() async {
+    try {
+      // 1. Instanciamos el módulo de captura
+      final ImagePicker picker = ImagePicker();
+      
+      // 2. Detonamos la interfaz de selección múltiple. 
+      // ⚙️ BEST PRACTICE: Compresión de payload al 70% para no saturar el canal de telemetría IoT
+      final List<XFile> fotos = await picker.pickMultiImage(
+        imageQuality: 70,
+      );
 
- // Este método ahora recibe la señal de completitud como parámetro
+      // 3. Verificación de compuerta: Si el operario cancela, no hacemos nada
+      if (fotos.isNotEmpty) {
+        // 4. Escribimos en el búfer de memoria volátil y refrescamos el HMI
+        setState(() {
+          _archivosEvidenciaGarantia.addAll(fotos);
+        });
 
- // ⚙️ Convertimos la función a asíncrona
-void _submitForm() async {
+        // 5. Feedback visual confirming the hardware state change
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ ${fotos.length} archivos de telemetría adjuntados al búfer de garantía.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        print("⚠️ OPERACIÓN ABORTADA: El usuario cerró el sensor óptico sin capturar datos.");
+      }
+    } catch (e) {
+      // 🛑 Manejo de fallos en el bus del sistema operativo (permisos denegados, etc.)
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🛑 Error en el módulo de cámara: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // ⚙️ Convertimos la función a asíncrona
+  void _submitForm() async {
     // =========================================================
     // 🧠 0. LECTURA DE SENSORES DE ESTADO
     // =========================================================
-    // Leemos la memoria del autómata PRIMERO para poder usar sus variables en el triage
     final currentState = context.read<TicketBloc>().state;
 
     // =========================================================
     // 🛑 1. VALIDACIÓN ESTRICTA (Hard Interlocks)
     // =========================================================
-    // Corrección del árbol de validación visual de Flutter
     if (!_formKey.currentState!.validate()) return;
 
-    // Guardas de seguridad explícitas para prevenir NullCheckErrors crónicos
     if (_selectedClienteId == null || _selectedClienteId!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⚠️ Seleccione un Cliente.'), backgroundColor: Colors.orange));
       return;
@@ -125,7 +171,6 @@ void _submitForm() async {
       return;
     }
 
-    // ⚙️ COMPUERTA CONDICIONAL: Sede obligatoria SOLO si el trabajo NO es en campo
     if (currentState.lugarAtencion != LugarAtencion.campo && _selectedSede == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⚠️ Especifique el lugar de recepción.'), backgroundColor: Colors.orange));
       return;
@@ -149,7 +194,7 @@ void _submitForm() async {
     }
 
     // =========================================================
-  // 🧠 2. ALGORITMO DE COMPLETITUD Y COSTOS (TRIAGE)
+    // 🧠 2. ALGORITMO DE COMPLETITUD Y COSTOS (TRIAGE)
     // =========================================================
     final bool esOperacionEnCampo = currentState.lugarAtencion == LugarAtencion.campo;
     final bool tieneSerie = _serieController.text.trim().isNotEmpty;
@@ -159,11 +204,9 @@ void _submitForm() async {
         ? tieneSerie 
         : (tieneSerie && tieneEvidencia);
         
-    // 📍 >>> PEGUE EL BLOQUE EXACTAMENTE AQUÍ <<< 📍
     // ⚙️ ENRUTADOR DE FACTURACIÓN AUTOMÁTICA
     ResponsableFacturacion responsableAsignado = ResponsableFacturacion.cliente;
 
-    // Conmutación basada en el tipo de garantía
     if (currentState.tipoSeleccionado == TipoRequerimiento.reclamoGarantia) {
       if (currentState.tipoGarantia == TipoGarantia.maquinaNueva) {
         responsableAsignado = ResponsableFacturacion.agripotsa;
@@ -171,20 +214,17 @@ void _submitForm() async {
         responsableAsignado = ResponsableFacturacion.tallerInterno;
       }
     }
+
     // =========================================================
     // 🛑 3. ENCLAVAMIENTO DE CONFIRMACIÓN MODULAR
     // =========================================================
-    // Pausamos el hilo de ejecución hasta recibir señal del pop-up externo
     final bool? operadorConfirma = await showDialog<bool>(
       context: context,
       barrierDismissible: false, 
       builder: (context) => ConfirmacionIngresoDialog(esRegistroCompleto: esRegistroCompleto),
     );
 
-    // Si el operador cancela, cortamos el suministro eléctrico de la función
     if (operadorConfirma != true) return;
-
-    // Verificación obligatoria anti-fugas de memoria en procesos asíncronos
     if (!context.mounted) return;
 
     // =========================================================
@@ -198,14 +238,20 @@ void _submitForm() async {
       nombreOperario = authState.usuario.nombre; 
       rolOperario = authState.usuario.rol.name.toUpperCase();
     }
+    
     print('El valor es ${responsableAsignado.name}');
-    // Despacho de la trama de datos limpia y tipada al BLoC
+    
+    // ⚠️ ATENCIÓN INGENIERO: El horómetro está capturando datos. 
+    // Asegúrese de actualizar su evento `CrearTicketEvent` en el BLoC para recibir `_horometroController.text`
+    // si necesita guardarlo en la base de datos de Firebase.
+    
+final double? lecturaHorometro = _horometroController.text.trim().isNotEmpty
+        ? double.tryParse(_horometroController.text.trim())
+        : null;
+
+    // 🚀 DESPACHO DE LA TRAMA DE DATOS AL PLC (BLoC)
     context.read<TicketBloc>().add(CrearTicketEvent(
-      // ⚠️ ALARMA ARQUITECTÓNICA: Si es campo, _selectedSede es nulo. 
-      // Si el evento CrearTicketEvent exige un tipo "Sede" no nulo, debe pasar un valor nominal por defecto 
-      // (ej. Sede.ninguno o Sede.campo). Ajuste esta variable según la estructura de su entidad.
-      sede: _selectedSede ?? Sede.NINGUNO, // <-- No fuerce el "!" si permitió que fuera nulo arriba.
-      
+      sede: _selectedSede ?? Sede.NINGUNO, 
       clienteId: _selectedClienteId!, 
       campamento: _campamentoController.text.trim(),
       nombreContacto: _nombreContactoController.text.trim(),
@@ -220,17 +266,24 @@ void _submitForm() async {
       numeroSerie: tieneSerie ? _serieController.text.trim() : null,
       accesoriosRecibidos: _accesoriosSeleccionados.isEmpty ? null : Map<String, bool>.from(_accesoriosSeleccionados), 
       evidencias: List<XFile>.from(_archivosEvidencia), 
-      
       marcaEquipo: _selectedMarca,
       tipoRequerimiento: currentState.tipoSeleccionado,
       lugarAtencion: currentState.lugarAtencion,
       esRegistroCompleto: esRegistroCompleto, 
       tipoGarantia: currentState.tipoGarantia.name,
       resposableFacturacion: responsableAsignado.name,
+      
+      // ==========================================
+      // 🔌 PINES DE TELEMETRÍA Y GARANTÍA CONECTADOS
+      // ==========================================
+      horometro: lecturaHorometro,
+      evidenciasGarantia: _archivosEvidenciaGarantia.isNotEmpty 
+          ? List<XFile>.from(_archivosEvidenciaGarantia) 
+          : null,
     ));
   }
 
- @override
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF0F2F5),
@@ -241,21 +294,15 @@ void _submitForm() async {
       body: BlocConsumer<TicketBloc, TicketState>(
         listenWhen: (previous, current) => previous.status != current.status,
         listener: (context, state) async {
-          // 🛑 MANEJO DE ERRORES
           if (state.status == TicketStatus.error) {
              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.red));
-          
-          // ✅ MANEJO DE ÉXITO
           } else if (state.status == TicketStatus.operationSuccess) { 
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Registro Exitoso'), backgroundColor: Colors.green));
             
-            // ⚙️ COMPUERTA LÓGICA DE SEGURIDAD
             final ticketReciente = state.currentTicket;
             final bool esTicketCompleto = ticketReciente != null && ticketReciente.esRegistroCompleto;
-            // 📡 SENSOR DE ENTORNO RÁPIDO
             final bool esOperacionEnCampo = state.lugarAtencion == LugarAtencion.campo;
 
-            // 🖨️ INTERLOCK DE IMPRESIÓN (Bypass activado para campo)
             if (esTicketCompleto && !esOperacionEnCampo && state.pdfBytes != null && state.pdfBytes!.isNotEmpty) {
               await Printing.layoutPdf(
                 onLayout: (format) async => state.pdfBytes!,
@@ -263,11 +310,7 @@ void _submitForm() async {
               );
             }
 
-            // 🚪 EVACUACIÓN DE LA PANTALLA
-            // 1. Revisamos que el contexto exista (OBLIGATORIO DESPUÉS DE UN AWAIT)
             if (!context.mounted) return; 
-            
-            // 2. Demolición de la ruta
             Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
           }
         },
@@ -296,6 +339,19 @@ void _submitForm() async {
                         customEquipoController: _customEquipoController,
                         serieController: _serieController,
                         notasRecepcionController: _notasController,
+                        
+                        // 🔌 CABLEADO DE NUEVOS PINES (Interlock Agrícola completado)
+                        horometroController: _horometroController,
+                        onAddMedia: _abrirSelectorMultimedia,
+                        
+                        // ⚡ TERMINALES DE BÚFER AISLADO REQUERIDOS POR EL FORMULARIO
+                        archivosGarantia: _archivosEvidenciaGarantia,
+                        onRemoveArchivoGarantia: (index) {
+                          setState(() {
+                            _archivosEvidenciaGarantia.removeAt(index);
+                          });
+                        },
+                        
                         selectedSede: _selectedSede,
                         selectedEquipo: _selectedEquipo,
                         selectedClienteId: _selectedClienteId,
@@ -305,11 +361,8 @@ void _submitForm() async {
                         tipoRequerimiento: state.tipoSeleccionado,
                         lugarAtencion: state.lugarAtencion,
                         tipoGarantia: state.tipoGarantia,
-                        
-                        // ⚙️ TERMINALES DE LA MARCA CONECTADOS AL ESTADO LOCAL
                         marcaSeleccionada: _selectedMarca,
                         onMarcaChanged: (val) => setState(() => _selectedMarca = val),
-                        
                         onSedeChanged: (val) => setState(() => _selectedSede = val),
                         onEquipoChanged: (val) => setState(() {
                           _selectedEquipo = val;
@@ -330,7 +383,7 @@ void _submitForm() async {
                           _archivosEvidencia.clear();
                           _archivosEvidencia.addAll(archivos);
                         }),
-                        onSubmit: _submitForm, // 🚀 SEÑAL DE ARRANQUE CABLEADA
+                        onSubmit: _submitForm, 
                       ),
                     ),
                   ),

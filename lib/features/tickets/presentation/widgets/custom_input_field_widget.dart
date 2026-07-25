@@ -7,6 +7,7 @@ class CustomInputFieldWidget extends StatelessWidget {
   final int lines;
   final String? hint;
   final String? Function(String?)? validator;
+  final TextInputType? keyboardType;
 
   const CustomInputFieldWidget({
     super.key,
@@ -16,6 +17,7 @@ class CustomInputFieldWidget extends StatelessWidget {
     this.lines = 1,
     this.hint,
     this.validator,
+    this.keyboardType,
   });
 
   @override
@@ -26,6 +28,7 @@ class CustomInputFieldWidget extends StatelessWidget {
         validator: validator ?? (value) => value == null || value.isEmpty ? 'Campo requerido' : null, // Comportamiento por defecto
         controller: controller,
         maxLines: lines,
+        keyboardType: keyboardType,
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,

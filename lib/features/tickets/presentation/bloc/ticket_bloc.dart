@@ -91,6 +91,7 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     on<ActualizarEstadoTicketEvent>(_onActualizarEstadoTicket);
     on<SeleccionarTipoGarantiaEvent>(_onSeleccionarTipoGarantia);
     on<ResetearRequerimientoEvent>(_onResetearTodo);
+    on<DictaminarGarantiaEvent>(_onDictaminarGarantia);                            
   }
 
  
@@ -305,128 +306,238 @@ Future<void> _onSubirEvidencia(SubirEvidenciaEvent event, Emitter<TicketState> e
     );
   }
 
+Future<void> _onDictaminarGarantia(
+  DictaminarGarantiaEvent event, 
+  Emitter<TicketState> emit
+) async {
+  emit(state.copyWith(
+    status: TicketStatus.loading,
+    message: 'Registrando dictamen de garantía en el sistema...'
+  ));
+
+  // 1. Auditoría del evento (Bitácora)
+  final accionTexto = event.esGarantia 
+      ? 'GARANTÍA APROBADA POR INGENIERÍA' 
+      : 'GARANTÍA RECHAZADA - PASA A FACTURACIÓN CLIENTE';
+
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: accionTexto,
+    usuarioNombre: event.nombreUsuario, 
+    usuarioRol: event.rolUsuario,
+    timestamp: DateTime.now(),
+  );
+
+  // ==========================================
+  // 2. MÁQUINA DE ESTADOS: LÓGICA DE ENRUTAMIENTO Y FACTURACIÓN
+  // ==========================================
+  EstadoTicket estadoDestino = EstadoTicket.comercial; 
+  String nuevoResponsable;
+
+  if (event.esGarantia) {
+    // Si se aprueba: ruteamos según el tipo de garantía
+    if (event.ticket.tipoGarantia == 'servicio') {
+      estadoDestino = EstadoTicket.costos; // Desvío al departamento de costos
+      nuevoResponsable = 'tallerInterno';
+    } else {
+      nuevoResponsable = 'agripotsa'; // Máquina nueva u otros
+    }
+  } else {
+    // 🛑 Si se rechaza la garantía: la responsabilidad pasa de forma innegociable al cliente
+    nuevoResponsable = 'cliente';
+    estadoDestino = EstadoTicket.comercial;
+  }
+
+  // ==========================================
+  // 3. Mutación del ticket (Troquelado en memoria)
+  // ==========================================
+  final ticketActualizado = event.ticket.copyWith(
+    esGarantia: event.esGarantia,
+    estadoActual: estadoDestino,
+    responsableFacturacion: nuevoResponsable,
+    historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+  );
+
+  // ==========================================
+  // 4. Persistencia en la Base de Datos
+  // ==========================================
+  final dbResult = await actualizarTicket(ticketActualizado);
+
+  dbResult.fold(
+    (failure) => emit(state.copyWith(
+      status: TicketStatus.error, 
+      message: 'Error al registrar dictamen: ${_mapFailureToMessage(failure)}'
+    )),
+    (ticketGuardado) {
+      // HOT SWAP del ticket en la memoria global
+      final listaActualizada = state.historial.map((t) => 
+        t.id == ticketGuardado.id ? ticketGuardado : t
+      ).toList();
+
+      emit(state.copyWith(
+        status: TicketStatus.operationSuccess,
+        message: 'Dictamen registrado y ruteado correctamente.',
+        historial: listaActualizada,
+        currentTicket: ticketGuardado,
+      ));
+    }
+  );
+}
+
+
+
+
+
 Future<void> _onProcesarEvaluacionDocumental(
-    ProcesarEvaluacionDocumentalEvent event, 
-    Emitter<TicketState> emit
-  ) async {
-    emit(state.copyWith(
-      status: TicketStatus.loading,
-      message: 'Transmitiendo documentos técnicos a la nube...'
-    ));
+  ProcesarEvaluacionDocumentalEvent event, 
+  Emitter<TicketState> emit
+) async {
+  emit(state.copyWith(
+    status: TicketStatus.loading,
+    message: 'Transmitiendo documentos técnicos a la nube...'
+  ));
 
-    String? urlExcelSubido;
-    List<String> urlsPdfsSubidos = [];
-    bool huboFalla = false;
-    String mensajeError = '';
+  String? urlExcelSubido;
+  List<String> urlsPdfsSubidos = [];
+  List<String> urlsPdfsGarantiaSubidos = []; // 🔌 Tubería para los respaldos de OV
+  bool huboFalla = false;
+  String mensajeError = '';
 
-    // ==========================================
-    // 1A. SUBIDA DEL CANAL EXCLUSIVO (PROFORMA EXCEL)
-    // ==========================================
-    if (event.proformaExcel != null) {
-      // Opcional: Puede enviar a una subcarpeta 'evaluaciones/proformas' para más orden en Storage
-      final result = await subirDocumentoEvaluacionUseCase(event.proformaExcel!, event.ticket.id, 'evaluaciones');
+  // ==========================================
+  // 1A. SUBIDA DEL CANAL EXCLUSIVO (PROFORMA EXCEL)
+  // ==========================================
+  if (event.proformaExcel != null) {
+    final result = await subirDocumentoEvaluacionUseCase(event.proformaExcel!, event.ticket.id, 'evaluaciones/proformas');
+    
+    result.fold(
+      (failure) {
+        huboFalla = true;
+        mensajeError = _mapFailureToMessage(failure);
+      },
+      (url) => urlExcelSubido = url,
+    );
+
+    if (huboFalla) {
+      emit(state.copyWith(status: TicketStatus.error, message: 'Falla al subir Proforma: $mensajeError'));
+      return; // 🛑 Aborto de emergencia
+    }
+  }
+
+  // ==========================================
+  // 1B. SUBIDA DEL CANAL GENERAL (EVIDENCIA PDF)
+  // ==========================================
+  if (event.documentosPdf.isNotEmpty) {
+    for (final file in event.documentosPdf) {
+      final result = await subirDocumentoEvaluacionUseCase(file, event.ticket.id, 'evaluaciones/generales');
       
       result.fold(
         (failure) {
           huboFalla = true;
           mensajeError = _mapFailureToMessage(failure);
         },
-        (url) => urlExcelSubido = url,
+        (url) => urlsPdfsSubidos.add(url),
       );
 
       if (huboFalla) {
-        emit(state.copyWith(status: TicketStatus.error, message: 'Falla al subir Proforma: $mensajeError'));
+        emit(state.copyWith(status: TicketStatus.error, message: 'Falla al subir PDF: $mensajeError'));
         return; // 🛑 Aborto de emergencia
       }
     }
+  }
 
-    // ==========================================
-    // 1B. SUBIDA DEL CANAL GENERAL (EVIDENCIA PDF)
-    // ==========================================
-    if (event.documentosPdf.isNotEmpty) {
-      for (final file in event.documentosPdf) {
-        final result = await subirDocumentoEvaluacionUseCase(file, event.ticket.id, 'evaluaciones');
-        
-        result.fold(
-          (failure) {
-            huboFalla = true;
-            mensajeError = _mapFailureToMessage(failure);
-          },
-          (url) => urlsPdfsSubidos.add(url),
-        );
-
-        if (huboFalla) {
-          emit(state.copyWith(status: TicketStatus.error, message: 'Falla al subir PDF: $mensajeError'));
-          return; // 🛑 Aborto de emergencia
-        }
-      }
-    }
-
+  // ==========================================
+  // 1C. SUBIDA DE RESPALDOS DE GARANTÍA (OV)
+  // ==========================================
+  if (event.documentosPdfGarantia != null && event.documentosPdfGarantia!.isNotEmpty) {
     emit(state.copyWith(
       status: TicketStatus.loading,
-      message: 'Ensamblando reporte y consolidando base de datos...'
+      message: 'Subiendo respaldo documental de Orden de Venta...'
     ));
 
-    // ==========================================
-    // 2. ENSAMBLAJE DE LAS NUEVAS ENTIDADES (Estructura Determinista)
-    // ==========================================
-    final evaluacion = EvaluacionTecnicaEntity(
-      urlProformaExcel: urlExcelSubido, // Puede ser null, la entidad lo acepta
-      urlsAdjuntosPdf: urlsPdfsSubidos, // Arreglo, puede estar vacío
-      observacion: event.observacion,
-    );
+    for (final file in event.documentosPdfGarantia!) {
+      // Mandamos esto a una ruta específica para trazabilidad de auditoría
+      final result = await subirDocumentoEvaluacionUseCase(file, event.ticket.id, 'evaluaciones/garantias');
+      
+      result.fold(
+        (failure) {
+          huboFalla = true;
+          mensajeError = _mapFailureToMessage(failure);
+        },
+        (url) => urlsPdfsGarantiaSubidos.add(url),
+      );
 
-    final eventoAuditoria = EventoAuditoriaEntity(
-      accion: 'EVALUACIÓN TÉCNICA Y DOCUMENTAL REGISTRADA',
-      usuarioNombre: event.nombreUsuario, 
-      usuarioRol: event.rolUsuario,
-      timestamp: DateTime.now(),
-    );
-
-    // ==========================================
-    //3. MUTACIÓN DEL TICKET (El Troquelado y Enrutamiento)
-    // ==========================================
-    
-    // ⚙️ RELÉ DE CONMUTACIÓN DE ESTADOS
-    // Estado por defecto si es una reparación normal o mantenimiento
-    EstadoTicket siguienteEstado = EstadoTicket.comercial; 
-
-    // Si el sensor detecta que el ticket ingresó como reclamo de garantía, 
-    // desviamos el flujo hacia el departamento correspondiente.
-    if (event.ticket.tipoRequerimiento == TipoRequerimiento.reclamoGarantia) {
-      siguienteEstado = EstadoTicket.revisionGarantia;
-    }
-
-    final ticketActualizado = event.ticket.copyWith(
-      evaluacionTecnica: evaluacion,
-      estadoActual: siguienteEstado, // 🚀 TRASPASO DE ESTACIÓN DINÁMICO
-      historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
-    );
-    // ==========================================
-    // 4. PERSISTENCIA EN FIRESTORE
-    // ==========================================
-    final dbResult = await actualizarTicket(ticketActualizado);
-
-    dbResult.fold(
-      (failure) => emit(state.copyWith(
-        status: TicketStatus.error, 
-        message: 'Error al guardar la evaluación: ${_mapFailureToMessage(failure)}'
-      )),
-      (ticketGuardado) {
-        // 5. HOT SWAP: Lazo cerrado para actualizar la HMI
-        final listaActualizada = state.historial.map((t) => 
-          t.id == ticketGuardado.id ? ticketGuardado : t
-        ).toList();
-
-        emit(state.copyWith(
-          status: TicketStatus.operationSuccess,
-          message: 'Reporte técnico guardado con éxito.',
-          historial: listaActualizada,
-          currentTicket: ticketGuardado,
-        ));
+      if (huboFalla) {
+        emit(state.copyWith(status: TicketStatus.error, message: 'Falla al subir PDF de Garantía: $mensajeError'));
+        return; // 🛑 Aborto de emergencia
       }
-    );
+    }
   }
+
+  emit(state.copyWith(
+    status: TicketStatus.loading,
+    message: 'Ensamblando reporte y consolidando base de datos...'
+  ));
+
+  // ==========================================
+  // 2. ENSAMBLAJE DE LAS NUEVAS ENTIDADES (Estructura Determinista)
+  // ==========================================
+  final evaluacion = EvaluacionTecnicaEntity(
+    urlProformaExcel: urlExcelSubido, 
+    urlsAdjuntosPdf: urlsPdfsSubidos, 
+    observacion: event.observacion,
+    // 🚀 INYECCIÓN DE LOS NUEVOS PINES DE GARANTÍA
+    numeroOVGarantia: event.numeroOVGarantia,
+    urlsAdjuntosPdfGarantia: urlsPdfsGarantiaSubidos,
+  );
+
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: 'EVALUACIÓN TÉCNICA Y DOCUMENTAL REGISTRADA',
+    usuarioNombre: event.nombreUsuario, 
+    usuarioRol: event.rolUsuario,
+    timestamp: DateTime.now(),
+  );
+
+  // ==========================================
+  // 3. MUTACIÓN DEL TICKET (El Troquelado y Enrutamiento)
+  // ==========================================
+  
+  // ⚙️ RELÉ DE CONMUTACIÓN DE ESTADOS
+  EstadoTicket siguienteEstado = EstadoTicket.comercial; 
+
+  if (event.ticket.tipoRequerimiento == TipoRequerimiento.reclamoGarantia) {
+    siguienteEstado = EstadoTicket.revisionGarantia;
+  }
+
+  final ticketActualizado = event.ticket.copyWith(
+    evaluacionTecnica: evaluacion,
+    estadoActual: siguienteEstado, 
+    historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+  );
+
+  // ==========================================
+  // 4. PERSISTENCIA EN FIRESTORE
+  // ==========================================
+  final dbResult = await actualizarTicket(ticketActualizado);
+
+  dbResult.fold(
+    (failure) => emit(state.copyWith(
+      status: TicketStatus.error, 
+      message: 'Error al guardar la evaluación: ${_mapFailureToMessage(failure)}'
+    )),
+    (ticketGuardado) {
+      // 5. HOT SWAP: Lazo cerrado para actualizar la HMI
+      final listaActualizada = state.historial.map((t) => 
+        t.id == ticketGuardado.id ? ticketGuardado : t
+      ).toList();
+
+      emit(state.copyWith(
+        status: TicketStatus.operationSuccess,
+        message: 'Reporte técnico guardado con éxito.',
+        historial: listaActualizada,
+        currentTicket: ticketGuardado,
+      ));
+    }
+  );
+}
 
 Future<void> _onProcesarBodega(
   ProcesarBodegaEvent event, 
@@ -772,7 +883,13 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
     fotosUrls: const [], 
     pdfActaUrl: '',
     tipoGarantia: event.tipoGarantia,
-    responsableFacturacion: event.resposableFacturacion
+    responsableFacturacion: event.resposableFacturacion,
+    
+    // 🔌 INYECCIÓN DE TELEMETRÍA DIRECTA
+    horometro: event.horometro,
+    
+    // 🛑 CORTOCIRCUITO CORREGIDO: Inicia vacío, se llena después de Storage
+    urlsEvidenciasGarantia: const [], 
   );
 
   // =========================================================
@@ -791,11 +908,16 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
   // 💎 EXTRACCIÓN DEL TICKET OFICIAL
   final ticketOficial = dbResult.fold((l) => throw Exception(), (r) => r);
   final idReal = ticketOficial.id;
+  
+  // 🗄️ BÚFERES DE MEMORIA PARA URLs
   final List<String> urlsSubidas = [];
+  final List<String> urlsGarantiaSubidas = []; 
 
   // =========================================================
-  // 📸 FASE 2: SUBIDA DE EVIDENCIAS
+  // 📸 FASE 2: SUBIDA DE EVIDENCIAS (Doble Canal)
   // =========================================================
+  
+  // Canal 1: Evidencias Generales
   if (event.evidencias.isNotEmpty) {
     emit(state.copyWith(status: TicketStatus.loading, message: 'Subiendo evidencias a carpeta $idReal...'));
     
@@ -805,6 +927,22 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
       uploadResult.fold(
         (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
         (url) => urlsSubidas.add(url),
+      );
+      if (state.status == TicketStatus.error) return; // Parada de emergencia
+    }
+  }
+
+  // 🚜 Canal 2: Evidencias de Garantía (Aislado)
+  if (event.evidenciasGarantia != null && event.evidenciasGarantia!.isNotEmpty) {
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Subiendo telemetría de garantía...'));
+    
+    for (final file in event.evidenciasGarantia!) {
+      // Nota técnica: Idealmente su caso de uso debería aceptar una subcarpeta, ej: '$idReal/garantia'
+      final uploadResult = await subirEvidenciaUseCase(file, idReal); 
+      
+      uploadResult.fold(
+        (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+        (url) => urlsGarantiaSubidas.add(url),
       );
       if (state.status == TicketStatus.error) return; // Parada de emergencia
     }
@@ -863,8 +1001,10 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
     final ticketFinalActualizado = ticketOficial.copyWith(
       fotosUrls: urlsSubidas,
       pdfActaUrl: urlPdfFinal, // Si fue en campo, pasará vacío ('')
-      // 🚀 INYECCIÓN DEL SALTO DE ESTADO CALCULADO
       estadoActual: estadoDestino, 
+      
+      // 🚀 INYECCIÓN DE URLs DE GARANTÍA YA GENERADAS POR STORAGE
+      urlsEvidenciasGarantia: urlsGarantiaSubidas,
     );
 
     final updateResult = await actualizarTicket(ticketFinalActualizado);
@@ -886,8 +1026,14 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
 
   } else {
     // ⚙️ RUTA B: INCOMPLETO
-    if (urlsSubidas.isNotEmpty) {
-      final ticketParcialActualizado = ticketOficial.copyWith(fotosUrls: urlsSubidas);
+    if (urlsSubidas.isNotEmpty || urlsGarantiaSubidas.isNotEmpty) {
+      
+      // Aseguramos que cualquier foto subida quede persistida en BD
+      final ticketParcialActualizado = ticketOficial.copyWith(
+        fotosUrls: urlsSubidas,
+        urlsEvidenciasGarantia: urlsGarantiaSubidas,
+      );
+      
       await actualizarTicket(ticketParcialActualizado);
       
       emit(state.copyWith(

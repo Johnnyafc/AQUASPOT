@@ -107,6 +107,9 @@ class CrearTicketEvent extends TicketEvent {
    final MarcaEquipo? marcaEquipo;
    final String? tipoGarantia;
    final String? resposableFacturacion;
+   final double? horometro; 
+  final List<XFile>? evidenciasGarantia;
+  
    
 
   const CrearTicketEvent({
@@ -132,7 +135,8 @@ class CrearTicketEvent extends TicketEvent {
     this.notasRecepcion,
     this.tipoGarantia,
     this.resposableFacturacion,
-    
+    this.horometro,
+    this.evidenciasGarantia,
   });
 
   @override
@@ -140,7 +144,8 @@ class CrearTicketEvent extends TicketEvent {
         sede, clienteId, campamento, nombreContacto, telefonoContacto, 
         emailContacto, equipo, equipoDetalle, fallaReportada, 
         nombreUsuario, rolUsuario, evidencias,
-        tipoRequerimiento, lugarAtencion,numeroSerie,accesoriosRecibidos,esRegistroCompleto,marcaEquipo,notasRecepcion, tipoGarantia,resposableFacturacion // 🚀 Añadidos a las props
+        tipoRequerimiento, lugarAtencion,numeroSerie,accesoriosRecibidos,esRegistroCompleto,marcaEquipo,notasRecepcion, tipoGarantia,resposableFacturacion, horometro,
+    evidenciasGarantia, // 🚀 Añadidos a las props
       ];
 }
 
@@ -199,6 +204,8 @@ class ProcesarEvaluacionDocumentalEvent extends TicketEvent {
   final String observacion;
   final String nombreUsuario; 
   final String rolUsuario;
+  final String? numeroOVGarantia;
+  final List<fp.PlatformFile>? documentosPdfGarantia;
 
   const ProcesarEvaluacionDocumentalEvent({
     required this.ticket,
@@ -207,6 +214,8 @@ class ProcesarEvaluacionDocumentalEvent extends TicketEvent {
     required this.observacion,
     required this.nombreUsuario,
     required this.rolUsuario,
+    required this.documentosPdfGarantia,
+    required this.numeroOVGarantia,
   });
 
 @override
@@ -216,7 +225,9 @@ class ProcesarEvaluacionDocumentalEvent extends TicketEvent {
         documentosPdf, 
         observacion, 
         nombreUsuario, 
-        rolUsuario
+        rolUsuario,
+        documentosPdfGarantia,
+        numeroOVGarantia
       ];
 }
 

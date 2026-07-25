@@ -1,3 +1,4 @@
+import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_event.dart';
@@ -153,93 +154,151 @@ void _mostrarDialogoAccion(BuildContext context, String accion) {
   ));
 }
 
- @override
-Widget build(BuildContext context) {
-  return BlocListener<TicketBloc, TicketState>(
-    listener: (context, state) {
-      if (state.status == TicketStatus.operationSuccess) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(state.message), 
-            backgroundColor: Colors.green, 
-            duration: const Duration(seconds: 2)
-          )
-        );
-        // Retiramos la pantalla HMI y devolvemos al usuario
-        if (Navigator.canPop(context)) {
-          Navigator.pop(context);
+@override
+  Widget build(BuildContext context) {
+    return BlocListener<TicketBloc, TicketState>(
+      listener: (context, state) {
+        if (state.status == TicketStatus.operationSuccess) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.message), 
+              backgroundColor: Colors.green, 
+              duration: const Duration(seconds: 2)
+            )
+          );
+          // Retiramos la pantalla HMI y devolvemos al usuario
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context);
+          }
+        } else if (state.status == TicketStatus.error) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.message), backgroundColor: Colors.red)
+          );
         }
-      } else if (state.status == TicketStatus.error) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(state.message), backgroundColor: Colors.red)
-        );
-      }
-    },
-    child: Scaffold(
-      backgroundColor: const Color(0xFFF4F7F6),
-      appBar: AppBar(
-        title: Text('Proforma: ${ticket.id}', style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text("Datos del Requerimiento", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
-            const SizedBox(height: 12),
-            _buildDataCard(),
-            const SizedBox(height: 24),
-            const Text("Evidencia Fotográfica", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
-            const SizedBox(height: 12),
-            _buildEvidenciasCard(context),
-            const SizedBox(height: 24),
-            const Text("Carga Documental (Cotización)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
-            const SizedBox(height: 12),
-            PanelDocumentosComerciales(urls: ticket.proforma?.pdfUrls ?? []),
-            const SizedBox(height: 24),
-            const Text("Trazabilidad y Auditoría", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
-            const SizedBox(height: 12),
-            _buildTimelineCard(),
-          ],
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF4F7F6),
+        appBar: AppBar(
+          title: Text('Proforma: ${ticket.id}', style: const TextStyle(fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          elevation: 0,
         ),
-      ),
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))],
-        ),
-        child: SafeArea(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              OutlinedButton.icon(
-                onPressed: () => _mostrarDialogoAccion(context, 'MODIFICAR'),
-                icon: const Icon(Icons.edit, size: 18),
-                label: const Text('Modificar'),
-              ),
-              ElevatedButton.icon(
-                onPressed: () => ModalAprobacionComercial.show(context, ticket),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                icon: const Icon(Icons.check, size: 18),
-                label: const Text('Aceptar'),
-              ),
-              ElevatedButton.icon(
-                onPressed: () => _mostrarDialogoAccion(context, 'ANULAR'),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                icon: const Icon(Icons.cancel, size: 18),
-                label: const Text('Anular'),
-              ),
+              // ==========================================
+              // 🚨 ENCLAVAMIENTO VISUAL DE FACTURACIÓN
+              // ==========================================
+              _buildAlarmaFacturacion(),
+
+              const Text("Datos del Requerimiento", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
+              const SizedBox(height: 12),
+              _buildDataCard(),
+              const SizedBox(height: 24),
+              const Text("Evidencia Fotográfica", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
+              const SizedBox(height: 12),
+              _buildEvidenciasCard(context),
+              const SizedBox(height: 24),
+              const Text("Carga Documental (Cotización)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
+              const SizedBox(height: 12),
+              PanelDocumentosComerciales(urls: ticket.proforma?.pdfUrls ?? []),
+              const SizedBox(height: 24),
+              const Text("Trazabilidad y Auditoría", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
+              const SizedBox(height: 12),
+              _buildTimelineCard(),
             ],
           ),
         ),
+        bottomNavigationBar: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))],
+          ),
+          child: SafeArea(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => _mostrarDialogoAccion(context, 'MODIFICAR'),
+                  icon: const Icon(Icons.edit, size: 18),
+                  label: const Text('Modificar'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () => ModalAprobacionComercial.show(context, ticket),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                  icon: const Icon(Icons.check, size: 18),
+                  label: const Text('Aceptar'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () => _mostrarDialogoAccion(context, 'ANULAR'),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                  icon: const Icon(Icons.cancel, size: 18),
+                  label: const Text('Anular'),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
+
+
+Widget _buildAlarmaFacturacion() {
+    // Si no es garantía, la válvula permanece cerrada y no dibuja nada
+    if (ticket.tipoRequerimiento != TipoRequerimiento.reclamoGarantia) {
+      return const SizedBox.shrink();
+    }
+
+    final String responsable = (ticket.responsableFacturacion ?? 'NO DEFINIDO').toUpperCase();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        border: Border.all(color: Colors.orange.shade800, width: 2),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(color: Colors.orange.withOpacity(0.15), blurRadius: 8, offset: const Offset(0, 4)),
+        ]
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.orange.shade900, size: 40),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'ATENCIÓN: TICKET DE GARANTÍA', 
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade900, fontSize: 16)
+                ),
+                const SizedBox(height: 6),
+                RichText(
+                  text: TextSpan(
+                    style: const TextStyle(color: Colors.black87, fontSize: 14),
+                    children: [
+                      const TextSpan(text: 'La facturación de esta orden recae sobre: '),
+                      TextSpan(
+                        text: responsable,
+                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade900, fontSize: 15),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildDataCard() {
     return Card(

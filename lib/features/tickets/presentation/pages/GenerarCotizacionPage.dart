@@ -1,3 +1,4 @@
+import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/ticket_entity.dart';
@@ -109,6 +110,10 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
 
  @override
   Widget build(BuildContext context) {
+    // 🧠 Sensor lógico: ¿Es un reclamo de garantía?
+    // Ajuste esta variable si en su modelo lo evalúa diferente (ej. ticket.tipoGarantia != 'ninguna')
+    final bool esGarantia = widget.ticket.tipoRequerimiento == TipoRequerimiento.reclamoGarantia;
+
     return Scaffold(
       appBar: AppBar(title: Text('Cotización: ${widget.ticket.id}'), backgroundColor: Colors.green),
       // 🔧 CIRCUITO LIMPIO: Un solo sensor conectado directamente al flujo principal
@@ -232,6 +237,54 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
                   ),
                 ),
               const SizedBox(height: 20),
+
+              // ==========================================
+              // 🚨 BALIZA DE ADVERTENCIA: FACTURACIÓN DE GARANTÍA
+              // ==========================================
+              if (esGarantia)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    border: Border.all(color: Colors.orange.shade800, width: 2),
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(color: Colors.orange.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 4)),
+                    ]
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: Colors.orange.shade900, size: 36),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'ATENCIÓN: TICKET DE GARANTÍA', 
+                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade900, fontSize: 16)
+                            ),
+                            const SizedBox(height: 4),
+                            RichText(
+                              text: TextSpan(
+                                style: const TextStyle(color: Colors.black87, fontSize: 14),
+                                children: [
+                                  const TextSpan(text: 'La facturación de esta orden debe emitirse a: '),
+                                  TextSpan(
+                                    // ⚡ AQUÍ SE EXTRAE LA VARIABLE DE LA IMAGEN
+                                    text: (widget.ticket.responsableFacturacion ?? 'NO DEFINIDO').toUpperCase(),
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade900, fontSize: 15),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
               // ==========================================
               // PANEL DE DOCUMENTOS MULTIPLES (Comercial)

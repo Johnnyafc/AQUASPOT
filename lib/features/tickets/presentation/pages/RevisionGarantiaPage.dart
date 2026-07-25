@@ -151,17 +151,16 @@ class RevisionGarantiaPage extends StatelessWidget {
   }
 
   void _ejecutarDictamen(BuildContext context, bool esGarantiaAprobada) {
-    // Extraer datos del usuario actual desde el AuthBloc
     final authState = context.read<AuthBloc>().state;
     String nombreUser = 'Sistema';
     String rolUser = 'Operador Garantías';
 
     if (authState is Authenticated) {
       nombreUser = authState.usuario.nombre;
-      rolUser = authState.usuario.rol.name;
+      rolUser = authState.usuario.rol.name.toUpperCase();
     }
 
-    // Disparar el evento al BLoC
+    // El ticket viaja intacto; el BLoC intercepta 'esGarantia' y actualiza la entidad en el repositorio
     context.read<TicketBloc>().add(
       DictaminarGarantiaEvent(
         ticket: ticket,

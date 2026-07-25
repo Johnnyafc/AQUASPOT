@@ -3,6 +3,7 @@
 import 'package:aquaspot_postventa/core/enum/segmento_operativo.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/pages/RevisionGarantiaPage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/ticket_bloc.dart';
@@ -99,7 +100,7 @@ class _BandejaRevisionesGarantiasPageState extends State<BandejaRevisionesGarant
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                     onTap: () {
                       // 🚀 Aquí se enruta a la pantalla donde se procesa el dictamen final (Aprobar/Rechazar garantía)
-                      // Navigator.push(context, MaterialPageRoute(builder: (_) => DetalleTicketPage(ticket: ticket)));
+                       Navigator.push(context, MaterialPageRoute(builder: (_) => RevisionGarantiaPage(ticket: ticket)));
                     },
                   ),
                 );

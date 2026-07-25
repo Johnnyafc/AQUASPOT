@@ -11,7 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_state.dart';
 import '../../domain/entities/ticket_entity.dart';
-import 'package:url_launcher/url_launcher.dart'; // Asegúrese de tener esta dependencia para abrir el Excel
+import 'package:url_launcher/url_launcher.dart';
 
 class GestionComprasPage extends StatefulWidget {
   final TicketEntity ticket;
@@ -33,21 +33,18 @@ class _GestionComprasPageState extends State<GestionComprasPage> {
   }
 
   // ⚙️ ACTUADOR: Selector de archivos
- Future<void> _seleccionarArchivo() async {
-  // ⚙️ Sintaxis actualizada al estándar actual
-  final result = await FilePicker.pickFiles(
-    type: FileType.custom,
-    allowedExtensions: ['pdf', 'jpg', 'png'], // Bien en restringir las extensiones.
-  );
+  Future<void> _seleccionarArchivo() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'png'],
+    );
 
-  // Validación robusta: verificamos que el resultado y la ruta existan
-  if (result != null && result.files.single.path != null) {
-    setState(() {
-      // 🔧 EL ADAPTADOR: Construimos el XFile usando la ruta del PlatformFile
-      _archivoOrdenCompra = XFile(result.files.single.path!);
-    });
+    if (result != null && result.files.single.path != null) {
+      setState(() {
+        _archivoOrdenCompra = XFile(result.files.single.path!);
+      });
+    }
   }
-}
 
   // ⚙️ LECTURA: Abrir proforma en el navegador/app externa
   Future<void> _abrirProformaExcel(String url) async {
@@ -65,7 +62,6 @@ class _GestionComprasPageState extends State<GestionComprasPage> {
 
   // 🚀 EJECUCIÓN: Disparo del evento al BLoC
   void _ejecutarPasoABodega() {
-    // 🔒 Enclavamiento de seguridad: No se envía si el tanque está vacío
     if (_archivoOrdenCompra == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -76,8 +72,7 @@ class _GestionComprasPageState extends State<GestionComprasPage> {
       return;
     }
 
-    // ⚠️ ATENCIÓN: Asegúrese de tener este evento creado en su TicketBloc
-     final authState = context.read<AuthBloc>().state;
+    final authState = context.read<AuthBloc>().state;
     String operador = 'DESCONOCIDO';
     String rol = 'SIN_ROL';
 
@@ -86,27 +81,24 @@ class _GestionComprasPageState extends State<GestionComprasPage> {
       rol = authState.usuario.rol.name.toUpperCase();
     } 
     
-context.read<TicketBloc>().add(
+    context.read<TicketBloc>().add(
       ProcesarGestionComprasEvent(
         ticket: widget.ticket,
-        archivoOrdenCompra: _archivoOrdenCompra!, // Asumo que ya validó que no sea null antes de este punto
+        archivoOrdenCompra: _archivoOrdenCompra!,
         observacion: _observacionController.text,
-        nombreUsuario: operador, // ⚠️ Puente temporal
-        rolUsuario: rol,             // ⚡ EL PIN QUE DEJÓ DESCONECTADO
+        nombreUsuario: operador,
+        rolUsuario: rol,
       ),
     );
     
-    // Simulación temporal para el HMI
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Transmitiendo orden de compra al servidor...'), backgroundColor: Colors.teal),
     );
-    
   }
 
   Future<void> _abrirDocumentoOV(BuildContext context, String url) async {
     final Uri uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
-      // Abre el PDF en el navegador externo o visor nativo
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
       if (context.mounted) {
@@ -120,26 +112,37 @@ context.read<TicketBloc>().add(
     }
   }
 
-@override
+  @override
   Widget build(BuildContext context) {
-    // Extracción de señales base para código más limpio
+    // 🧠 SENSOR MAESTRO: Evaluación de garantía activa
+    final bool esGarantiaActiva = widget.ticket.tipoRequerimiento == TipoRequerimiento.reclamoGarantia &&
+                                  widget.ticket.tipoGarantia != null && 
+                                  widget.ticket.tipoGarantia!.trim().isNotEmpty && 
+                                  widget.ticket.tipoGarantia!.toLowerCase() != 'ninguna' &&
+                                  widget.ticket.tipoGarantia!.toLowerCase() != 'pendiente' &&
+                                  widget.ticket.esGarantia != false; 
+
+    // Detección si el ticket inició como garantía pero fue rechazado
+    final bool esReclamoNegado = widget.ticket.tipoRequerimiento == TipoRequerimiento.reclamoGarantia &&
+                                 widget.ticket.esGarantia == false;
+
     final String codigoProyecto = widget.ticket.codigoProyecto ?? 'SIN ASIGNAR';
     final String ordenVenta = widget.ticket.numeroOrdenVenta ?? 'N/A';
     final String? urlProforma = widget.ticket.evaluacionTecnica?.urlProformaExcel;
+    final List<String> urlsGarantia = widget.ticket.evaluacionTecnica?.urlsAdjuntosPdfGarantia ?? [];
 
     return Scaffold(
       appBar: AppBar(
         title: Text('Estación Compras: ${widget.ticket.id}'),
         backgroundColor: Colors.teal.shade800,
       ),
-      // BlocListener para capturar el éxito y retornar a la bandeja
       body: BlocListener<TicketBloc, TicketState>(
         listener: (context, state) {
           if (state.status == TicketStatus.operationSuccess) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Orden procesada. Ticket transferido a Bodega.'), backgroundColor: Colors.green),
             );
-            Navigator.pop(context); // Lazo cerrado: volver a la línea principal
+            Navigator.pop(context);
           } else if (state.status == TicketStatus.error) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(state.message), backgroundColor: Colors.red),
@@ -156,9 +159,9 @@ context.read<TicketBloc>().add(
               // ==========================================
               Card(
                 elevation: 3,
-                color: Colors.blueGrey.shade50,
+                color: esReclamoNegado ? Colors.red.shade50 : Colors.blueGrey.shade50,
                 shape: RoundedRectangleBorder(
-                  side: BorderSide(color: Colors.blueGrey.shade200),
+                  side: BorderSide(color: esReclamoNegado ? Colors.red.shade300 : Colors.blueGrey.shade200),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Padding(
@@ -166,49 +169,86 @@ context.read<TicketBloc>().add(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
+                      Row(
                         children: [
-                          Icon(Icons.monitor, color: Colors.blueGrey),
-                          SizedBox(width: 8),
-                          Text('Datos Base Aprobados', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          Icon(
+                            esReclamoNegado ? Icons.warning_amber_rounded : Icons.monitor, 
+                            color: esReclamoNegado ? Colors.red.shade900 : Colors.blueGrey
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            esReclamoNegado ? 'GARANTÍA NEGADA - FLUJO COMERCIAL' : 'Datos Base y Trazabilidad', 
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold, 
+                              fontSize: 16,
+                              color: esReclamoNegado ? Colors.red.shade900 : Colors.black87,
+                            )
+                          ),
                         ],
                       ),
                       const Divider(),
+                      
+                      if (esReclamoNegado) ...[
+                        const Text(
+                          '⚠️ Este ticket inició por garantía pero fue rechazado por ingeniería. Se procesa con la Orden de Venta comercial original.',
+                          style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
                       _buildReadoutRow('Código de Proyecto (Costos):', codigoProyecto, isHighlighted: true),
-                      const SizedBox(height: 8),
-                      _buildReadoutRow('Orden de Venta (Comercial):', ordenVenta),
                       const SizedBox(height: 12),
                       
-                      // ⚙️ NUEVO MÓDULO INTEGRADO: Enlace de descarga de OV
-                      if (widget.ticket.codigoOrdenVenta != null && widget.ticket.codigoOrdenVenta!.isNotEmpty)
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          decoration: BoxDecoration(
-                            color: Colors.blueGrey.shade100, 
-                            border: Border.all(color: Colors.blueGrey.shade300),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: ListTile(
-                            dense: true,
-                            leading: const Icon(Icons.picture_as_pdf, color: Colors.redAccent, size: 28),
-                            title: const Text(
-                              'Orden de Venta (OV) Adjunta',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                            ),
-                            subtitle: const Text('Toque para visualizar el requerimiento original.', style: TextStyle(fontSize: 11)),
-                            trailing: ElevatedButton.icon(
-                              icon: const Icon(Icons.download, size: 16),
-                              label: const Text('Descargar'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blueGrey.shade800,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              ),
-                              onPressed: () => _abrirDocumentoOV(context, widget.ticket.codigoOrdenVenta!.first),
-                            ),
-                          ),
-                        ),
+                      // ==========================================
+                      // 🔌 LÍNEA BASE INNEGOCIABLE: LA OV COMERCIAL SIEMPRE SE MUESTRA
+                      // ==========================================
+                      _buildReadoutRow('Orden de Venta (Comercial):', ordenVenta),
+                      const SizedBox(height: 8),
+                      
+                      if (widget.ticket.codigoOrdenVenta.isNotEmpty)
+                        _buildPdfDownloadContainer(
+                          context: context,
+                          titulo: 'Orden de Venta (OV) Comercial Adjunta',
+                          subtitulo: 'Requerimiento comercial base para compras.',
+                          urlPDF: widget.ticket.codigoOrdenVenta!.first,
+                        )
+                      else
+                        const Text('⚠️ No se detectó documento de Orden de Venta comercial adjunto.', style: TextStyle(color: Colors.red, fontSize: 12)),
 
+                      // ==========================================
+                      // 🔌 BLOQUE COMPLEMENTARIO: SI ES GARANTÍA APROBADA, AÑADIMOS SU RESPALDO TÉCNICO
+                      // ==========================================
+                      if (esGarantiaActiva) ...[
+                        const Divider(height: 24),
+                        Row(
+                          children: [
+                            Icon(Icons.policy, size: 18, color: Colors.amber.shade900),
+                            const SizedBox(width: 6),
+                            Text(
+                              'RESPALDO DE GARANTÍA (${widget.ticket.tipoGarantia!.toUpperCase()})',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.amber.shade900),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        _buildReadoutRow(
+                          widget.ticket.tipoGarantia == 'servicio' ? 'OV de Servicio Antiguo:' : 'OV de Máquina Nueva:',
+                          widget.ticket.evaluacionTecnica?.numeroOVGarantia ?? 'No registrada'
+                        ),
+                        const SizedBox(height: 8),
+
+                        if (urlsGarantia.isNotEmpty)
+                          _buildPdfDownloadContainer(
+                            context: context,
+                            titulo: widget.ticket.tipoGarantia == 'servicio' ? 'Descargar OV de Servicio' : 'Descargar OV de Máquina',
+                            subtitulo: 'Documento técnico de respaldo de garantía.',
+                            urlPDF: urlsGarantia.first,
+                            colorAcento: Colors.amber.shade900,
+                          ),
+                      ],
+
+                      const SizedBox(height: 8),
+                      const Divider(),
                       // Enlace a la proforma técnica
                       const Text('Matriz de Costeo (Taller):', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                       const SizedBox(height: 4),
@@ -219,7 +259,7 @@ context.read<TicketBloc>().add(
                           leading: const Icon(Icons.table_view, color: Colors.green),
                           title: const Text('Descargar Proforma Técnica (Excel)', style: TextStyle(decoration: TextDecoration.underline, color: Colors.blue)),
                           trailing: const Icon(Icons.download, size: 20),
-                          onTap: () => _abrirProformaExcel(urlProforma), // Asumo que ya tiene este método creado
+                          onTap: () => _abrirProformaExcel(urlProforma), 
                         )
                       else
                         const Text('⚠️ No se detectó archivo de costeo.', style: TextStyle(color: Colors.red, fontStyle: FontStyle.italic)),
@@ -237,7 +277,6 @@ context.read<TicketBloc>().add(
               const Divider(),
               const SizedBox(height: 8),
               
-              // Selector de Archivo
               InkWell(
                 onTap: _seleccionarArchivo,
                 borderRadius: BorderRadius.circular(8),
@@ -273,7 +312,6 @@ context.read<TicketBloc>().add(
 
               const SizedBox(height: 20),
 
-              // Campo de Observaciones
               TextField(
                 controller: _observacionController,
                 maxLines: 3,
@@ -293,16 +331,12 @@ context.read<TicketBloc>().add(
               BlocBuilder<TicketBloc, TicketState>(
                 builder: (context, state) {
                   final bool procesando = state.status == TicketStatus.loading;
-                  
-                  // 🔒 SENSOR DE SEGURIDAD: Verificamos si Costos ya hizo su trabajo
-                  // Reemplace los enums por los suyos si se llaman distinto
                   final bool procesadoPorCostos = widget.ticket.estadoActual == EstadoTicket.compras || 
                                                   widget.ticket.isCostosCompletado;
 
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // ⚠️ ALARMA VISUAL SI ESTÁ BLOQUEADO
                       if (!procesadoPorCostos)
                         Container(
                           margin: const EdgeInsets.only(bottom: 12),
@@ -326,9 +360,7 @@ context.read<TicketBloc>().add(
                           ),
                         ),
 
-                      // 🎛️ ACTUADOR PRINCIPAL
                       ElevatedButton.icon(
-                        // EL ENCLAVAMIENTO: Solo funciona si no está procesando Y si Costos ya lo liberó
                         onPressed: (procesando || !procesadoPorCostos) ? null : _ejecutarPasoABodega,
                         icon: procesando 
                             ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
@@ -355,7 +387,42 @@ context.read<TicketBloc>().add(
     );
   }
 
-  // Widget auxiliar para mantener el código limpio
+  Widget _buildPdfDownloadContainer({
+    required BuildContext context, 
+    required String titulo, 
+    required String subtitulo, 
+    required String urlPDF,
+    Color colorAcento = Colors.redAccent,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.blueGrey.shade100, 
+        border: Border.all(color: Colors.blueGrey.shade300),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: ListTile(
+        dense: true,
+        leading: Icon(Icons.picture_as_pdf, color: colorAcento, size: 28),
+        title: Text(
+          titulo,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+        ),
+        subtitle: Text(subtitulo, style: const TextStyle(fontSize: 11)),
+        trailing: ElevatedButton.icon(
+          icon: const Icon(Icons.download, size: 16),
+          label: const Text('Descargar'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blueGrey.shade800,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+          onPressed: () => _abrirDocumentoOV(context, urlPDF),
+        ),
+      ),
+    );
+  }
+
   Widget _buildReadoutRow(String label, String value, {bool isHighlighted = false}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,

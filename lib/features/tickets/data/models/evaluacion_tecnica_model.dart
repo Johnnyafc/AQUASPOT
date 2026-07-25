@@ -5,6 +5,8 @@ class EvaluacionTecnicaModel extends EvaluacionTecnicaEntity {
     super.urlProformaExcel,
     required super.urlsAdjuntosPdf,
     super.observacion = '',
+    super.numeroOVGarantia,
+    super.urlsAdjuntosPdfGarantia,
   });
 
   factory EvaluacionTecnicaModel.fromJson(Map<String, dynamic> json) {
@@ -16,6 +18,8 @@ class EvaluacionTecnicaModel extends EvaluacionTecnicaEntity {
       urlsAdjuntosPdf: List<String>.from(json['urlsAdjuntosPdf'] ?? []),
       
       observacion: json['observacion'] ?? '',
+      numeroOVGarantia: json['numeroOVGarantia'] ?? '',
+      urlsAdjuntosPdfGarantia: List<String>.from(json['urlsAdjuntosPdfGarantia'] ?? []),
     );
   }
 
@@ -24,6 +28,8 @@ class EvaluacionTecnicaModel extends EvaluacionTecnicaEntity {
       urlProformaExcel: entity.urlProformaExcel,
       urlsAdjuntosPdf: entity.urlsAdjuntosPdf,
       observacion: entity.observacion,
+      numeroOVGarantia: entity.numeroOVGarantia,
+      urlsAdjuntosPdfGarantia: entity.urlsAdjuntosPdfGarantia,
     );
   }
 
@@ -32,6 +38,8 @@ class EvaluacionTecnicaModel extends EvaluacionTecnicaEntity {
       'urlProformaExcel': urlProformaExcel, // Si es null, Firestore no lo crea o lo guarda como null
       'urlsAdjuntosPdf': urlsAdjuntosPdf,
       'observacion': observacion,
+      'numeroOVGarantia':numeroOVGarantia,
+      'urlsAdjuntosPdfGarantia':urlsAdjuntosPdf,
     };
   }
 }

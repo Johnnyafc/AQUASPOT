@@ -68,6 +68,8 @@ final String marca; // 🚨 El que te habías olvidado
   final String? tipoGarantia;
   final String? responsableFacturacion;
   final bool? esGarantia;
+  final double? horometro;
+  final List<String>? urlsEvidenciasGarantia;
 
 const TicketEntity({
     required this.id,
@@ -107,6 +109,8 @@ const TicketEntity({
     this.tipoGarantia,
     this.responsableFacturacion,
     this.esGarantia,
+    this.horometro,
+    this.urlsEvidenciasGarantia,
   });
 
   // ⚙️ CLONADOR INDUSTRIAL CORREGIDO (Mutación Segura)
@@ -148,6 +152,8 @@ const TicketEntity({
     String? tipoGarantia,
     String? responsableFacturacion,
     bool? esGarantia,
+    double? horometro,
+    List<String>? urlsEvidenciasGarantia,
   }) {
     return TicketEntity(
       id: id ?? this.id,
@@ -187,6 +193,8 @@ const TicketEntity({
       tipoGarantia: tipoGarantia ?? this.tipoGarantia,
       responsableFacturacion: responsableFacturacion ?? this.responsableFacturacion,
       esGarantia: esGarantia ?? this.esGarantia,
+      horometro:horometro ?? this.horometro,
+      urlsEvidenciasGarantia: urlsEvidenciasGarantia ?? this.urlsEvidenciasGarantia,
     );
   }
 
@@ -229,6 +237,8 @@ const TicketEntity({
         tipoGarantia,
         responsableFacturacion,
         esGarantia,
+        horometro,
+        urlsEvidenciasGarantia,
       ];
 }
 

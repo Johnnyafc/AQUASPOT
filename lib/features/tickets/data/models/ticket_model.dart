@@ -46,6 +46,8 @@ class TicketModel extends TicketEntity {
     super.responsableFacturacion,
     super.tipoGarantia,
     super.esGarantia,
+    super.horometro,
+    super.urlsEvidenciasGarantia,
   });
 
   factory TicketModel.fromJson(Map<String, dynamic> json) {
@@ -122,6 +124,10 @@ class TicketModel extends TicketEntity {
           : null,
       tipoGarantia: json['tipoGarantia'] ?? '',
       responsableFacturacion: json['responsableFacturacion'] ?? '',
+      horometro: json['horometro'] != null ? (json['horometro'] as num).toDouble() : null,
+      urlsEvidenciasGarantia: json['urlsEvidenciasGarantia'] != null 
+          ? List<String>.from(json['urlsEvidenciasGarantia']) 
+          : [],
     );
   }
 
@@ -173,7 +179,9 @@ class TicketModel extends TicketEntity {
           ? EvidenciaTrabajoModel.fromEntity(entity.evidenciaTrabajo!)
           : null,
     tipoGarantia:entity.tipoGarantia,
-    responsableFacturacion:entity.responsableFacturacion,      
+    responsableFacturacion:entity.responsableFacturacion, 
+    horometro: entity.horometro,  
+    urlsEvidenciasGarantia: entity.urlsEvidenciasGarantia,   
     );
 
   }
@@ -223,6 +231,8 @@ class TicketModel extends TicketEntity {
       'isCostosCompletado': isCostosCompletado,
       'isComprasCompletado': isComprasCompletado,
        'numeroOrdenVenta': numeroOrdenVenta,
+       'horometro': horometro,
+       'urlsEvidenciasGarantia':urlsEvidenciasGarantia,
         'gestionCompras': gestionCompras != null 
           ? (gestionCompras as GestionComprasModel).toJson() 
           : null,
@@ -230,6 +240,7 @@ class TicketModel extends TicketEntity {
       'evidenciaTrabajo': evidenciaTrabajo != null
           ? EvidenciaTrabajoModel.fromEntity(evidenciaTrabajo!).toJson()
           : null,
+          
     };
   }
 }

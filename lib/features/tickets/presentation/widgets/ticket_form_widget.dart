@@ -15,7 +15,6 @@ import 'camera_manager_widget.dart';
 import 'section_title_widget.dart';
 
 class TicketForm extends StatelessWidget {
-  // ... (Tus mismas declaraciones de variables, controladores y callbacks se mantienen exactamente igual) ...
   final GlobalKey<FormState> formKey;
   final bool isProcessing;
   final List<ClienteEntity> listaClientes;
@@ -28,6 +27,14 @@ class TicketForm extends StatelessWidget {
   final TextEditingController customEquipoController;
   final TextEditingController serieController; 
   final TextEditingController notasRecepcionController; 
+  
+  // ==========================================
+  // 🔌 NUEVOS PINES DE CONEXIÓN (Telemetría Agrícola)
+  // ==========================================
+  final TextEditingController horometroController;
+  final VoidCallback onAddMedia;
+  // ==========================================
+
   final Sede? selectedSede;
   final TipoEquipo? selectedEquipo;
   final String? selectedClienteId;
@@ -45,8 +52,10 @@ class TicketForm extends StatelessWidget {
   final TipoRequerimiento tipoRequerimiento;
   final LugarAtencion lugarAtencion;
   final MarcaEquipo? marcaSeleccionada;
- final ValueChanged<MarcaEquipo?> onMarcaChanged;
- final TipoGarantia tipoGarantia;
+  final ValueChanged<MarcaEquipo?> onMarcaChanged;
+  final TipoGarantia tipoGarantia;
+  final List<XFile> archivosGarantia;
+  final ValueChanged<int> onRemoveArchivoGarantia;
 
   const TicketForm({
     super.key,
@@ -62,6 +71,13 @@ class TicketForm extends StatelessWidget {
     required this.customEquipoController,
     required this.serieController,
     required this.notasRecepcionController,
+    
+    // 🔌 AÑADIDOS AL CONSTRUCTOR (Enclavamiento obligatorio)
+    required this.horometroController,
+    required this.onAddMedia,
+    required this.archivosGarantia, // <-- Añadir al constructor
+    required this.onRemoveArchivoGarantia,
+    
     required this.selectedSede,
     required this.selectedEquipo,
     required this.selectedClienteId,
@@ -138,7 +154,7 @@ Widget build(BuildContext context) {
           const Padding(padding: EdgeInsets.symmetric(vertical: 24.0), child: Divider(thickness: 1.5, color: Colors.black12)),
 
           // ⚙️ MÓDULO B: EQUIPO 
-          ConfirmacionEquipoSection(
+         ConfirmacionEquipoSection(
             selectedEquipo: selectedEquipo,
             accesoriosSeleccionados: accesoriosSeleccionados,
             customEquipoController: customEquipoController,
@@ -146,9 +162,18 @@ Widget build(BuildContext context) {
             fallaController: fallaController,
             onEquipoChanged: onEquipoChanged,
             onAccesorioChanged: onAccesorioChanged,
-            mostrarAccesorios: mostrarAccesorios, // 🚀 Responde automáticamente a Taller/Campo
+            mostrarAccesorios: mostrarAccesorios, 
             selectedMarca: marcaSeleccionada,
             onMarcaChanged: onMarcaChanged,
+            
+            // 🚀 CONEXIÓN DE LOS PINES DE GARANTÍA
+            tipoRequerimiento: tipoRequerimiento,
+            horometroController: horometroController,
+            onAddMedia: onAddMedia,
+
+            // ⚡ SEÑALES ENRUTADAS CORRECTAMENTE DESDE EL PADRE
+            archivosGarantia: archivosGarantia,
+            onRemoveArchivo: onRemoveArchivoGarantia,
           ),
           
           // 🚪 COMPUERTA DE AISLAMIENTO: Ocultar Parámetros y Telemetría en Campo
