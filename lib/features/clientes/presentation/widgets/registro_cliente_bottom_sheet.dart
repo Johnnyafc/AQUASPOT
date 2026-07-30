@@ -37,9 +37,9 @@ class _RegistroClienteBottomSheetState extends State<RegistroClienteBottomSheet>
   String _nombreContacto = '';
   String _emailContacto = '';
   String _celular = '';
-  String _subSector = 'DURAN'; // Valor nominal por defecto
+  String _subSector = 'GUAYAS'; // Valor nominal por defecto
 
-  final List<String> _sedesDisponibles = ['EL_GUABO', 'DURAN'];
+  final List<String> _sedesDisponibles = ['GUAYAS', 'EL ORO', 'SANTA ELENA', 'ESMERALDA','PERU'];
 
   void _submitForm() {
     // ⚙️ Enclavamiento: Si el formulario es inválido, abortamos
@@ -104,7 +104,7 @@ class _RegistroClienteBottomSheetState extends State<RegistroClienteBottomSheet>
 
                   // 1. SEDE (SubSector)
                   DropdownButtonFormField<String>(
-                    decoration: _inputStyle('Lugar de recepción', Icons.business),
+                    decoration: _inputStyle('Sede camaronera ', Icons.business),
                     value: _subSector,
                     items: _sedesDisponibles.map((sede) {
                       return DropdownMenuItem(value: sede, child: Text(sede));

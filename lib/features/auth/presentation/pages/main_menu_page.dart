@@ -54,6 +54,7 @@ class _MainMenuPageState extends State<MainMenuPage> {
         }
 
         final operador = state.usuario;
+        final bool isAdmin = operador.rol == RolUsuario.admin;
 
         // ✅ EL MULTIPLEXOR DE VISTAS 
         // Aquí conectamos los módulos independientes
@@ -62,15 +63,15 @@ class _MainMenuPageState extends State<MainMenuPage> {
           const HistorialTicketsPage(), // ✅ SEÑAL CONECTADA AL PUERTO 2
         ];
 
-     return Scaffold(
+      return Scaffold(
           backgroundColor: const Color(0xFFF4F7F6),
           appBar: AppBar(
             backgroundColor: Colors.white,
             elevation: 0,
             title: const Text("Aquaspot", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
             actions: [
-              // ⚙️ COMPUERTA LÓGICA: Acceso restringido a Comerciales
-              if (operador.rol.name.toLowerCase() == 'comercial')
+              // ⚙️ COMPUERTA LÓGICA: Acceso restringido a Comerciales y Administradores
+              if (operador.rol.name.toLowerCase() == 'comercial' || isAdmin)
                 IconButton(
                   icon: const Icon(Icons.person_add_alt_1, color: Colors.black54), // Color atenuado para no ser invasivo
                   tooltip: 'Registrar Cliente',
@@ -159,8 +160,20 @@ class _InicioView extends StatelessWidget {
 
   List<Widget> _getModules(BuildContext context, UsuarioEntity operador) {
     List<Widget> modules = [];
+    final bool isAdmin = operador.rol == RolUsuario.admin;
     
-    if (operador.rol == RolUsuario.requerimiento || operador.rol == RolUsuario.supervisor) {
+    // 🔒 ACCESO EXCLUSIVO PARA SUPER ADMINISTRADORES
+    if (isAdmin) {
+      modules.add(_buildCardOption(
+        title: 'Gestión de Operarios',
+        icon: Icons.admin_panel_settings,
+        color: Colors.blueGrey, // Color sobrio para módulos administrativos
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RegistroUsuarioPage())),
+      ));
+    }
+
+    // 🚀 MÓDULOS DE REQUERIMIENTO Y RECEPCIÓN
+    if (isAdmin || operador.rol == RolUsuario.requerimiento || operador.rol == RolUsuario.supervisor) {
       modules.add(_buildCardOption(
         title: 'Crear Ticket',
         icon: Icons.add_box,
@@ -169,197 +182,99 @@ class _InicioView extends StatelessWidget {
       ));
     }
 
-    // 2. MÓDULO DE RECEPCIÓN (Fase Beta - Restringido temporalmente)
-    // Cuando el comisionamiento termine, agregaremos el rol de 'recepcion' o 'requerimiento' aquí.
-    if (operador.rol == RolUsuario.supervisor || operador.rol == RolUsuario.recepcion ) {
+    if (isAdmin || operador.rol == RolUsuario.supervisor || operador.rol == RolUsuario.recepcion ) {
       modules.add(_buildCardOption(
         title: 'Tickets',
-        icon: Icons.inventory_outlined, // Ícono industrial de inventario/recepción
+        icon: Icons.inventory_outlined, 
         color: Colors.teal, 
-        onTap: () {
-          
-           Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaRecepcionPage()));
-        },
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaRecepcionPage())),
       ));
     }
 
-    if (operador.rol == RolUsuario.tecnico || operador.rol == RolUsuario.supervisor) {
-    
-    modules.add(_buildCardOption(
+    // 🔧 MÓDULOS TÉCNICOS
+    if (isAdmin || operador.rol == RolUsuario.tecnico || operador.rol == RolUsuario.supervisor) {
+      modules.add(_buildCardOption(
         title: 'Recepción del Guabo',
         icon: Icons.car_rental,
         color: Colors.lightBlue,
-       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaRecepcionGuaboPage())),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaRecepcionGuaboPage())),
       ));
-
 
       modules.add(_buildCardOption(
         title: 'Evaluaciones Técnicas',
         icon: Icons.handyman,
         color: Colors.orange,
-       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaEvaluacionesPage())),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaEvaluacionesPage())),
       ));
     }
 
-
-    if (operador.rol == RolUsuario.supervisor) {
+    // 📋 MÓDULOS DE SUPERVISIÓN
+    if (isAdmin || operador.rol == RolUsuario.supervisor) {
       modules.add(_buildCardOption(
         title: 'Proceso de trabajo',
         icon: Icons.toll,
         color: Colors.orange,
-       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaTrabajosPage())),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaTrabajosPage())),
       ));
 
       modules.add(_buildCardOption(
         title: 'Revisión de garantias',
         icon: Icons.perm_contact_cal_outlined,
         color: Colors.green,
-       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaRevisionesGarantiasPage())),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaRevisionesGarantiasPage())),
       ));
     }
 
-// 🔒 ACCESO EXCLUSIVO PARA SUPER ADMINISTRADORES
-    if (operador.rol == RolUsuario.admin) {
-      modules.add(_buildCardOption(
-        title: 'Gestión de Operarios',
-        icon: Icons.admin_panel_settings,
-        color: Colors.blueGrey, // Color sobrio para módulos administrativos
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const RegistroUsuarioPage())
-        ),
-      ));
-
-        modules.add(_buildCardOption(
-        title: 'Crear Ticket',
-        icon: Icons.add_box,
-        color: Colors.blue,
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CreacionTicketPage())),
-      ));
-
-      modules.add(_buildCardOption(
-        title: 'Tickets',
-        icon: Icons.inventory_outlined, // Ícono industrial de inventario/recepción
-        color: Colors.teal, 
-        onTap: () {
-          // TODO: Descomentar cuando la vista BandejaRecepcionPage esté creada
-           Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaRecepcionPage()));
-        },
-      ));
-
-    modules.add(_buildCardOption(
-        title: 'Evaluaciones Técnicas',
-        icon: Icons.handyman,
-        color: Colors.orange,
-       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaEvaluacionesPage())),
-      ));
-     modules.add(_buildCardOption(
-        title: 'Crear proforma',
-        icon: Icons.business_center,
-        color: Colors.green, // Color asociado a transacciones comerciales
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const BandejaComercialPage())
-        ),
-      ));
-
-            modules.add(_buildCardOption(
-        title: 'Proformas enviadas',
-        icon: Icons.access_alarm,
-        color: Colors.blue, // Color asociado a transacciones comerciales
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const BandejaProformasEnviadasPage())
-        ),
-      ));
-
-
-      modules.add(_buildCardOption(
-    title: 'Crear proyecto',
-    icon: Icons.account_balance_wallet, // Ícono financiero
-    color: Colors.orange[800]!, // Color industrial de alerta/gestión
-    onTap: () => Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const BandejaCostosPage())
-    ),
-  ));
-
-
-   modules.add(_buildCardOption(
-    title: 'Compras',
-    icon: Icons.account_balance_wallet, // Ícono financiero
-    color: Colors.orange[800]!, // Color industrial de alerta/gestión
-    onTap: () => Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const BandejaComprasPage())
-    ),
-  ));
-
-  modules.add(_buildCardOption(
-    title: 'Validación Bodega',
-    icon: Icons.factory, // Ícono financiero
-    color: Colors.blue[800]!, // Color industrial de alerta/gestión
-    onTap: () => Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const BandejaBodegaPage())
-    ),
-  ));
-
-    }
-    if (operador.rol == RolUsuario.comercial) {
+    // 💼 MÓDULOS COMERCIALES
+    if (isAdmin || operador.rol == RolUsuario.comercial) {
       modules.add(_buildCardOption(
         title: 'Crear proforma',
         icon: Icons.business_center,
-        color: Colors.green, // Color asociado a transacciones comerciales
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const BandejaComercialPage())
-        ),
+        color: Colors.green, 
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaComercialPage())),
       ));
-            modules.add(_buildCardOption(
+      
+      modules.add(_buildCardOption(
         title: 'Proformas enviadas',
         icon: Icons.access_alarm,
-        color: Colors.blue, // Color asociado a transacciones comerciales
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const BandejaProformasEnviadasPage())
-        ),
+        color: Colors.blue, 
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaProformasEnviadasPage())),
       ));
 
-               modules.add(_buildCardOption(
+      modules.add(_buildCardOption(
         title: 'Validación entregas comercial',
         icon: Icons.access_alarm,
-        color: Colors.blue, // Color asociado a transacciones comerciales
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const BandejaValidacionFacturacionPage())
-        ),
+        color: Colors.blue, 
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaValidacionFacturacionPage())),
       ));
     }
 
-    if (operador.rol == RolUsuario.costos) {
-    modules.add(_buildCardOption(
-    title: 'Crear proyecto',
-    icon: Icons.account_balance_wallet, // Ícono financiero
-    color: Colors.orange[800]!, // Color industrial de alerta/gestión
-    onTap: () => Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const BandejaCostosPage())
-    ),
-  ));
-}
+    // 💰 MÓDULOS DE COSTOS
+    if (isAdmin || operador.rol == RolUsuario.costos) {
+      modules.add(_buildCardOption(
+        title: 'Crear proyecto',
+        icon: Icons.account_balance_wallet, 
+        color: Colors.orange[800]!, 
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaCostosPage())),
+      ));
+    }
 
-if (operador.rol == RolUsuario.compras) {
-    modules.add(_buildCardOption(
-    title: 'Compras',
-    icon: Icons.account_balance_wallet, // Ícono financiero
-    color: Colors.orange[800]!, // Color industrial de alerta/gestión
-    onTap: () => Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const BandejaComprasPage())
-    ),
-  ));
+    // 🛒 MÓDULOS DE COMPRAS Y BODEGA
+    if (isAdmin || operador.rol == RolUsuario.compras) {
+      modules.add(_buildCardOption(
+        title: 'Compras',
+        icon: Icons.account_balance_wallet, 
+        color: Colors.orange[800]!, 
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaComprasPage())),
+      ));
 
-  modules.add(_buildCardOption(
-    title: 'Validación Bodega',
-    icon: Icons.factory, // Ícono financiero
-    color: Colors.blue[800]!, // Color industrial de alerta/gestión
-    onTap: () => Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const BandejaBodegaPage())
-    ),
-  ));
-}
-
-
+      modules.add(_buildCardOption(
+        title: 'Validación Bodega',
+        icon: Icons.factory, 
+        color: Colors.blue[800]!, 
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaBodegaPage())),
+      ));
+    }
 
     return modules;
   } 
