@@ -52,49 +52,28 @@ class _ModalAprobacionComercialState extends State<ModalAprobacionComercial> {
   // 🔌 Conecta aquí tu FilePicker o CameraManager
 // 🔌 ACTUADOR REAL: Lector de archivos del dispositivo
 Future<void> _seleccionarOrdenVenta() async {
-    FilePickerResult? result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
-      withData: true, 
-    );
+  FilePickerResult? result = await FilePicker.pickFiles(
+    type: FileType.custom,
+    allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+    withData: true, 
+  );
 
-    if (result != null && result.files.isNotEmpty) {
-      final file = result.files.single;
-      final nombreCompleto = file.name;
+  if (result != null && result.files.isNotEmpty) {
+    final file = result.files.single;
+    final nombreCompleto = file.name;
 
-      // 1. Decapado de la extensión del archivo
-      final nombreSinExtension = nombreCompleto.contains('.')
-          ? nombreCompleto.substring(0, nombreCompleto.lastIndexOf('.'))
-          : nombreCompleto;
+    // 1. Decapado de la extensión del archivo
+    final nombreSinExtension = nombreCompleto.contains('.')
+        ? nombreCompleto.substring(0, nombreCompleto.lastIndexOf('.'))
+        : nombreCompleto;
 
-      // 2. Filtro de Validación (Regex Industrial)
-      // Exige que empiece con "OV" (indistinto de mayúsculas/minúsculas), 
-      // permite un guion o guion bajo opcional, seguido de números.
-      // Acepta: OV-1234, ov1234, OV_1234. Rechaza: doc_OV.pdf, OV-test.jpg
-      final regexVenta = RegExp(r'^OV[-_]?\d+$', caseSensitive: false);
-
-      if (!regexVenta.hasMatch(nombreSinExtension)) {
-        // 🚨 Alarma HMI: El formato es incorrecto
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('❌ ARCHIVO RECHAZADO: El nombre debe tener el formato OV-XXXX (Ej: OV-12345).'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 4),
-            ),
-          );
-        }
-        return; // Cortocircuito transaccional: Abortamos la operación.
-      }
-
-      // 3. Confirmación en memoria (Si pasa la auditoría de la Regex)
-      setState(() {
-        _ordenesVenta.add(file);
-        // Lo forzamos a mayúsculas para estandarizar la base de datos
-        _numeroOrdenExtraido = nombreSinExtension.toUpperCase(); 
-      });
-    }
+    // 2. Transacción sin restricciones: Se acepta cualquier nomenclatura
+    setState(() {
+      _ordenesVenta.add(file);
+      _numeroOrdenExtraido = nombreSinExtension.toUpperCase(); 
+    });
   }
+}
 
   Future<void> _seleccionarOrdenCompra() async {
     FilePickerResult? result = await FilePicker.pickFiles(

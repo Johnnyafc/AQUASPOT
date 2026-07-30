@@ -91,6 +91,7 @@ class _AsignacionCostosPageState extends State<AsignacionCostosPage> {
               const SizedBox(height: 8),
               _buildReadOnlyField("Cliente", widget.ticket.clienteId),
               _buildReadOnlyField("Máquina", widget.ticket.equipo.name),
+              _buildReadOnlyField("Serie", widget.ticket.numeroSerie.toString()),
               _buildReadOnlyField("Marca", widget.ticket.marca ?? 'No especificada'), 
               _buildReadOnlyField("Ubicación", widget.ticket.lugarAtencion.name),
               

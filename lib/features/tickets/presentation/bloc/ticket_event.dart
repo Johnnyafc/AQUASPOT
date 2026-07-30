@@ -497,3 +497,27 @@ class DictaminarGarantiaEvent extends TicketEvent {
     required this.rolUsuario,
   });
 }
+class ProcesarFacturacionEvent extends TicketEvent {
+  final String ticketId;
+  final bool aprobado; // true = Facturado, false = Devuelto/Rechazado
+  final String nombreUsuario;
+  final String rolUsuario;
+  final String? observaciones;
+
+  const ProcesarFacturacionEvent({
+    required this.ticketId,
+    required this.aprobado,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+    this.observaciones,
+  });
+
+  @override
+  List<Object?> get props => [
+        ticketId, 
+        aprobado, 
+        nombreUsuario, 
+        rolUsuario, 
+        observaciones
+      ];
+}

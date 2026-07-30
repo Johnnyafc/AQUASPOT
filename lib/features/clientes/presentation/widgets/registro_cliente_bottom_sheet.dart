@@ -115,7 +115,7 @@ class _RegistroClienteBottomSheetState extends State<RegistroClienteBottomSheet>
 
                   // 2. RAZÓN SOCIAL (Dirección en Firestore)
                   TextFormField(
-                    decoration: _inputStyle('Razón Social / Cliente', Icons.search),
+                    decoration: _inputStyle('Grupo donde pertenece la camaronera', Icons.search),
                     textCapitalization: TextCapitalization.words,
                     validator: (val) => val == null || val.isEmpty ? 'Requerido' : null,
                     onSaved: (val) => _camaronera = val!,

@@ -91,7 +91,8 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     on<ActualizarEstadoTicketEvent>(_onActualizarEstadoTicket);
     on<SeleccionarTipoGarantiaEvent>(_onSeleccionarTipoGarantia);
     on<ResetearRequerimientoEvent>(_onResetearTodo);
-    on<DictaminarGarantiaEvent>(_onDictaminarGarantia);                            
+    on<DictaminarGarantiaEvent>(_onDictaminarGarantia); 
+    on<ProcesarFacturacionEvent>(_onProcesarFacturacion);                           
   }
 
  
@@ -158,7 +159,7 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
   // 4. MUTACIÓN DEL TICKET 
   final ticketActualizado = event.ticket.copyWith(
     evidenciaTrabajo: evidencia,
-    estadoActual: EstadoTicket.finalizado, // 🚀 TRASPASO AL SIGUIENTE ESTADO LOGICO
+    estadoActual: EstadoTicket.validacionFacturacion, // 🚀 TRASPASO AL SIGUIENTE ESTADO LOGICO
     historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
   );
 
@@ -177,6 +178,69 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
       ));
     }
   );
+}
+
+Future<void> _onProcesarFacturacion(
+  ProcesarFacturacionEvent event, 
+  Emitter<TicketState> emit
+) async {
+  // 0. SEÑAL DE OCUPADO EN EL BUS
+  emit(state.copyWith(
+    status: TicketStatus.loading,
+    message: 'Consolidando base de datos y cerrando ciclo comercial...'
+  ));
+
+  try {
+    // 1. EXTRACCIÓN DEL TICKET (Lectura del bus de datos local)
+    final ticketOriginal = state.historial.firstWhere(
+      (t) => t.id == event.ticketId,
+      orElse: () => throw Exception('Anomalía: El ticket no existe en el árbol de estado local.'),
+    );
+    
+    
+    // 2. ENSAMBLAJE DE AUDITORÍA
+    final eventoAuditoria = EventoAuditoriaEntity(
+      accion: 'COMERCIAL VALIDADO. TICKET FINALIZADO.',
+      usuarioNombre: event.nombreUsuario, // ⚠️ Conecte esto a su telemetría de sesión real
+      usuarioRol: event.rolUsuario,
+      timestamp: DateTime.now(),
+    );
+
+    // 3. MUTACIÓN DEL TICKET (Inmutabilidad estricta)
+    final ticketActualizado = ticketOriginal.copyWith(
+      estadoActual: EstadoTicket.finalizado, // 🚀 TRASPASO AL ESTADO LÓGICO FINAL
+      historialEventos: [...ticketOriginal.historialEventos, eventoAuditoria],
+    );
+
+    // 4. PERSISTENCIA Y HOT SWAP
+    // Se invoca el UseCase que ya tiene configurado para impactar Firestore
+    final dbResult = await actualizarTicket(ticketActualizado);
+
+    dbResult.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error, 
+        message: 'Error al actualizar Firestore: ${failure.message}'
+      )),
+      (ticketGuardado) {
+        // Reemplazo atómico en la lista actual para no forzar recargas de red
+        final listaActualizada = state.historial
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+            
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: 'Facturación procesada correctamente. Ciclo cerrado.',
+          historial: listaActualizada,
+          currentTicket: ticketGuardado,
+        ));
+      }
+    );
+  } catch (e) {
+    emit(state.copyWith(
+      status: TicketStatus.error, 
+      message: 'Falla interna del sistema: $e'
+    ));
+  }
 }
 
 

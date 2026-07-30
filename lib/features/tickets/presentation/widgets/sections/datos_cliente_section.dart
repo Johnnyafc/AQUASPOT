@@ -79,9 +79,9 @@ class DatosClienteSection extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         CustomInputField(controller: campamentoController, label: 'Campamento / Finca', icon: Icons.map),
-        CustomInputField(controller: nombreContactoController, label: 'Nombre contacto', icon: Icons.person),
-        CustomInputField(controller: emailController, label: 'Correo', icon: Icons.email, keyboard: TextInputType.emailAddress),
-        CustomInputField(controller: telefonoController, label: 'Teléfono', icon: Icons.phone, keyboard: TextInputType.phone),
+        CustomInputField(controller: nombreContactoController, label: 'Nombre contacto', icon: Icons.person, obscureText: true,),
+        CustomInputField(controller: emailController, label: 'Correo', icon: Icons.email, keyboard: TextInputType.emailAddress,obscureText: true,),
+        CustomInputField(controller: telefonoController, label: 'Teléfono', icon: Icons.phone, keyboard: TextInputType.phone,obscureText: true,),
       ],
     );
   }

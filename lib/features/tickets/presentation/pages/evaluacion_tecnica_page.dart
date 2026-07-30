@@ -123,7 +123,7 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
     );
   }
 
-  @override
+ @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text("Evaluación: ${widget.ticket.id}")),
@@ -144,181 +144,285 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
           final bool isProcesando = state.status == TicketStatus.loading;
           final bool formValido = _isFormularioValido(isProcesando);
 
-          return Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: SingleChildScrollView( 
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text("Documentación Técnica", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 24),
-                  
-                  // ==========================================
-                  // 📂 MÓDULO DINÁMICO DE GARANTÍAS (OV ÚNICA)
-                  // ==========================================
-                  if (_requiereCamposGarantia) ...[
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.orange.shade700, width: 2),
-                        borderRadius: BorderRadius.circular(8),
-                        color: Colors.orange.shade50,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800),
-                              const SizedBox(width: 8),
-                              const Text("REQUISITOS DE GARANTÍA", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                            ],
-                          ),
-                          const Divider(),
-                          const SizedBox(height: 8),
-                          
-                          // Título dinámico basado en el tipo de garantía
-                          Text(
-                            _esGarantiaServicio 
-                                ? "Adjunte documento de OV (Servicio Antiguo)" 
-                                : "Adjunte documento de OV (Máquina Nueva)", 
-                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)
-                          ),
-                          const SizedBox(height: 8),
-                          
-                          OutlinedButton.icon(
-                            icon: const Icon(Icons.receipt_long, color: Colors.orange),
-                            label: const Text("SELECCIONAR PDF DE ORDEN DE VENTA"),
-                            onPressed: isProcesando ? null : _seleccionarDocumentoOV,
-                            style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 50), backgroundColor: Colors.white),
-                          ),
-                          
-                          // Renderizado del archivo único seleccionado
-                          if (_documentoOVGarantia != null) ...[
-                            const SizedBox(height: 8),
-                            Card(
-                              child: ListTile(
-                                leading: const Icon(Icons.picture_as_pdf, color: Colors.orange),
-                                title: Text(_documentoOVGarantia!.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.red),
-                                  onPressed: isProcesando ? null : () => setState(() => _documentoOVGarantia = null),
-                                ),
-                              ),
+          // ==========================================
+          // 🛡️ CHÁSIS ESTRUCTURAL: Contención Web
+          // ==========================================
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 900), // Límite de expansión en escritorio
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: SingleChildScrollView( 
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ==========================================
+                      // 📊 DATOS DEL REQUERIMIENTO (Solo Lectura)
+                      // ==========================================
+                      const Text("Datos del Requerimiento", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003057))),
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF4F6F9), // Tono gris claro azulado del diseño
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildInfoRow('Estado Actual:', widget.ticket.estadoActual.name.toUpperCase()),
+                            const Divider(height: 24),
+                            
+                            _buildInfoRow('Equipo:', widget.ticket.equipo.name.toUpperCase()),
+                            _buildInfoRow('Lugar de recepción:', widget.ticket.lugarAtencion?.name.toUpperCase() ?? 'NINGUNO'),
+                            const Divider(height: 24),
+                            
+                            _buildInfoRow('Cliente:', widget.ticket.clienteId.toUpperCase()),
+                            _buildInfoRow('Campamento:', widget.ticket.campamento.toUpperCase()),
+                            _buildInfoRow('Contacto:', '${widget.ticket.nombreContacto ?? 'Sin registro'} (${widget.ticket.telefonoContacto ?? 'Sin registro'})'),
+                            const Divider(height: 24),
+                            
+                            _buildInfoRow('Número de Serie:', widget.ticket.numeroSerie ?? 'No especificado'),
+                            const Divider(height: 24),
+                            
+                            const Text('Falla Reportada e Inspección:', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                            const SizedBox(height: 6),
+                            Text(
+                              widget.ticket.fallaReportada ?? 'Sin detalle de falla reportada.', 
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)
                             ),
                           ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // ==========================================
-                  // 📂 BLOQUE A: PROFORMA EXCEL
-                  // ==========================================
-                  const Text("Proforma de Costos", style: TextStyle(fontWeight: FontWeight.w600, color: Colors.blueGrey)),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.table_view, color: Colors.green),
-                    label: const Text("ADJUNTAR EXCEL (.xls, .xlsx)"),
-                    onPressed: isProcesando ? null : _seleccionarExcelCosteo,
-                    style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
-                  ),
-                  if (_proformaExcel != null) ...[
-                    const SizedBox(height: 8),
-                    Card(
-                      color: Colors.green.shade50,
-                      child: ListTile(
-                        leading: const Icon(Icons.check_circle, color: Colors.green),
-                        title: Text(_proformaExcel!.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: isProcesando ? null : () => setState(() => _proformaExcel = null),
                         ),
                       ),
-                    ),
-                  ],
-                  const SizedBox(height: 24),
+                      const SizedBox(height: 32),
 
-                  // ==========================================
-                  // 📂 BLOQUE B: EVIDENCIA PDF REGULAR
-                  // ==========================================
-                  const Text("Evidencia Documental (General)", style: TextStyle(fontWeight: FontWeight.w600, color: Colors.blueGrey)),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
-                    label: const Text("ADJUNTAR PDFs"),
-                    onPressed: isProcesando ? null : _seleccionarAdjuntosPdf,
-                    style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
-                  ),
-                  if (_adjuntosPdf.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _adjuntosPdf.length,
-                      itemBuilder: (context, index) {
-                        final file = _adjuntosPdf[index];
-                        return Card(
+                      // ==========================================
+                      // 📄 DOCUMENTACIÓN TÉCNICA
+                      // ==========================================
+                      const Text("Documentación Técnica", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 24),
+                      
+                      // ==========================================
+                      // 📂 MÓDULO DINÁMICO DE GARANTÍAS (OV ÚNICA)
+                      // ==========================================
+                      if (_requiereCamposGarantia) ...[
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.orange.shade700, width: 2),
+                            borderRadius: BorderRadius.circular(8),
+                            color: Colors.orange.shade50,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800),
+                                  const SizedBox(width: 8),
+                                  const Text("REQUISITOS DE GARANTÍA", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                ],
+                              ),
+                              const Divider(),
+                              const SizedBox(height: 8),
+                              
+                              // Título dinámico basado en el tipo de garantía
+                              Text(
+                                _esGarantiaServicio 
+                                    ? "Adjunte documento de OV (Servicio Antiguo)" 
+                                    : "Adjunte documento de OV (Máquina Nueva)", 
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)
+                              ),
+                              const SizedBox(height: 8),
+                              
+                              OutlinedButton.icon(
+                                icon: const Icon(Icons.receipt_long, color: Colors.orange),
+                                label: const Text("SELECCIONAR PDF DE ORDEN DE VENTA"),
+                                onPressed: isProcesando ? null : _seleccionarDocumentoOV,
+                                style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 50), backgroundColor: Colors.white),
+                              ),
+                              
+                              // Renderizado del archivo único seleccionado
+                              if (_documentoOVGarantia != null) ...[
+                                const SizedBox(height: 8),
+                                Card(
+                                  child: ListTile(
+                                    leading: const Icon(Icons.picture_as_pdf, color: Colors.orange),
+                                    title: Text(_documentoOVGarantia!.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    trailing: IconButton(
+                                      icon: const Icon(Icons.delete, color: Colors.red),
+                                      onPressed: isProcesando ? null : () => setState(() => _documentoOVGarantia = null),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+
+                      // ==========================================
+                      // 📂 BLOQUE A: PROFORMA EXCEL
+                      // ==========================================
+                      const Text("Proforma de Costos", style: TextStyle(fontWeight: FontWeight.w600, color: Colors.blueGrey)),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.table_view, color: Colors.green),
+                        label: const Text("ADJUNTAR EXCEL (.xls, .xlsx)"),
+                        onPressed: isProcesando ? null : _seleccionarExcelCosteo,
+                        style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
+                      ),
+                      if (_proformaExcel != null) ...[
+                        const SizedBox(height: 8),
+                        Card(
+                          color: Colors.green.shade50,
                           child: ListTile(
-                            leading: const Icon(Icons.picture_as_pdf, color: Colors.blueGrey),
-                            title: Text(file.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            leading: const Icon(Icons.check_circle, color: Colors.green),
+                            title: Text(_proformaExcel!.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                             trailing: IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: isProcesando ? null : () => setState(() => _adjuntosPdf.removeAt(index)),
+                              onPressed: isProcesando ? null : () => setState(() => _proformaExcel = null),
                             ),
                           ),
-                        );
-                      },
-                    ),
-                  ],
-                  const SizedBox(height: 24),
+                        ),
+                      ],
+                      const SizedBox(height: 24),
 
-                  // ==========================================
-                  // 📝 SENSOR DE OBSERVACIÓN 
-                  // ==========================================
-                  TextField(
-                    controller: _observacionController,
-                    maxLines: 4,
-                    enabled: !isProcesando, 
-                    onChanged: (_) => setState(() {}), 
-                    decoration: const InputDecoration(
-                      labelText: 'Observación Técnica (Opcional)',
-                      hintText: 'Ingrese detalles adicionales, estado de las piezas, etc.',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.engineering),
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  
-                  // ==========================================
-                  // ⚡ ACTUADOR FINAL
-                  // ==========================================
-                  SizedBox(
-                    width: double.infinity,
-                    height: 55,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF005A9C),
-                        disabledBackgroundColor: Colors.grey.shade400,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                      // ==========================================
+                      // 📂 BLOQUE B: EVIDENCIA PDF REGULAR
+                      // ==========================================
+                      const Text("Evidencia Documental (General)", style: TextStyle(fontWeight: FontWeight.w600, color: Colors.blueGrey)),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
+                        label: const Text("ADJUNTAR PDFs"),
+                        onPressed: isProcesando ? null : _seleccionarAdjuntosPdf,
+                        style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
                       ),
-                      onPressed: formValido ? _enviarReporte : null,
-                      child: isProcesando 
-                          ? const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)),
-                                SizedBox(width: 12),
-                                Text("TRANSMITIENDO...", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                              ],
-                            )
-                          : const Text("ENVIAR REPORTE TÉCNICO", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                    ),
+                      if (_adjuntosPdf.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _adjuntosPdf.length,
+                          itemBuilder: (context, index) {
+                            final file = _adjuntosPdf[index];
+                            return Card(
+                              child: ListTile(
+                                leading: const Icon(Icons.picture_as_pdf, color: Colors.blueGrey),
+                                title: Text(file.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red),
+                                  onPressed: isProcesando ? null : () => setState(() => _adjuntosPdf.removeAt(index)),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                      const SizedBox(height: 24),
+
+                      // ==========================================
+                      // 📝 SENSOR DE OBSERVACIÓN 
+                      // ==========================================
+                      TextField(
+                        controller: _observacionController,
+                        maxLines: 4,
+                        enabled: !isProcesando, 
+                        onChanged: (_) => setState(() {}), 
+                        decoration: const InputDecoration(
+                          labelText: 'Observación Técnica (Opcional)',
+                          hintText: 'Ingrese detalles adicionales, estado de las piezas, etc.',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.engineering),
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                      
+                      // ==========================================
+                      // ⚡ ACTUADOR FINAL
+                      // ==========================================
+                      SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF005A9C),
+                            disabledBackgroundColor: Colors.grey.shade400,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                          ),
+                          onPressed: formValido ? _enviarReporte : null,
+                          child: isProcesando 
+                              ? const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)),
+                                    SizedBox(width: 12),
+                                    Text("TRANSMITIENDO...", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                                  ],
+                                )
+                              : const Text("ENVIAR REPORTE TÉCNICO", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ⚙️ SUBRUTINA VISUAL: Evita la duplicación de código en el diseño de las filas de datos
+// ⚙️ SUBRUTINA VISUAL (Responsiva): Se adapta al ancho del contenedor local
+// ⚙️ SUBRUTINA VISUAL: Responsividad de Grado Industrial
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // 📱 SENSOR DE CAÍDA: Pantallas estrechas (móviles o ventanas web reducidas)
+          if (constraints.maxWidth < 500) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label, 
+                  style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500)
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value, 
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87)
+                ),
+              ],
+            );
+          }
+
+          // 🖥️ MODO WEB / TABLET: 
+          // Usamos un ancho fijo más holgado (180px) para que las etiquetas no hagan 'wrap',
+          // y mantenemos el 'Expanded' en el valor para que no se separe demasiado del título.
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 180, // Ancho de columna recalibrado para Web
+                child: Text(
+                  label, 
+                  style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500)
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  value, 
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87)
+                ),
+              ),
+            ],
           );
         },
       ),

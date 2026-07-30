@@ -57,6 +57,7 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
       case EstadoTicket.compras: return Icons.shopping_cart;
       case EstadoTicket.bodega: return Icons.inventory;
       case EstadoTicket.procesoTrabajo: return Icons.engineering;
+      case EstadoTicket.validacionFacturacion: return Icons.loupe;
       case EstadoTicket.finalizado: return Icons.task_alt;
       case EstadoTicket.anulado: return Icons.cancel;
     }

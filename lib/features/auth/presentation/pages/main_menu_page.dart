@@ -9,6 +9,7 @@ import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaCo
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaProformasEnviadasPage.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaRecepcionGuaboPage.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaTrabajosPage.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/pages/ValidacionFacturacionPage.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_comercial_Page.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_compras_page.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_revisiones_garantias_page.dart';
@@ -314,6 +315,15 @@ class _InicioView extends StatelessWidget {
         color: Colors.blue, // Color asociado a transacciones comerciales
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const BandejaProformasEnviadasPage())
+        ),
+      ));
+
+               modules.add(_buildCardOption(
+        title: 'Validación entregas comercial',
+        icon: Icons.access_alarm,
+        color: Colors.blue, // Color asociado a transacciones comerciales
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const BandejaValidacionFacturacionPage())
         ),
       ));
     }

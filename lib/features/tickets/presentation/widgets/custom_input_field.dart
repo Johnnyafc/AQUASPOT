@@ -7,10 +7,12 @@ class CustomInputField extends StatelessWidget {
   final TextInputType keyboard;
   final int maxLines;
   
-  // 🚀 Se agregaron estos 3 parámetros clave
   final FocusNode? focusNode;
   final String? Function(String?)? validator;
   final void Function(String)? onChanged;
+  
+  // 🔒 Pin de control de enmascaramiento (Privacidad de datos)
+  final bool obscureText;
 
   const CustomInputField({
     super.key,
@@ -22,6 +24,7 @@ class CustomInputField extends StatelessWidget {
     this.focusNode,
     this.validator,
     this.onChanged,
+    this.obscureText = false, // Por defecto visible
   });
 
   @override
@@ -30,10 +33,11 @@ class CustomInputField extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
         controller: controller,
-        focusNode: focusNode, // 🔗 Conecta el foco del framework aquí
+        focusNode: focusNode,
         keyboardType: keyboard,
         maxLines: maxLines,
-        onChanged: onChanged, // 🔗 Conecta la escucha de cambios aquí
+        onChanged: onChanged,
+        obscureText: obscureText, // 🔗 Conexión directa al motor del input
         decoration: InputDecoration(
           labelText: label,
           prefixIcon: Icon(icon),
@@ -44,7 +48,6 @@ class CustomInputField extends StatelessWidget {
             borderSide: BorderSide.none
           ),
         ),
-        // 🛡️ Si mandas un validador personalizado lo usa, si no, usa tu regla por defecto
         validator: validator ?? (v) => (v == null || v.isEmpty) ? 'Requerido' : null,
       ),
     );

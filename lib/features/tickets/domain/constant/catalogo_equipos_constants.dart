@@ -7,11 +7,11 @@ class CatalogoEquiposConstants {
       'Carcasa', 'Tapa posterior', 'Tapa frontal', 'Motor hidráulico', 'Impulsor'
     ],
     TipoEquipo.Cosechadora: [
-      'Sistema de corte', 'Banda transportadora', 'Sensor de humedad', 
-      'Tolva principal', 'Panel de control', 'Sistema hidráulico'
+      'Acoples rapidos', 'comAp', 'Bomba hidraulica', 
+      'Motor diesel', 'Serpentin', 'Mangueras internas'
     ],
     TipoEquipo.Contador: [
-      'Sensor óptico', 'Pantalla LCD', 'Fuente de poder', 'Cableado'
+      'Cámara', 'Monitor', 'Estructura', 'Cables'
     ],
   };
 }

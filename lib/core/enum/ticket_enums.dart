@@ -33,6 +33,7 @@ enum EstadoTicket {
   compras,
   bodega,
   procesoTrabajo,
+  validacionFacturacion,
   finalizado,           // Cerrado y correo enviado
   anulado 
 }

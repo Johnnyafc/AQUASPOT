@@ -170,22 +170,85 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
 
   // Componente de solo lectura
   Widget _buildDataCardBloqueada() {
-    return Card(
-      elevation: 1,
-      color: Colors.grey.shade100, // Color que sugiere "solo lectura"
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Equipo: ${widget.ticket.equipo.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
-            const Divider(),
-            Text('Falla Reportada: ${widget.ticket.fallaReportada}', style: TextStyle(color: Colors.grey.shade800)),
-            // Agregue aquí los campos que considere estrictamente necesarios
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F6F9), // Tono grisáceo/azulado técnico para "Solo Lectura"
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildInfoRow('Estado Actual:', widget.ticket.estadoActual.name.toUpperCase()),
+          const Divider(height: 24, color: Colors.black12),
+          
+          _buildInfoRow('Equipo:', widget.ticket.equipo.name.toUpperCase()),
+          _buildInfoRow('Lugar de recepción:', widget.ticket.lugarAtencion?.name.toUpperCase() ?? 'NINGUNO'),
+          const Divider(height: 24, color: Colors.black12),
+          
+          _buildInfoRow('Cliente:', widget.ticket.clienteId.toUpperCase()),
+          _buildInfoRow('Campamento:', widget.ticket.campamento.toUpperCase()),
+          _buildInfoRow('Contacto:', '${widget.ticket.nombreContacto ?? 'Sin registro'} (${widget.ticket.telefonoContacto ?? 'Sin registro'})'),
+          const Divider(height: 24, color: Colors.black12),
+          
+          _buildInfoRow('Número de Serie:', widget.ticket.numeroSerie ?? 'No especificado'),
+          const Divider(height: 24, color: Colors.black12),
+          
+          const Text(
+            'Falla Reportada e Inspección:', 
+            style: TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w600)
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Text(
+              widget.ticket.fallaReportada ?? 'Sin detalle de falla reportada.', 
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87)
+            ),
+          ),
+        ],
       ),
     );
   }
+
+  
+Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 500) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87)),
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 180, 
+                child: Text(label, style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w600)),
+              ),
+              Expanded(
+                child: Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
 }

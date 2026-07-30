@@ -175,7 +175,7 @@ export const orquestadorNotificacionesTicket = onDocumentWritten(
       }
 
       // 🔵 ESTADO B: TRABAJO FINALIZADO (Transición desde procesoTrabajo)
-      if (estadoNuevo === "finalizado" && estadoAnterior === "procesoTrabajo") {
+      if (estadoNuevo === "finalizado" && estadoAnterior === "validacionFacturacion") {
         logger.info(`Despachando telemetría de FINALIZACIÓN para ticket ${ticketId}`);
         await transporter.sendMail({
           from: '"Soporte Técnico" <ingenieria2@aquaspot.ec>',
