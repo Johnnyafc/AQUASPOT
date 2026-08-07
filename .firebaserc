@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "aquaspot-postventa-2026"
-  }
+    "aquaspot": "aquaspot-postventa",
+    "default": "aquaspot-postventa"
+  },
+  "targets": {},
+  "etags": {}
 }

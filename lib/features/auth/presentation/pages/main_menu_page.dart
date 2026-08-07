@@ -12,6 +12,7 @@ import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaTr
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/ValidacionFacturacionPage.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_comercial_Page.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_compras_page.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_entregas_page.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_revisiones_garantias_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -246,6 +247,13 @@ class _InicioView extends StatelessWidget {
         icon: Icons.access_alarm,
         color: Colors.blue, 
         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaValidacionFacturacionPage())),
+      ));
+
+    modules.add(_buildCardOption(
+        title: 'Entrega y facturación',
+        icon: Icons.access_alarm,
+        color: Colors.blue, 
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaEntregasPage())),
       ));
     }
 

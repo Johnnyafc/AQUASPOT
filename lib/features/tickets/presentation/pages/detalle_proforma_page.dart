@@ -118,7 +118,7 @@ void _mostrarDialogoAccion(BuildContext context, String accion) {
       rolOperario = authState.usuario.rol.name.toUpperCase();
     }
   context.read<TicketBloc>().add(
-    ReversarAComercialEvent(
+    ReversarAComercialEvent( 
       ticketActual: ticket, // Reemplace con la variable que contenga su ticket en esta vista
       observacion: observacion,
       nombreUsuario:nombreOperario , // 🚨 TODO: Conectar con datos de sesión reales

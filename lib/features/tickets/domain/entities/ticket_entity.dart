@@ -32,6 +32,7 @@ class TicketEntity extends Equatable {
   final String? numeroSerie;
   final String? equipoDetalle;
   final Map<String, bool>? accesoriosRecibidos;
+  
 
 
 final String marca; // 🚨 El que te habías olvidado
@@ -70,6 +71,10 @@ final String marca; // 🚨 El que te habías olvidado
   final bool? esGarantia;
   final double? horometro;
   final List<String>? urlsEvidenciasGarantia;
+  final bool fueModificado;
+  final String? urlGuiaRemision;
+  final String? urlFactura;
+  final bool trabajoIniciado;
 
 const TicketEntity({
     required this.id,
@@ -111,12 +116,17 @@ const TicketEntity({
     this.esGarantia,
     this.horometro,
     this.urlsEvidenciasGarantia,
+    this.fueModificado=false,
+    this.urlFactura,
+    this.urlGuiaRemision,
+    this.trabajoIniciado = false,
   });
 
   // ⚙️ CLONADOR INDUSTRIAL CORREGIDO (Mutación Segura)
   TicketEntity copyWith({
     String? id,
     EstadoTicket? estadoActual,
+    bool? trabajoIniciado,
     Sede? sede,
     String? clienteId,
     String? campamento,
@@ -154,6 +164,9 @@ const TicketEntity({
     bool? esGarantia,
     double? horometro,
     List<String>? urlsEvidenciasGarantia,
+    bool? fueModificado,
+    String? urlFactura,
+    String? urlGuiaRemision,
   }) {
     return TicketEntity(
       id: id ?? this.id,
@@ -178,6 +191,7 @@ const TicketEntity({
       tipoRequerimiento: tipoRequerimiento ?? this.tipoRequerimiento,
       lugarAtencion: lugarAtencion ?? this.lugarAtencion,
       esRegistroCompleto: esRegistroCompleto ?? this.esRegistroCompleto,
+      fueModificado: fueModificado ?? this.fueModificado,
       // 🚀 EXPANSIÓN: Inyección al constructor del clon
       marca: marca ?? this.marca,
       codigoProyecto: codigoProyecto ?? this.codigoProyecto,
@@ -195,6 +209,10 @@ const TicketEntity({
       esGarantia: esGarantia ?? this.esGarantia,
       horometro:horometro ?? this.horometro,
       urlsEvidenciasGarantia: urlsEvidenciasGarantia ?? this.urlsEvidenciasGarantia,
+      urlFactura:urlFactura ?? this.urlFactura, 
+      urlGuiaRemision: urlGuiaRemision ?? this.urlGuiaRemision,
+      trabajoIniciado: trabajoIniciado ?? this.trabajoIniciado,
+      
     );
   }
 
@@ -239,6 +257,10 @@ const TicketEntity({
         esGarantia,
         horometro,
         urlsEvidenciasGarantia,
+        fueModificado,
+        urlFactura,
+        urlGuiaRemision,
+        trabajoIniciado,
       ];
 }
 

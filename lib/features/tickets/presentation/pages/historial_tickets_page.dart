@@ -60,6 +60,7 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
       case EstadoTicket.validacionFacturacion: return Icons.loupe;
       case EstadoTicket.finalizado: return Icons.task_alt;
       case EstadoTicket.anulado: return Icons.cancel;
+      case EstadoTicket.entrega: return Icons.add_box;
     }
   }
 

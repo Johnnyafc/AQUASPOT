@@ -174,13 +174,16 @@ export const orquestadorNotificacionesTicket = onDocumentWritten(
         return;
       }
 
-      // 🔵 ESTADO B: TRABAJO FINALIZADO (Transición desde procesoTrabajo)
-      if (estadoNuevo === "finalizado" && estadoAnterior === "validacionFacturacion") {
+      // 🔵 ESTADO B: TRABAJO FINALIZADO (Llegada a fin de línea logística)
+      // 🛑 INGENIERÍA: Evaluamos que sea "finalizado" y que ANTES no lo fuera.
+      // Así garantizamos que el correo salga tanto si hizo escala en "entrega" 
+      // como si hizo un bypass directo por tener los documentos anticipados.
+      if (estadoNuevo === "finalizado" && estadoAnterior !== "finalizado") {
         logger.info(`Despachando telemetría de FINALIZACIÓN para ticket ${ticketId}`);
         await transporter.sendMail({
           from: '"Soporte Técnico" <ingenieria2@aquaspot.ec>',
           to: emailCliente,
-          subject: `✅ Equipo Listo para Retiro - Ticket #${ticketId}`,
+          subject: `✅ Equipo Listo para Retiro / Despacho - Ticket #${ticketId}`,
           html: _generarPlantillaFinalizado(nombreContacto, ticketId, docAfter)
         });
         return;

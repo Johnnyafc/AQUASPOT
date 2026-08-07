@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "699104329538",
-    "project_id": "aquaspot-postventa-2026",
-    "storage_bucket": "aquaspot-postventa-2026.firebasestorage.app"
+    "project_number": "700527118972",
+    "project_id": "aquaspot-postventa",
+    "storage_bucket": "aquaspot-postventa.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:699104329538:android:7d6482446806338b3bd2db",
+        "mobilesdk_app_id": "1:700527118972:android:03df495828166e6321d7f9",
         "android_client_info": {
           "package_name": "com.aquaspot.aquaspot_postventa"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyB1Bhsx6z7D-52CwD58wjwHgmhN27RrHdk"
+          "current_key": "AIzaSyDdSN5gpuG6TSLVsDJ8s6DoWH-VHCaNTNc"
         }
       ],
       "services": {

@@ -92,7 +92,11 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     on<SeleccionarTipoGarantiaEvent>(_onSeleccionarTipoGarantia);
     on<ResetearRequerimientoEvent>(_onResetearTodo);
     on<DictaminarGarantiaEvent>(_onDictaminarGarantia); 
-    on<ProcesarFacturacionEvent>(_onProcesarFacturacion);                           
+    on<ProcesarFacturacionEvent>(_onProcesarFacturacion);  
+    on<ProcesarEntregaGuiaEvent>(_onProcesarEntregaGuia);
+    on<ProcesarEntregaFacturaEvent>(_onProcesarEntregaFactura); 
+    on<IniciarTrabajoFisicoEvent>(_onIniciarTrabajoFisico);
+    on<ReportarIncidenciaComercialEvent>(_onReportarIncidencia);                         
   }
 
  
@@ -180,69 +184,289 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
   );
 }
 
-Future<void> _onProcesarFacturacion(
-  ProcesarFacturacionEvent event, 
-  Emitter<TicketState> emit
-) async {
-  // 0. SEÑAL DE OCUPADO EN EL BUS
-  emit(state.copyWith(
-    status: TicketStatus.loading,
-    message: 'Consolidando base de datos y cerrando ciclo comercial...'
-  ));
 
-  try {
-    // 1. EXTRACCIÓN DEL TICKET (Lectura del bus de datos local)
-    final ticketOriginal = state.historial.firstWhere(
-      (t) => t.id == event.ticketId,
-      orElse: () => throw Exception('Anomalía: El ticket no existe en el árbol de estado local.'),
-    );
-    
-    
-    // 2. ENSAMBLAJE DE AUDITORÍA
+Future<void> _onIniciarTrabajoFisico(
+    IniciarTrabajoFisicoEvent event, 
+    Emitter<TicketState> emit
+  ) async {
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Energizando línea de trabajo...'));
+
     final eventoAuditoria = EventoAuditoriaEntity(
-      accion: 'COMERCIAL VALIDADO. TICKET FINALIZADO.',
-      usuarioNombre: event.nombreUsuario, // ⚠️ Conecte esto a su telemetría de sesión real
+      accion: 'INICIO DE TRABAJO EN CAMPO / TALLER',
+      usuarioNombre: event.nombreUsuario, 
       usuarioRol: event.rolUsuario,
       timestamp: DateTime.now(),
     );
 
-    // 3. MUTACIÓN DEL TICKET (Inmutabilidad estricta)
-    final ticketActualizado = ticketOriginal.copyWith(
-      estadoActual: EstadoTicket.finalizado, // 🚀 TRASPASO AL ESTADO LÓGICO FINAL
-      historialEventos: [...ticketOriginal.historialEventos, eventoAuditoria],
+    // 🚀 MUTACIÓN: Solo encendemos la baliza bool
+    final ticketActualizado = event.ticket.copyWith(
+      trabajoIniciado: true,
+      historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
     );
 
-    // 4. PERSISTENCIA Y HOT SWAP
-    // Se invoca el UseCase que ya tiene configurado para impactar Firestore
     final dbResult = await actualizarTicket(ticketActualizado);
 
     dbResult.fold(
-      (failure) => emit(state.copyWith(
-        status: TicketStatus.error, 
-        message: 'Error al actualizar Firestore: ${failure.message}'
-      )),
+      (failure) => emit(state.copyWith(status: TicketStatus.error, message: 'Falla al iniciar trabajo: ${_mapFailureToMessage(failure)}')),
       (ticketGuardado) {
-        // Reemplazo atómico en la lista actual para no forzar recargas de red
-        final listaActualizada = state.historial
-            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
-            .toList();
-            
+        final listaActualizada = state.historial.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
         emit(state.copyWith(
           status: TicketStatus.operationSuccess,
-          message: 'Facturación procesada correctamente. Ciclo cerrado.',
+          message: 'Baliza encendida. Trabajo en proceso.',
           historial: listaActualizada,
           currentTicket: ticketGuardado,
         ));
       }
     );
-  } catch (e) {
-    emit(state.copyWith(
-      status: TicketStatus.error, 
-      message: 'Falla interna del sistema: $e'
-    ));
   }
-}
 
+
+
+
+// =========================================================
+  // ⚙️ SUBRUTINA 1: PROCESAMIENTO DE GUÍA DE REMISIÓN
+  // =========================================================
+  Future<void> _onProcesarEntregaGuia(
+    ProcesarEntregaGuiaEvent event, 
+    Emitter<TicketState> emit
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Energizando circuito: Transmitiendo Guía de Remisión a Storage...'
+    ));
+
+    String urlSubida = '';
+    bool huboFalla = false;
+    String mensajeError = '';
+
+    final result = await subirDocumentoEvaluacionUseCase(
+      event.guiaRemision, 
+      event.ticket.id, 
+      'despachos/guias'
+    );
+
+    result.fold(
+      (failure) { huboFalla = true; mensajeError = failure.message; },
+      (url) => urlSubida = url,
+    );
+
+    if (huboFalla) {
+      emit(state.copyWith(status: TicketStatus.error, message: 'Falla de telemetría al subir Guía: $mensajeError'));
+      return; 
+    }
+
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Consolidando enclavamiento en base de datos...'));
+
+    final eventoAuditoria = EventoAuditoriaEntity(
+      accion: 'CARGA DE GUÍA DE REMISIÓN. Obs: ${event.observacion.isEmpty ? "Sin observaciones" : event.observacion}',
+      usuarioNombre: event.nombreUsuario, 
+      usuarioRol: event.rolUsuario,
+      timestamp: DateTime.now(),
+    );
+
+    final ticketPaso1 = event.ticket.copyWith(urlGuiaRemision: urlSubida);
+
+    // 🚀 LECTURA DE SENSORES Y ENCLAVAMIENTO FÍSICO
+    final bool tieneGuia = ticketPaso1.urlGuiaRemision != null && ticketPaso1.urlGuiaRemision!.isNotEmpty;
+    final bool tieneFactura = ticketPaso1.urlFactura != null && ticketPaso1.urlFactura!.isNotEmpty;
+
+    // 🛑 REGLA INQUEBRANTABLE: Subir un papel NO mueve la máquina. 
+    // Mantenemos la inercia física del equipo.
+    EstadoTicket estadoResultante = ticketPaso1.estadoActual;
+    String mensajeHMI = 'Guía anexada. El equipo continúa en estación: ${estadoResultante.name.toUpperCase()}';
+
+    // ⚠️ COMPUERTA AND (3 Vías): Solo finaliza si YA estaba en Entrega Y tiene ambos papeles.
+    if (tieneGuia && tieneFactura && ticketPaso1.estadoActual == EstadoTicket.entrega) {
+      estadoResultante = EstadoTicket.finalizado;
+      mensajeHMI = '✅ Despacho Finalizado: Circuito cerrado (Guía + Factura en rampa).';
+    }
+
+    final ticketActualizado = ticketPaso1.copyWith(
+      estadoActual: estadoResultante,
+      historialEventos: [...ticketPaso1.historialEventos, eventoAuditoria],
+    );
+
+    final dbResult = await actualizarTicket(ticketActualizado);
+
+    dbResult.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error, 
+        message: 'Falla en escritura de BD: ${_mapFailureToMessage(failure)}'
+      )),
+      (ticketGuardado) {
+        final listaActualizada = state.historial.map((t) => 
+          t.id == ticketGuardado.id ? ticketGuardado : t
+        ).toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: mensajeHMI,
+          historial: listaActualizada,
+          currentTicket: ticketGuardado,
+        ));
+      }
+    );
+  }
+
+  // =========================================================
+  // ⚙️ SUBRUTINA 2: PROCESAMIENTO DE FACTURA COMERCIAL
+  // =========================================================
+  Future<void> _onProcesarEntregaFactura(
+    ProcesarEntregaFacturaEvent event, 
+    Emitter<TicketState> emit
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Energizando circuito: Transmitiendo Factura a Storage...'
+    ));
+
+    String urlSubida = '';
+    bool huboFalla = false;
+    String mensajeError = '';
+
+    final result = await subirDocumentoEvaluacionUseCase(
+      event.factura, 
+      event.ticket.id, 
+      'despachos/facturas'
+    );
+
+    result.fold(
+      (failure) { huboFalla = true; mensajeError = failure.message; },
+      (url) => urlSubida = url,
+    );
+
+    if (huboFalla) {
+      emit(state.copyWith(status: TicketStatus.error, message: 'Falla de telemetría al subir Factura: $mensajeError'));
+      return;
+    }
+
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Consolidando enclavamiento en base de datos...'));
+
+    final eventoAuditoria = EventoAuditoriaEntity(
+      accion: 'CARGA DE FACTURA. Obs: ${event.observacion.isEmpty ? "Sin observaciones" : event.observacion}',
+      usuarioNombre: event.nombreUsuario, 
+      usuarioRol: event.rolUsuario,
+      timestamp: DateTime.now(),
+    );
+
+    final ticketPaso1 = event.ticket.copyWith(urlFactura: urlSubida);
+
+    // 🚀 LECTURA DE SENSORES Y ENCLAVAMIENTO FÍSICO
+    final bool tieneGuia = ticketPaso1.urlGuiaRemision != null && ticketPaso1.urlGuiaRemision!.isNotEmpty;
+    final bool tieneFactura = ticketPaso1.urlFactura != null && ticketPaso1.urlFactura!.isNotEmpty;
+    
+    // 🛑 REGLA INQUEBRANTABLE: Subir un papel NO mueve la máquina.
+    EstadoTicket estadoResultante = ticketPaso1.estadoActual;
+    String mensajeHMI = 'Factura anexada. El equipo continúa en estación: ${estadoResultante.name.toUpperCase()}';
+
+    // ⚠️ COMPUERTA AND (3 Vías): Solo finaliza si YA estaba en Entrega Y tiene ambos papeles.
+    if (tieneGuia && tieneFactura && ticketPaso1.estadoActual == EstadoTicket.entrega) {
+      estadoResultante = EstadoTicket.finalizado;
+      mensajeHMI = '✅ Despacho Finalizado: Circuito cerrado (Guía + Factura en rampa).';
+    }
+
+    final ticketActualizado = ticketPaso1.copyWith(
+      estadoActual: estadoResultante,
+      historialEventos: [...ticketPaso1.historialEventos, eventoAuditoria],
+    );
+
+    final dbResult = await actualizarTicket(ticketActualizado);
+
+    dbResult.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error, 
+        message: 'Falla en escritura de BD: ${_mapFailureToMessage(failure)}'
+      )),
+      (ticketGuardado) {
+        final listaActualizada = state.historial.map((t) => 
+          t.id == ticketGuardado.id ? ticketGuardado : t
+        ).toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: mensajeHMI,
+          historial: listaActualizada,
+          currentTicket: ticketGuardado,
+        ));
+      }
+    );
+  }
+// =========================================================
+  // ⚙️ SUBRUTINA: PROCESAMIENTO DE FACTURACIÓN (SECCIÓN COMERCIAL)
+  // =========================================================
+  Future<void> _onProcesarFacturacion(
+    ProcesarFacturacionEvent event, 
+    Emitter<TicketState> emit
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Consolidando base de datos. Transfiriendo equipo a rampa de despacho...'
+    ));
+
+    try {
+      final ticketOriginal = state.historial.firstWhere(
+        (t) => t.id == event.ticketId,
+        orElse: () => throw Exception('Anomalía: El ticket no existe en el árbol de estado local.'),
+      );
+      
+      // 1. EL PLC LEE LOS REGISTROS ANTES DE MOVER EL EQUIPO
+      final bool tieneGuia = ticketOriginal.urlGuiaRemision != null && ticketOriginal.urlGuiaRemision!.isNotEmpty;
+      final bool tieneFactura = ticketOriginal.urlFactura != null && ticketOriginal.urlFactura!.isNotEmpty;
+
+      // 2. ESTADOS Y MENSAJES POR DEFECTO (Asumimos parada en rampa de entrega)
+      EstadoTicket nuevoEstado = EstadoTicket.entrega;
+      String accionAuditoria = 'REVISIÓN COMERCIAL COMPLETADA. EQUIPO TRANSFERIDO A DESPACHO LOGÍSTICO.';
+      String mensajeHMI = 'Facturación procesada. Equipo en rampa de entrega.';
+
+      // 🚀 3. SENSOR DE CROSS-DOCKING (La validación automática que usted pide)
+      // Si el equipo ya tenía los papeles listos desde antes, no lo detenemos en despacho.
+      if (tieneGuia && tieneFactura) {
+        nuevoEstado = EstadoTicket.finalizado;
+        accionAuditoria = 'REVISIÓN COMERCIAL COMPLETADA Y GUIA CON FACTURACIÓN DETECTADA. TICKET FINALIZADO.';
+        mensajeHMI = '✅ Equipo transferido a despacho y finalizado automáticamente por tener documentos completos.';
+      }
+
+      // 4. TROQUELADO Y ENSAMBLAJE
+      final eventoAuditoria = EventoAuditoriaEntity(
+        accion: accionAuditoria,
+        usuarioNombre: event.nombreUsuario, 
+        usuarioRol: event.rolUsuario,
+        timestamp: DateTime.now(),
+      );
+
+      final ticketActualizado = ticketOriginal.copyWith(
+        estadoActual: nuevoEstado, 
+        historialEventos: [...ticketOriginal.historialEventos, eventoAuditoria],
+      );
+
+      // 5. PERSISTENCIA
+      final dbResult = await actualizarTicket(ticketActualizado);
+
+      dbResult.fold(
+        (failure) => emit(state.copyWith(
+          status: TicketStatus.error, 
+          message: 'Error al actualizar Firestore: ${failure.message}'
+        )),
+        (ticketGuardado) {
+          final listaActualizada = state.historial
+              .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+              .toList();
+              
+          emit(state.copyWith(
+            status: TicketStatus.operationSuccess,
+            message: mensajeHMI,
+            historial: listaActualizada,
+            currentTicket: ticketGuardado,
+          ));
+        }
+      );
+    } catch (e) {
+      emit(state.copyWith(
+        status: TicketStatus.error, 
+        message: 'Falla interna del sistema: $e'
+      ));
+    }
+  }
 
 
 void _onSeleccionarTipoGarantia(SeleccionarTipoGarantiaEvent event, Emitter<TicketState> emit) {
@@ -315,11 +539,11 @@ Future<void> _onReversarAComercial(
     );
 
     // 3. MUTACIÓN DEL TICKET (El Troquelado)
-    final ticketActualizado = event.ticketActual.copyWith(
-      estadoActual: EstadoTicket.comercial, // 🚀 TRASPASO DE REGRESO AL ESTADO ANTERIOR
-      // ⚠️ Aplicando tu estándar estructural (el evento nuevo al final de la matriz)
-      historialEventos: [...event.ticketActual.historialEventos, eventoAuditoria],
-    );
+   final ticketActualizado = event.ticketActual.copyWith(
+  estadoActual: EstadoTicket.comercial, 
+  fueModificado: true, // ⚠️ FLAG DE HARDWARE ACTIVADO
+  historialEventos: [...event.ticketActual.historialEventos, eventoAuditoria],
+);
 
     // 4. PERSISTENCIA EN FIRESTORE
     final dbResult = await actualizarTicket(ticketActualizado);
@@ -827,6 +1051,49 @@ Future<void> _onActualizarEvaluacion(ActualizarEvaluacionEvent event, Emitter<Ti
   }
 
 
+  Future<void> _onReportarIncidencia(
+    ReportarIncidenciaComercialEvent event, 
+    Emitter<TicketState> emit
+  ) async {
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Registrando anomalía en bitácora...'));
+
+    // 1. ENSAMBLAJE DEL REGISTRO DE AUDITORÍA (Reutilización de entidad)
+    final eventoAuditoria = EventoAuditoriaEntity(
+      accion: 'REPORTE COMERCIAL: ${event.reporteComercial}',
+      usuarioNombre: event.nombreUsuario, 
+      usuarioRol: event.rolUsuario,
+      timestamp: DateTime.now(),
+    );
+
+    // 2. MUTACIÓN (Se inyecta el historial, el estado actual del ticket NO cambia)
+    final ticketActualizado = event.ticket.copyWith(
+      historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+    );
+
+    // 3. PERSISTENCIA
+    final dbResult = await actualizarTicket(ticketActualizado);
+
+    dbResult.fold(
+      (failure) => emit(state.copyWith(status: TicketStatus.error, message: 'Falla al guardar reporte: ${_mapFailureToMessage(failure)}')),
+      (ticketGuardado) {
+        // ⚙️ LECTURA Y ESCRITURA SOBRE EL BUS PRINCIPAL (historial)
+        final listaActualizada = state.historial.map((t) => 
+          t.id == ticketGuardado.id ? ticketGuardado : t
+        ).toList();
+        
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: 'Reporte anexado a la bitácora exitosamente.',
+          historial: listaActualizada, // 🔌 Ahora sí coincide con el borne de su State
+          currentTicket: ticketGuardado,
+        ));
+      }
+    );
+  }
+
+  
+
+
 
 Future<void> _onProcesarCotizacion(
     ProcesarCotizacionEvent event,
@@ -880,13 +1147,12 @@ Future<void> _onProcesarCotizacion(
       );
 
        final proformaModel = ProformaModel.fromEntity(nuevaProforma);
-       
-      final eventoAuditoria = EventoAuditoriaEntity(
-        accion: 'COTIZACIÓN GENERADA',
-        usuarioNombre: event.nombreUsuario,
-        usuarioRol: event.rolUsuario,
-        timestamp: DateTime.now(),
-      );
+     final eventoAuditoria = EventoAuditoriaEntity(
+  accion: 'COTIZACIÓN GENERADA: ${event.observacion.isNotEmpty ? event.observacion : "Sin observaciones adicionales."}',
+  usuarioNombre: event.nombreUsuario,
+  usuarioRol: event.rolUsuario,
+  timestamp: DateTime.now(),
+);
 
       // 4. TROQUELADO Y GUARDADO
       final ticketActualizado = event.ticket.copyWith(

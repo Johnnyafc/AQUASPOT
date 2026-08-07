@@ -3,18 +3,19 @@
     "platforms": {
       "android": {
         "default": {
-          "projectId": "aquaspot-postventa-2026",
-          "appId": "1:699104329538:android:7d6482446806338b3bd2db",
+          "projectId": "aquaspot-postventa",
+          "appId": "1:700527118972:android:03df495828166e6321d7f9",
           "fileOutput": "android/app/google-services.json"
         }
       },
       "dart": {
         "lib/firebase_options.dart": {
-          "projectId": "aquaspot-postventa-2026",
+          "projectId": "aquaspot-postventa",
           "configurations": {
-            "android": "1:699104329538:android:7d6482446806338b3bd2db",
-            "ios": "1:699104329538:ios:4ac8ffaea7a895d33bd2db",
-            "web": "1:699104329538:web:3988b4982e523a923bd2db"
+            "android": "1:700527118972:android:03df495828166e6321d7f9",
+            "ios": "1:700527118972:ios:672fc7930e1e476a21d7f9",
+            "web": "1:700527118972:web:a74145c9e26fa54021d7f9",
+            "windows": "1:700527118972:web:60f9cc739e02e63e21d7f9"
           }
         }
       }

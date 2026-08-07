@@ -48,6 +48,10 @@ class TicketModel extends TicketEntity {
     super.esGarantia,
     super.horometro,
     super.urlsEvidenciasGarantia,
+    super.fueModificado,
+    super.urlFactura,
+    super.urlGuiaRemision,
+    super.trabajoIniciado,
   });
 
   factory TicketModel.fromJson(Map<String, dynamic> json) {
@@ -95,6 +99,7 @@ class TicketModel extends TicketEntity {
       ),
       esRegistroCompleto: json['esRegistroCompleto'] ?? false,
       esGarantia: json['esGarantia'] ?? false,
+      fueModificado: json['fueModificado'] ?? false,
       notasRecepcion: json['notasRecepcion'],
       proforma: json['proforma'] != null
           ? ProformaModel.fromJson(json['proforma'])
@@ -114,6 +119,7 @@ class TicketModel extends TicketEntity {
       procesoTrabajoUrls: json['procesoTrabajoUrls'] != null ? List<String>.from(json['procesoTrabajoUrls']) : const [],
       isCostosCompletado: json['isCostosCompletado'] as bool? ?? false,
       isComprasCompletado: json['isComprasCompletado'] as bool? ?? false,
+      trabajoIniciado: json['trabajoIniciado'] as bool? ?? false,
       numeroOrdenVenta: json['numeroOrdenVenta'],
       gestionCompras: json['gestionCompras'] != null 
           ? GestionComprasModel.fromJson(json['gestionCompras'] as Map<String, dynamic>) 
@@ -128,7 +134,10 @@ class TicketModel extends TicketEntity {
       urlsEvidenciasGarantia: json['urlsEvidenciasGarantia'] != null 
           ? List<String>.from(json['urlsEvidenciasGarantia']) 
           : [],
+      urlGuiaRemision: json['urlGuiaRemision'] as String?,
+      urlFactura: json['urlFactura'] as String?,
     );
+    
   }
 
   factory TicketModel.fromEntity(TicketEntity entity) {
@@ -160,6 +169,8 @@ class TicketModel extends TicketEntity {
       esGarantia: entity.esGarantia,
       notasRecepcion: entity.notasRecepcion,
       proforma: entity.proforma,
+      urlFactura: entity.urlFactura,
+      urlGuiaRemision: entity.urlGuiaRemision,
       
       // 🔄 MAPEO DE NUEVOS PINES
       marca: entity.marca,
@@ -169,7 +180,9 @@ class TicketModel extends TicketEntity {
       itemsCompra: entity.itemsCompra,
       procesoTrabajoUrls: entity.procesoTrabajoUrls,
       isCostosCompletado: entity.isCostosCompletado,
+      fueModificado: entity.fueModificado,
       isComprasCompletado: entity.isComprasCompletado,
+      trabajoIniciado: entity.trabajoIniciado,
       numeroOrdenVenta: entity.numeroOrdenVenta,
       gestionCompras: entity.gestionCompras != null
           ? GestionComprasModel.fromEntity(entity.gestionCompras!)
@@ -230,6 +243,8 @@ class TicketModel extends TicketEntity {
       'procesoTrabajoUrls': procesoTrabajoUrls,
       'isCostosCompletado': isCostosCompletado,
       'isComprasCompletado': isComprasCompletado,
+      'fueModificado': fueModificado,
+      'trabajoIniciado': trabajoIniciado,
        'numeroOrdenVenta': numeroOrdenVenta,
        'horometro': horometro,
        'urlsEvidenciasGarantia':urlsEvidenciasGarantia,
@@ -240,6 +255,8 @@ class TicketModel extends TicketEntity {
       'evidenciaTrabajo': evidenciaTrabajo != null
           ? EvidenciaTrabajoModel.fromEntity(evidenciaTrabajo!).toJson()
           : null,
+          'urlGuiaRemision': urlGuiaRemision,
+          'urlFactura': urlFactura,
           
     };
   }

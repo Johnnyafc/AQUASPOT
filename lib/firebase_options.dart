@@ -30,10 +30,7 @@ class DefaultFirebaseOptions {
           'you can reconfigure this by running the FlutterFire CLI again.',
         );
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -47,27 +44,39 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCbyYvscR_mMiTA-oUeGX3aSdpw0PdlDLY',
-    appId: '1:699104329538:web:3988b4982e523a923bd2db',
-    messagingSenderId: '699104329538',
-    projectId: 'aquaspot-postventa-2026',
-    authDomain: 'aquaspot-postventa-2026.firebaseapp.com',
-    storageBucket: 'aquaspot-postventa-2026.firebasestorage.app',
+    apiKey: 'AIzaSyC9vJzVDh8Rh5E0gxu4zEVIdWenLtGvML8',
+    appId: '1:700527118972:web:a74145c9e26fa54021d7f9',
+    messagingSenderId: '700527118972',
+    projectId: 'aquaspot-postventa',
+    authDomain: 'aquaspot-postventa.firebaseapp.com',
+    storageBucket: 'aquaspot-postventa.firebasestorage.app',
+    measurementId: 'G-D3MX7PRQC6',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyB1Bhsx6z7D-52CwD58wjwHgmhN27RrHdk',
-    appId: '1:699104329538:android:7d6482446806338b3bd2db',
-    messagingSenderId: '699104329538',
-    projectId: 'aquaspot-postventa-2026',
-    storageBucket: 'aquaspot-postventa-2026.firebasestorage.app',
+    apiKey: 'AIzaSyDdSN5gpuG6TSLVsDJ8s6DoWH-VHCaNTNc',
+    appId: '1:700527118972:android:03df495828166e6321d7f9',
+    messagingSenderId: '700527118972',
+    projectId: 'aquaspot-postventa',
+    storageBucket: 'aquaspot-postventa.firebasestorage.app',
   );
+
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyB_lHYD2SCC1YKJNGOIyIkNjELcEm4sJjA',
-    appId: '1:699104329538:ios:4ac8ffaea7a895d33bd2db',
-    messagingSenderId: '699104329538',
-    projectId: 'aquaspot-postventa-2026',
-    storageBucket: 'aquaspot-postventa-2026.firebasestorage.app',
+    apiKey: 'AIzaSyDYHIYRX1hshAspES1lrANKnv2LqE95jYw',
+    appId: '1:700527118972:ios:672fc7930e1e476a21d7f9',
+    messagingSenderId: '700527118972',
+    projectId: 'aquaspot-postventa',
+    storageBucket: 'aquaspot-postventa.firebasestorage.app',
     iosBundleId: 'com.aquaspot.aquaspotPostventa',
+  );
+
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyC9vJzVDh8Rh5E0gxu4zEVIdWenLtGvML8',
+    appId: '1:700527118972:web:60f9cc739e02e63e21d7f9',
+    messagingSenderId: '700527118972',
+    projectId: 'aquaspot-postventa',
+    authDomain: 'aquaspot-postventa.firebaseapp.com',
+    storageBucket: 'aquaspot-postventa.firebasestorage.app',
+    measurementId: 'G-ZC05ZWWHDG',
   );
 }

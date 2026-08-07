@@ -7,7 +7,7 @@ import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_eve
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:url_launcher/url_launcher.dart'; // 🔌 IMPORTACIÓN CRÍTICA PARA ABRIR ENLACES
+import 'package:url_launcher/url_launcher.dart'; 
 import 'package:file_picker/file_picker.dart' as fp;
 import '../../../../core/enum/segmento_operativo.dart';
 
@@ -23,6 +23,18 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
   final TextEditingController _observacionController = TextEditingController();
   final List<fp.PlatformFile> _pdfsSeleccionados = [];
   final List<fp.PlatformFile> _excelsSeleccionados = [];
+
+  // ⚙️ SUBRUTINA: Extracción de la justificación de auditoría
+  String _obtenerMotivoModificacion() {
+    try {
+      final eventoReversion = widget.ticket.historialEventos.lastWhere(
+        (e) => e.accion.startsWith('SOLICITUD DE MODIFICACIÓN:'),
+      );
+      return eventoReversion.accion.replaceAll('SOLICITUD DE MODIFICACIÓN:', '').trim();
+    } catch (e) {
+      return 'Motivo no registrado en la traza de auditoría.';
+    }
+  }
 
   // ⚙️ SUBRUTINA DE APERTURA DE ARCHIVOS TÉCNICOS
   Future<void> _abrirEnlaceTecnico(String url) async {
@@ -80,7 +92,7 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
     if (_pdfsSeleccionados.isEmpty && _excelsSeleccionados.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('el campo documental está vacío. Adjunte al menos un archivo.'), 
+          content: Text('El campo documental está vacío. Adjunte al menos un archivo.'), 
           backgroundColor: Colors.red
         ),
       );
@@ -111,7 +123,6 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
  @override
   Widget build(BuildContext context) {
     // 🧠 Sensor lógico: ¿Es un reclamo de garantía?
-    // Ajuste esta variable si en su modelo lo evalúa diferente (ej. ticket.tipoGarantia != 'ninguna')
     final bool esGarantia = widget.ticket.tipoRequerimiento == TipoRequerimiento.reclamoGarantia;
 
     return Scaffold(
@@ -147,6 +158,59 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
           padding: const EdgeInsets.all(16.0),
           child: ListView(
             children: [
+              // ==========================================
+              // 🚨 BALIZA DE ADVERTENCIA: TICKET MODIFICADO
+              // ==========================================
+              if (widget.ticket.fueModificado)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    border: Border.all(color: Colors.red.shade800, width: 2),
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(color: Colors.red.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 4)),
+                    ]
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.report_problem, color: Colors.red.shade900, size: 36),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'TICKET REVERSADO PARA CORRECCIÓN', 
+                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade900, fontSize: 16)
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Instrucción de Operaciones:',
+                              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.black87),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.red.shade200)
+                              ),
+                              child: Text(
+                                _obtenerMotivoModificacion(),
+                                style: TextStyle(fontStyle: FontStyle.italic, color: Colors.red.shade900),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
               // ==========================================
               // 🔍 PANEL DE DIAGNÓSTICO TÉCNICO (Solo Lectura)
               // ==========================================
@@ -272,7 +336,6 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
                                 children: [
                                   const TextSpan(text: 'La facturación de esta orden debe emitirse a: '),
                                   TextSpan(
-                                    // ⚡ AQUÍ SE EXTRAE LA VARIABLE DE LA IMAGEN
                                     text: (widget.ticket.responsableFacturacion ?? 'NO DEFINIDO').toUpperCase(),
                                     style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade900, fontSize: 15),
                                   ),

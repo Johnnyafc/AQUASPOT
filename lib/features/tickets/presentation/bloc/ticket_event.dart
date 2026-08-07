@@ -521,3 +521,77 @@ class ProcesarFacturacionEvent extends TicketEvent {
         observaciones
       ];
 }
+
+// --------------------------------------------------------
+// 🚀 EVENTOS DE DESPACHO LOGÍSTICO (CINTA DE SALIDA)
+// --------------------------------------------------------
+
+class ProcesarEntregaGuiaEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final fp.PlatformFile guiaRemision;
+  final String observacion;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const ProcesarEntregaGuiaEvent({
+    required this.ticket,
+    required this.guiaRemision,
+    required this.observacion,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, guiaRemision, observacion, nombreUsuario, rolUsuario];
+}
+
+class ProcesarEntregaFacturaEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final fp.PlatformFile factura;
+  final String observacion;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const ProcesarEntregaFacturaEvent({
+    required this.ticket,
+    required this.factura,
+    required this.observacion,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, factura, observacion, nombreUsuario, rolUsuario];
+}
+
+class IniciarTrabajoFisicoEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const IniciarTrabajoFisicoEvent({
+    required this.ticket,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, nombreUsuario, rolUsuario];
+}
+
+class ReportarIncidenciaComercialEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final String reporteComercial; // ⚙️ La variable solicitada
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const ReportarIncidenciaComercialEvent({
+    required this.ticket,
+    required this.reporteComercial,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, reporteComercial, nombreUsuario, rolUsuario];
+}
