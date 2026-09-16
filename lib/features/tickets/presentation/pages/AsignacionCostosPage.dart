@@ -7,6 +7,7 @@ import 'package:aquaspot_postventa/features/tickets/domain/entities/ticket_entit
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_bloc.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_event.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
+import '../widgets/tarjeta_no_requiere_compras_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -60,6 +61,7 @@ class _AsignacionCostosPageState extends State<AsignacionCostosPage> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              TarjetaNoRequiereComprasWidget(ticket: widget.ticket),
               _buildReadOnlyField("Tipo de requerimiento", widget.ticket.tipoRequerimiento.name),
               
               // ==========================================
@@ -90,6 +92,7 @@ class _AsignacionCostosPageState extends State<AsignacionCostosPage> {
 
               const SizedBox(height: 8),
               _buildReadOnlyField("Cliente", widget.ticket.clienteId),
+              _buildReadOnlyField("Cliente", widget.ticket.campamento),
               _buildReadOnlyField("Máquina", widget.ticket.equipo.name),
               _buildReadOnlyField("Serie", widget.ticket.numeroSerie.toString()),
               _buildReadOnlyField("Marca", widget.ticket.marca ?? 'No especificada'), 
@@ -279,6 +282,19 @@ class _AsignacionCostosPageState extends State<AsignacionCostosPage> {
                   ),
                 ],
               ),
+            ),
+
+          if (widget.ticket.evaluacionTecnica?.urlPdfRevisionTecnicaAntigua != null && widget.ticket.evaluacionTecnica!.urlPdfRevisionTecnicaAntigua!.isNotEmpty)
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.history_edu, color: Colors.deepOrange),
+              title: const Text(
+                'Descargar PDF de Revisión Técnica Antigua', 
+                style: TextStyle(decoration: TextDecoration.underline, color: Colors.deepOrange, fontWeight: FontWeight.bold)
+              ),
+              trailing: const Icon(Icons.open_in_new, size: 20, color: Colors.deepOrange),
+              onTap: () => _abrirEnlaceGarantia(context, widget.ticket.evaluacionTecnica!.urlPdfRevisionTecnicaAntigua!),
             ),
         ],
       ),

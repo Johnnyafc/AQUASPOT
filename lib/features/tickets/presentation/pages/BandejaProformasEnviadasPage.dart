@@ -4,8 +4,10 @@ import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_blo
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_event.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/detalle_proforma_page.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/widgets/tiempo_en_curso_widget.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_bloc.dart'; // 🔌 Inyección de módulo de seguridad
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.dart'; // 🔌 Inyección de módulo de seguridad
+import 'package:aquaspot_postventa/core/theme/ticket_visual_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -189,10 +191,11 @@ class BandejaProformasEnviadasPage extends StatelessWidget {
               final ticket = tickets[index];
               
               // 🧠 Lógica de visualización para facturación
-              final String responsable = (ticket.responsableFacturacion ?? 'NO DEFINIDO').toUpperCase();
+              final String responsable = ticket.responsableFacturacionLegible;
               final bool esGarantia = ticket.tipoRequerimiento == TipoRequerimiento.reclamoGarantia;
 
               return Card(
+                key: ValueKey(ticket.id),
                 elevation: 3,
                 margin: const EdgeInsets.only(bottom: 12),
                 shape: RoundedRectangleBorder(
@@ -221,52 +224,58 @@ class BandejaProformasEnviadasPage extends StatelessWidget {
                           ],
                         ),
                         const Divider(),
-                        Text('Cliente: ${ticket.clienteId}'),
-                        Text('Equipo: ${ticket.equipo.toString().toUpperCase()}'),
+                        // 🆕 Cliente (empresa/camaronera) y Contacto (persona) son
+                        // datos distintos — se muestran ambos.
+                        if (ticket.clienteId.trim().isNotEmpty) Text('Cliente: ${ticket.clienteId}'),
+                        Text('Contacto: ${ticket.nombreContacto}'),
+                        Text('Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}'),
                         const SizedBox(height: 4),
                         Text('Falla: ${ticket.fallaReportada}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                        if (ticket.noRequiereCompras) ...[
+                          const SizedBox(height: 6),
+                          const InsigniaSuave(
+                            color: Colors.deepOrange,
+                            icono: Icons.remove_shopping_cart,
+                            texto: 'NO REQUIERE COMPRAS',
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        // 🆕 Tiempo en vivo en el estado actual (sin backend: se
+                        // recalcula contra la hora real del dispositivo).
+                        TiempoEnCursoWidget(
+                          desde: ticket.fechaInicioEstadoActual,
+                          builder: (context, texto) => Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.hourglass_bottom, size: 12, color: kTicketIcono),
+                              const SizedBox(width: 4),
+                              Text(texto, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kTicketTextoSecundario)),
+                            ],
+                          ),
+                        ),
                         const SizedBox(height: 12),
-                        
+
                         // ==========================================
                         // 🏷️ BALIZA DE DESTINO Y ACTUADOR DE ALARMA
+                        // 🎨 Insignia suave con el color único de garantía
+                        // (antes: naranja/azul elegidos aparte del resto de
+                        // la app); "REPORTAR" usa el color de alerta
+                        // compartido en vez de un naranja propio.
                         // ==========================================
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            // 1. BALIZA DE FACTURACIÓN
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: esGarantia ? Colors.orange.shade50 : Colors.blue.shade50,
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: esGarantia ? Colors.orange.shade300 : Colors.blue.shade300),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.request_quote, 
-                                    size: 16, 
-                                    color: esGarantia ? Colors.orange.shade800 : Colors.blue.shade800
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Facturar a: $responsable',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                      color: esGarantia ? Colors.orange.shade900 : Colors.blue.shade900,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                            InsigniaSuave(
+                              color: esGarantia ? kTicketAlerta : kTicketAcento,
+                              icono: Icons.request_quote,
+                              texto: 'Facturar a: $responsable',
                             ),
 
                             // 2. 🚨 ACTUADOR: REPORTE COMERCIAL
                             TextButton.icon(
                               onPressed: () => _mostrarDialogoReporte(context, ticket),
-                              icon: const Icon(Icons.report_problem, size: 18, color: Colors.orange),
-                              label: const Text('REPORTAR', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+                              icon: const Icon(Icons.report_problem, size: 18, color: kTicketAlerta),
+                              label: const Text('REPORTAR', style: TextStyle(color: kTicketAlerta, fontWeight: FontWeight.bold)),
                               style: TextButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(horizontal: 8),
                               ),

@@ -5,6 +5,7 @@ class EvidenciaTrabajoModel extends EvidenciaTrabajoEntity {
     required super.fotosUrls,
     required super.videosUrls,
     super.notasTecnicas,
+    super.nombreTecnico,
   });
 
   /// 📥 LECTURA: Desempaqueta los datos que llegan desde la base de datos (Firestore)
@@ -14,6 +15,7 @@ class EvidenciaTrabajoModel extends EvidenciaTrabajoEntity {
       fotosUrls: List<String>.from(json['fotosUrls'] ?? []),
       videosUrls: List<String>.from(json['videosUrls'] ?? []),
       notasTecnicas: json['notasTecnicas'] as String?,
+      nombreTecnico: json['nombreTecnico'] as String?,
     );
   }
 
@@ -23,6 +25,7 @@ class EvidenciaTrabajoModel extends EvidenciaTrabajoEntity {
       fotosUrls: entity.fotosUrls,
       videosUrls: entity.videosUrls,
       notasTecnicas: entity.notasTecnicas,
+      nombreTecnico: entity.nombreTecnico,
     );
   }
 
@@ -32,6 +35,7 @@ class EvidenciaTrabajoModel extends EvidenciaTrabajoEntity {
       'fotosUrls': fotosUrls,
       'videosUrls': videosUrls,
       'notasTecnicas': notasTecnicas,
+      'nombreTecnico': nombreTecnico,
     };
   }
 }

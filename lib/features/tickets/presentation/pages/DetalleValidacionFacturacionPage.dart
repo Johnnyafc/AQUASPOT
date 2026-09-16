@@ -5,6 +5,8 @@ import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_eve
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../widgets/copy_icon_button_widget.dart';
+import '../widgets/tarjeta_no_requiere_compras_widget.dart';
 
 class DetalleValidacionFacturacionPage extends StatelessWidget {
   final dynamic ticket; // ⚠️ Reemplace dynamic por TicketEntity
@@ -36,7 +38,10 @@ class DetalleValidacionFacturacionPage extends StatelessWidget {
           elevation: 0,
         ),
         // 🖥️ CHÁSIS ESTRUCTURAL: Contención Web/Móvil
-        body: Center(
+        // 📋 SELECCIÓN DE TEXTO: para poder subrayar y copiar cualquier dato
+        // de esta pantalla con el mouse.
+        body: SelectionArea(
+          child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 900),
             child: SingleChildScrollView(
@@ -44,24 +49,26 @@ class DetalleValidacionFacturacionPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  TarjetaNoRequiereComprasWidget(ticket: ticket),
                   const Text(
-                    "Datos del Requerimiento", 
+                    "Datos del Requerimiento",
                     style: TextStyle(
-                      fontSize: 18, 
-                      fontWeight: FontWeight.w600, 
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
                       color: Color(0xFF003057)
                     )
                   ),
                   const SizedBox(height: 16),
-                  _buildFormularioRequerimiento(),
-                  
+                  _buildFormularioRequerimiento(context),
+
                   const SizedBox(height: 32),
-                  
+
                   // ⚡ ACTUADORES: Panel de control con validación de estado de carga
                   _buildPanelControl(context),
                 ],
               ),
             ),
+          ),
           ),
         ),
       ),
@@ -69,7 +76,7 @@ class DetalleValidacionFacturacionPage extends StatelessWidget {
   }
 
   // ⚙️ SUBRUTINA: Renderizado del contenedor gris con filtros de Enums
-  Widget _buildFormularioRequerimiento() {
+  Widget _buildFormularioRequerimiento(BuildContext context) {
     String limpiarDato(dynamic valor) {
       if (valor == null) return 'N/A';
       return valor.toString().split('.').last.toUpperCase();
@@ -85,31 +92,38 @@ class DetalleValidacionFacturacionPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildInfoRow('Estado Actual:', limpiarDato(ticket.estadoActual)),
+          _buildInfoRow(context, 'Estado Actual:', limpiarDato(ticket.estadoActual)),
           const Divider(height: 24, thickness: 1, color: Color(0xFFE0E0E0)),
-          
-          _buildInfoRow('Equipo:', limpiarDato(ticket.equipo)),
+
+          _buildInfoRow(context, 'Equipo y Marca:', '${limpiarDato(ticket.equipo)} • Marca: ${ticket.marca.toUpperCase()}'),
           const SizedBox(height: 12),
-          _buildInfoRow('Lugar de recepción:', limpiarDato(ticket.sede)),
+          _buildInfoRow(context, 'Lugar de recepción:', limpiarDato(ticket.sede)),
           const Divider(height: 24, thickness: 1, color: Color(0xFFE0E0E0)),
-          
-          _buildInfoRow('Cliente:', ticket.clienteId.toUpperCase()),
+
+          _buildInfoRow(context, 'Cliente:', ticket.clienteId.toUpperCase()),
           const SizedBox(height: 12),
-          _buildInfoRow('Campamento:', ticket.campamento?.toUpperCase() ?? 'N/A'),
+          _buildInfoRow(context, 'Campamento:', ticket.campamento?.toUpperCase() ?? 'N/A'),
           const SizedBox(height: 12),
-          _buildInfoRow('Contacto:', '${ticket.nombreContacto} (${ticket.telefonoContacto})'.toUpperCase()),
+          _buildInfoRow(context, 'Contacto:', '${ticket.nombreContacto} (${ticket.telefonoContacto})'.toUpperCase()),
           const Divider(height: 24, thickness: 1, color: Color(0xFFE0E0E0)),
-          
-          _buildInfoRow('Número de Serie:', ticket.numeroSerie ?? 'No Registrado'),
+
+          _buildInfoRow(context, 'Número de Serie:', ticket.numeroSerie ?? 'No Registrado'),
           const Divider(height: 24, thickness: 1, color: Color(0xFFE0E0E0)),
-          
-          const Text(
-            'Falla Reportada e Inspección:', 
-            style: TextStyle(color: Color(0xFF757575), fontSize: 13, fontWeight: FontWeight.w500)
+
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Falla Reportada e Inspección:',
+                  style: TextStyle(color: Color(0xFF757575), fontSize: 13, fontWeight: FontWeight.w500)
+                ),
+              ),
+              CopyIconButtonWidget(etiqueta: 'Falla Reportada e Inspección', valor: ticket.fallaReportada),
+            ],
           ),
           const SizedBox(height: 8),
           Text(
-            ticket.fallaReportada, 
+            ticket.fallaReportada,
             style: const TextStyle(color: Colors.black87, fontSize: 14, fontWeight: FontWeight.w500, height: 1.4)
           ),
         ],
@@ -118,23 +132,24 @@ class DetalleValidacionFacturacionPage extends StatelessWidget {
   }
 
   // ⚙️ SUBRUTINA: Fila tabulada
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(BuildContext context, String label, String value) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 200, 
+          width: 200,
           child: Text(
-            label, 
+            label,
             style: const TextStyle(color: Color(0xFF757575), fontSize: 13, fontWeight: FontWeight.w500)
           ),
         ),
         Expanded(
           child: Text(
-            value, 
+            value,
             style: const TextStyle(color: Colors.black87, fontSize: 14, fontWeight: FontWeight.w500)
           ),
         ),
+        CopyIconButtonWidget(etiqueta: label, valor: value),
       ],
     );
   }

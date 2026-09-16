@@ -18,4 +18,23 @@ class ClienteRemoteDataSourceImpl implements ClienteRemoteDataSource {
       throw Exception('Cortocircuito al intentar escribir en Firestore: $e');
     }
   }
+
+  @override
+  Future<List<ClienteModel>> obtenerClientes() async {
+    try {
+      final snapshot = await firestore.collection('clientes').get();
+      return snapshot.docs.map((doc) => ClienteModel.fromJson(doc.data(), doc.id)).toList();
+    } catch (e) {
+      throw Exception('Cortocircuito al consultar clientes en Firestore: $e');
+    }
+  }
+
+  @override
+  Future<void> actualizarCliente(ClienteModel cliente) async {
+    try {
+      await firestore.collection('clientes').doc(cliente.id).update(cliente.toUpdateJson());
+    } catch (e) {
+      throw Exception('Cortocircuito al actualizar cliente en Firestore: $e');
+    }
+  }
 }

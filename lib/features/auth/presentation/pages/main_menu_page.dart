@@ -1,6 +1,7 @@
 // lib/features/tickets/presentation/pages/main_menu_page.dart
 
 import 'package:aquaspot_postventa/core/enum/segmento_operativo.dart';
+import 'package:aquaspot_postventa/features/clientes/presentation/pages/gestion_clientes_page.dart';
 import 'package:aquaspot_postventa/features/clientes/presentation/widgets/registro_cliente_bottom_sheet.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_bloc.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_event.dart';
@@ -14,6 +15,11 @@ import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_c
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_compras_page.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_entregas_page.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_revisiones_garantias_page.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_despacho_bodega_page.dart';
+import 'package:aquaspot_postventa/features/inventario/presentation/pages/gestion_stock_bodega_page.dart';
+import 'package:aquaspot_postventa/features/catalogo/presentation/pages/gestion_catalogo_actividades_page.dart';
+import 'package:aquaspot_postventa/features/tecnicos/presentation/pages/gestion_tecnicos_page.dart';
+import 'package:aquaspot_postventa/features/fallas/presentation/pages/gestion_metricas_fallas_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/auth_bloc.dart';
@@ -24,6 +30,7 @@ import '../../../tickets/presentation/pages/creacion_ticket_page.dart';
 import '../../../tickets/presentation/pages/historial_tickets_page.dart';
 import '../../../tickets/presentation/pages/bandeja_evaluaciones_page.dart';
 import '../../../tickets/presentation/pages/bandeja_recepcion_page.dart';
+import '../../../tickets/presentation/pages/biblioteca_documentos_page.dart';
 import '../../../../core/enum/rol_usuario.dart';
 import '../pages/registro_usuario_page.dart';
 
@@ -69,7 +76,19 @@ class _MainMenuPageState extends State<MainMenuPage> {
           appBar: AppBar(
             backgroundColor: Colors.white,
             elevation: 0,
-            title: const Text("Aquaspot", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            // 🔧 FIX "CONTENEDOR DE ORIGEN": el título ahora es contextual según
+            // la pestaña activa. Antes historial_tickets_page.dart traía su PROPIO
+            // Scaffold+AppBar con el texto "Panel de Historial", que se dibujaba
+            // apilado justo debajo de este AppBar ("Aquaspot"), duplicando barra
+            // de herramientas + padding de status bar y dejando muy poco alto
+            // disponible para las tarjetas (se veían cortadas junto al
+            // BottomNavigationBar). Ahora ese AppBar interno ya no existe: este es
+            // el ÚNICO AppBar de toda la pantalla, y simplemente cambia su título
+            // según el módulo activo.
+            title: Text(
+              _selectedIndex == 1 ? "Panel de Historial" : "Aquaspot",
+              style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+            ),
             actions: [
               // ⚙️ COMPUERTA LÓGICA: Acceso restringido a Comerciales y Administradores
               if (operador.rol.name.toLowerCase() == 'comercial' || isAdmin)
@@ -162,7 +181,17 @@ class _InicioView extends StatelessWidget {
   List<Widget> _getModules(BuildContext context, UsuarioEntity operador) {
     List<Widget> modules = [];
     final bool isAdmin = operador.rol == RolUsuario.admin;
-    
+
+    // 📚 BIBLIOTECA DE DOCUMENTOS — sin restricción de rol: cualquier
+    // usuario autenticado puede consultar todas las fotos y documentos
+    // subidos a cualquier ticket.
+    modules.add(_buildCardOption(
+      title: 'Biblioteca de Documentos',
+      icon: Icons.perm_media_outlined,
+      color: Colors.indigo,
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BibliotecaDocumentosPage())),
+    ));
+
     // 🔒 ACCESO EXCLUSIVO PARA SUPER ADMINISTRADORES
     if (isAdmin) {
       modules.add(_buildCardOption(
@@ -207,27 +236,55 @@ class _InicioView extends StatelessWidget {
         color: Colors.orange,
         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaEvaluacionesPage())),
       ));
+
+      modules.add(_buildCardOption(
+        title: 'Proceso de trabajo',
+        icon: Icons.toll,
+        color: Colors.orange.shade800,
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaTrabajosPage())),
+      ));
     }
 
     // 📋 MÓDULOS DE SUPERVISIÓN
     if (isAdmin || operador.rol == RolUsuario.supervisor) {
-      modules.add(_buildCardOption(
-        title: 'Proceso de trabajo',
-        icon: Icons.toll,
-        color: Colors.orange,
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaTrabajosPage())),
-      ));
-
       modules.add(_buildCardOption(
         title: 'Revisión de garantias',
         icon: Icons.perm_contact_cal_outlined,
         color: Colors.green,
         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaRevisionesGarantiasPage())),
       ));
+
+      modules.add(_buildCardOption(
+        title: 'Catálogo de Actividades y Repuestos',
+        icon: Icons.menu_book,
+        color: const Color(0xFF005A9C),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GestionCatalogoActividadesPage())),
+      ));
+
+      modules.add(_buildCardOption(
+        title: 'Catálogo de Técnicos',
+        icon: Icons.badge_outlined,
+        color: const Color(0xFF003057),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GestionTecnicosPage())),
+      ));
+
+      modules.add(_buildCardOption(
+        title: 'Métricas de Fallas',
+        icon: Icons.troubleshoot_outlined,
+        color: Colors.blueGrey.shade700,
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GestionMetricasFallasPage())),
+      ));
     }
 
     // 💼 MÓDULOS COMERCIALES
     if (isAdmin || operador.rol == RolUsuario.comercial) {
+      modules.add(_buildCardOption(
+        title: 'Gestión y Edición de Clientes',
+        icon: Icons.people_alt,
+        color: const Color(0xFF005A9C), 
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GestionClientesPage())),
+      ));
+
       modules.add(_buildCardOption(
         title: 'Crear proforma',
         icon: Icons.business_center,
@@ -277,10 +334,27 @@ class _InicioView extends StatelessWidget {
       ));
 
       modules.add(_buildCardOption(
-        title: 'Validación Bodega',
+        title: 'Validación Bodega (Compras)',
         icon: Icons.factory, 
         color: Colors.blue[800]!, 
         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaBodegaPage())),
+      ));
+    }
+
+    // 📦 MÓDULOS DE BODEGA / DESPACHO
+    if (isAdmin || operador.rol == RolUsuario.bodega) {
+      modules.add(_buildCardOption(
+        title: 'Despacho Bodega',
+        icon: Icons.local_shipping_outlined,
+        color: const Color(0xFF005A9C),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaDespachoBodegaPage())),
+      ));
+
+      modules.add(_buildCardOption(
+        title: 'Inventario y Stock Bodega',
+        icon: Icons.inventory_2_outlined,
+        color: const Color(0xFF2E7D32),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GestionStockBodegaPage())),
       ));
     }
 

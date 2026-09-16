@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 
-// Importa tu MediaHelper (ajústalo a tu ruta real)
-// import '../../../../core/utils/media_helper.dart'; 
+import '../../../../core/utils/media_helper.dart';
 
 class CameraManagerWidget extends StatelessWidget {
   final List<XFile> archivosEvidencia;
@@ -27,10 +26,11 @@ class CameraManagerWidget extends StatelessWidget {
           maxDuration: const Duration(seconds: 30), 
         );
       } else {
-        archivo = await picker.pickImage(
-          source: source,
-          imageQuality: kIsWeb ? null : 85, 
-        );
+        // Pedimos el archivo crudo (sin imageQuality/maxWidth/maxHeight):
+        // la compresión la hacemos nosotros después con MediaHelper, una
+        // vez confirmado que el archivo terminó de escribirse en disco
+        // (ver _esperarArchivoDeCamaraListo más abajo).
+        archivo = await picker.pickImage(source: source);
       }
 
       if (archivo != null) {
@@ -41,16 +41,34 @@ class CameraManagerWidget extends StatelessWidget {
           nuevaLista.add(archivo);
           onArchivosActualizados(nuevaLista);
         } else {
-          // Si estamos en nativo y es imagen, delegamos al servicio de compresión
-          // NOTA: Descomenta esto cuando tengas tu MediaHelper
-          // final XFile? compressedFile = await MediaHelper.comprimirImagenNativa(archivo);
-          // if (compressedFile != null) {
-          //   nuevaLista.add(compressedFile);
-          //   onArchivosActualizados(nuevaLista);
-          // }
+          // 🩺 DIAGNÓSTICO: el cuadro negro solo ocurre con fotos tomadas
+          // en vivo con la cámara de este equipo (nunca con galería), lo
+          // que apunta a una condición de carrera: el archivo aún se está
+          // escribiendo en el almacenamiento lento cuando la cámara ya nos
+          // devolvió el control. Solo esperamos esto para ImageSource.camera;
+          // un archivo de galería ya está completo, no hace falta esperarlo.
+          final XFile? archivoListo = source == ImageSource.camera
+              ? await MediaHelper.esperarArchivoDeCamaraListo(archivo)
+              : archivo;
 
-          // Fallback temporal si aún no implementas el Helper:
-          nuevaLista.add(archivo);
+          if (archivoListo == null) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    '⚠️ La foto no se guardó completa (almacenamiento lento del equipo). Vuelva a tomarla.',
+                  ),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            }
+            return;
+          }
+
+          // Ya validado que el archivo es un JPEG completo: ahora sí lo
+          // comprimimos de forma aislada del hardware.
+          final XFile? archivoComprimido = await MediaHelper.comprimirImagenNativa(archivoListo);
+          nuevaLista.add(archivoComprimido ?? archivoListo);
           onArchivosActualizados(nuevaLista);
         }
       }

@@ -1,3 +1,4 @@
+import 'tiempos_operativos_entity.dart';
 // lib/features/tickets/domain/entities/ticket_entity.dart
 
 import 'package:aquaspot_postventa/features/tickets/domain/entities/evidencia_trabajo_entity.dart';
@@ -7,13 +8,10 @@ import 'package:aquaspot_postventa/features/tickets/domain/entities/proforma_ent
 import 'package:equatable/equatable.dart';
 import '../../../../core/enum/ticket_enums.dart';
 import 'evaluacion_tecnica_entity.dart';
-import 'evento_auditoria_entity.dart';
+import 'item_despacho_bodega_entity.dart';
+import 'registro_despacho_entity.dart';
+import '../../../fallas/domain/entities/metrica_falla_entity.dart';
 
-// lib/features/tickets/domain/entities/ticket_entity.dart
-
-import 'package:equatable/equatable.dart';
-import '../../../../core/enum/ticket_enums.dart'; // ⚙️ Asegúrate de apuntar a tus enums unificados
-import 'evaluacion_tecnica_entity.dart';
 import 'evento_auditoria_entity.dart';
 
 class TicketEntity extends Equatable {
@@ -76,6 +74,28 @@ final String marca; // 🚨 El que te habías olvidado
   final String? urlFactura;
   final bool trabajoIniciado;
 
+  // 🛑 CONTROL DE EXCEPCIÓN: SUPERVISOR DECLARA NO REQUIERE COMPRAS
+  final bool noRequiereCompras;
+  final String? motivoNoRequiereCompras;
+  final String? supervisorNoRequiereCompras;
+  final DateTime? fechaNoRequiereCompras;
+
+  // 📦 GESTIÓN Y DESPACHO BODEGA (Enclavamiento de Stock y Despacho)
+  final List<ItemDespachoBodegaEntity> itemsDespachoBodega;
+  final List<RegistroDespachoEntity> historialDespachos;
+
+  // ⏱️ TRAZABILIDAD CONCURRENTE Y TIEMPOS OPERATIVOS (Tiempos Netos vs Esperas)
+  final TiemposOperativosEntity? tiemposOperativos;
+
+  // 👥 TÉCNICOS ASIGNADOS (Gestión en Taller)
+  final List<String> tecnicosAsignados;
+
+  // 🔍 DIAGNÓSTICO DE FALLAS (Causas Raíz por Categoría)
+  final List<DiagnosticoFallaEntity> diagnosticoFallas;
+
+  // 📄 INFORME TÉCNICO ADJUNTO (Contador / Cosechadora)
+  final String? urlInformeTecnico;
+
 const TicketEntity({
     required this.id,
     required this.estadoActual,
@@ -120,6 +140,16 @@ const TicketEntity({
     this.urlFactura,
     this.urlGuiaRemision,
     this.trabajoIniciado = false,
+    this.noRequiereCompras = false,
+    this.motivoNoRequiereCompras,
+    this.supervisorNoRequiereCompras,
+    this.fechaNoRequiereCompras,
+    this.itemsDespachoBodega = const [],
+    this.historialDespachos = const [],
+    this.tiemposOperativos,
+    this.tecnicosAsignados = const [],
+    this.diagnosticoFallas = const [],
+    this.urlInformeTecnico,
   });
 
   // ⚙️ CLONADOR INDUSTRIAL CORREGIDO (Mutación Segura)
@@ -167,6 +197,16 @@ const TicketEntity({
     bool? fueModificado,
     String? urlFactura,
     String? urlGuiaRemision,
+    bool? noRequiereCompras,
+    String? motivoNoRequiereCompras,
+    String? supervisorNoRequiereCompras,
+    DateTime? fechaNoRequiereCompras,
+    List<ItemDespachoBodegaEntity>? itemsDespachoBodega,
+    List<RegistroDespachoEntity>? historialDespachos,
+    TiemposOperativosEntity? tiemposOperativos,
+    List<String>? tecnicosAsignados,
+    List<DiagnosticoFallaEntity>? diagnosticoFallas,
+    String? urlInformeTecnico,
   }) {
     return TicketEntity(
       id: id ?? this.id,
@@ -212,7 +252,16 @@ const TicketEntity({
       urlFactura:urlFactura ?? this.urlFactura, 
       urlGuiaRemision: urlGuiaRemision ?? this.urlGuiaRemision,
       trabajoIniciado: trabajoIniciado ?? this.trabajoIniciado,
-      
+      noRequiereCompras: noRequiereCompras ?? this.noRequiereCompras,
+      motivoNoRequiereCompras: motivoNoRequiereCompras ?? this.motivoNoRequiereCompras,
+      supervisorNoRequiereCompras: supervisorNoRequiereCompras ?? this.supervisorNoRequiereCompras,
+      fechaNoRequiereCompras: fechaNoRequiereCompras ?? this.fechaNoRequiereCompras,
+      itemsDespachoBodega: itemsDespachoBodega ?? this.itemsDespachoBodega,
+      historialDespachos: historialDespachos ?? this.historialDespachos,
+      tiemposOperativos: tiemposOperativos ?? this.tiemposOperativos,
+      tecnicosAsignados: tecnicosAsignados ?? this.tecnicosAsignados,
+      diagnosticoFallas: diagnosticoFallas ?? this.diagnosticoFallas,
+      urlInformeTecnico: urlInformeTecnico ?? this.urlInformeTecnico,
     );
   }
 
@@ -261,7 +310,54 @@ const TicketEntity({
         urlFactura,
         urlGuiaRemision,
         trabajoIniciado,
+        noRequiereCompras,
+        motivoNoRequiereCompras,
+        supervisorNoRequiereCompras,
+        fechaNoRequiereCompras,
+        itemsDespachoBodega,
+        historialDespachos,
+        tiemposOperativos,
+        tecnicosAsignados,
+        diagnosticoFallas,
+        urlInformeTecnico,
       ];
+
+  /// Obtiene el nombre formateado y estandarizado del responsable de facturación (ej: AGRISPOTSA)
+  String get responsableFacturacionLegible => formatearResponsableFacturacion(responsableFacturacion);
+
+  // ============================================================================
+  // 📦 ENCLAVAMIENTOS Y SENSORES DE BODEGA / DESPACHO / COMPRAS
+  // ============================================================================
+
+  /// Retorna verdadero si Compras ya marcó con check al menos un repuesto
+  /// (Gatillo para visualización temprana en la bandeja de Bodega / Despacho)
+  bool get tieneAlMenosUnCheckCompras =>
+      itemsDespachoBodega.any((item) => item.validadoPorCompras);
+
+  /// Retorna verdadero si Bodega ya despachó al menos una unidad de algún ítem
+  /// (Gatillo para visualización temprana en la bandeja de Proceso de Trabajo / Taller)
+  bool get tieneAlMenosUnDespachoBodega =>
+      itemsDespachoBodega.any((item) => item.cantidadDespachada > 0);
+
+  /// Válvula de seguridad: Compras solo puede cerrar/transferir definitivamente si
+  /// el 100% de los ítems requeridos tienen su check de validación.
+  bool get comprasValidacionCompleta =>
+      itemsDespachoBodega.isNotEmpty &&
+      itemsDespachoBodega.every((item) => item.validadoPorCompras);
+
+  /// Válvula de seguridad: Bodega solo transfiere formalmente a Proceso de Trabajo si
+  /// el 100% de los materiales requeridos han sido despachados en su totalidad.
+  bool get bodegaDespachoCompleto =>
+      itemsDespachoBodega.isNotEmpty &&
+      itemsDespachoBodega.every((item) => item.despachadoCompletamente);
+
+  /// Ítems que ya han sido despachados desde bodega (total o parcialmente)
+  List<ItemDespachoBodegaEntity> get itemsDespachados =>
+      itemsDespachoBodega.where((item) => item.cantidadDespachada > 0).toList();
+
+  /// Ítems que todavía tienen cantidades pendientes por despachar
+  List<ItemDespachoBodegaEntity> get itemsFaltantesDespacho =>
+      itemsDespachoBodega.where((item) => item.cantidadFaltante > 0).toList();
 }
 
 extension TicketMetrics on TicketEntity {
@@ -279,5 +375,21 @@ extension TicketMetrics on TicketEntity {
 
     // 3. Calculamos el delta de tiempo usando el primer registro cronológico encontrado
     return eventosFin.first.timestamp.difference(eventosInicio.first.timestamp);
+  }
+
+  // 🆕 Fecha en que el ticket entró a su estado ACTUAL: el timestamp más
+  // reciente de su historial. Se usa para mostrar, en tiempo real, cuánto
+  // lleva el ticket en el paso donde está ahora mismo (ver
+  // TiempoEnCursoWidget). No requiere ningún campo nuevo en Firestore: se
+  // deriva de historialEventos, que ya se guarda en cada paso.
+  DateTime? get fechaInicioEstadoActual {
+    if (historialEventos.isEmpty) return null;
+    DateTime? masReciente;
+    for (final evento in historialEventos) {
+      if (masReciente == null || evento.timestamp.isAfter(masReciente)) {
+        masReciente = evento.timestamp;
+      }
+    }
+    return masReciente;
   }
 }

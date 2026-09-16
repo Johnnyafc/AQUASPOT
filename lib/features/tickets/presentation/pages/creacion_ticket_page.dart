@@ -1,5 +1,5 @@
-import 'dart:io'; 
 import 'package:aquaspot_postventa/core/enum/marca_equipo.dart';
+import 'package:aquaspot_postventa/core/services/borrador_storage_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,9 +10,7 @@ import '../bloc/ticket_state.dart';
 import '../../../../core/enum/ticket_enums.dart'; 
 import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../../../features/auth/presentation/bloc/auth_state.dart';
-import '../../domain/entities/cliente_entity.dart';
 import '../widgets/ticket_form_widget.dart';
-import '../../../clientes/presentation/widgets/registro_cliente_bottom_sheet.dart'; 
 import '../widgets/confirmacion_ingreso_dialog.dart';
 import 'package:printing/printing.dart';
 
@@ -55,11 +53,143 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
   @override
   void initState() {
     super.initState();
-    context.read<TicketBloc>().add(ObtenerClientesEvent()); 
+    context.read<TicketBloc>().add(ObtenerClientesEvent());
+    _conectarAutoGuardadoBorrador();
+    _cargarBorradorLocal();
+  }
+
+  void _conectarAutoGuardadoBorrador() {
+    _clienteController.addListener(_guardarBorrador);
+    _customEquipoController.addListener(_guardarBorrador);
+    _campamentoController.addListener(_guardarBorrador);
+    _nombreContactoController.addListener(_guardarBorrador);
+    _emailController.addListener(_guardarBorrador);
+    _telefonoController.addListener(_guardarBorrador);
+    _fallaController.addListener(_guardarBorrador);
+    _serieController.addListener(_guardarBorrador);
+    _notasController.addListener(_guardarBorrador);
+    _horometroController.addListener(_guardarBorrador);
+  }
+
+  void _desconectarAutoGuardadoBorrador() {
+    _clienteController.removeListener(_guardarBorrador);
+    _customEquipoController.removeListener(_guardarBorrador);
+    _campamentoController.removeListener(_guardarBorrador);
+    _nombreContactoController.removeListener(_guardarBorrador);
+    _emailController.removeListener(_guardarBorrador);
+    _telefonoController.removeListener(_guardarBorrador);
+    _fallaController.removeListener(_guardarBorrador);
+    _serieController.removeListener(_guardarBorrador);
+    _notasController.removeListener(_guardarBorrador);
+    _horometroController.removeListener(_guardarBorrador);
+  }
+
+  void _guardarBorrador() {
+    BorradorStorageService.guardarBorrador(
+      clave: BorradorStorageService.kClaveDraftCreacionTicket,
+      datos: {
+        'cliente': _clienteController.text,
+        'customEquipo': _customEquipoController.text,
+        'campamento': _campamentoController.text,
+        'nombreContacto': _nombreContactoController.text,
+        'email': _emailController.text,
+        'telefono': _telefonoController.text,
+        'falla': _fallaController.text,
+        'serie': _serieController.text,
+        'notas': _notasController.text,
+        'horometro': _horometroController.text,
+        'selectedClienteId': _selectedClienteId,
+        'selectedSede': _selectedSede?.name,
+        'selectedEquipo': _selectedEquipo?.name,
+        'selectedMarca': _selectedMarca?.name,
+        'prioridad': _prioridad?.name,
+        'accesorios': _accesoriosSeleccionados,
+        'evidenciasPaths': BorradorStorageService.xFilesToPaths(_archivosEvidencia),
+        'evidenciasGarantiaPaths': BorradorStorageService.xFilesToPaths(_archivosEvidenciaGarantia),
+      },
+    );
+  }
+
+  Future<void> _cargarBorradorLocal() async {
+    final draft = await BorradorStorageService.obtenerBorrador(
+      BorradorStorageService.kClaveDraftCreacionTicket,
+    );
+    if (draft != null && mounted) {
+      setState(() {
+        if (draft['cliente'] != null && (draft['cliente'] as String).isNotEmpty) {
+          _clienteController.text = draft['cliente'];
+        }
+        if (draft['customEquipo'] != null) _customEquipoController.text = draft['customEquipo'];
+        if (draft['campamento'] != null) _campamentoController.text = draft['campamento'];
+        if (draft['nombreContacto'] != null) _nombreContactoController.text = draft['nombreContacto'];
+        if (draft['email'] != null) _emailController.text = draft['email'];
+        if (draft['telefono'] != null) _telefonoController.text = draft['telefono'];
+        if (draft['falla'] != null) _fallaController.text = draft['falla'];
+        if (draft['serie'] != null) _serieController.text = draft['serie'];
+        if (draft['notas'] != null) _notasController.text = draft['notas'];
+        if (draft['horometro'] != null) _horometroController.text = draft['horometro'];
+        if (draft['selectedClienteId'] != null) _selectedClienteId = draft['selectedClienteId'];
+
+        if (draft['selectedSede'] != null) {
+          final s = draft['selectedSede'] as String;
+          _selectedSede = Sede.values.cast<Sede?>().firstWhere((e) => e?.name == s, orElse: () => null);
+        }
+        if (draft['selectedEquipo'] != null) {
+          final eq = draft['selectedEquipo'] as String;
+          _selectedEquipo = TipoEquipo.values.cast<TipoEquipo?>().firstWhere((e) => e?.name == eq, orElse: () => null);
+        }
+        if (draft['selectedMarca'] != null) {
+          final m = draft['selectedMarca'] as String;
+          _selectedMarca = MarcaEquipo.values.cast<MarcaEquipo?>().firstWhere((e) => e?.name == m, orElse: () => null);
+        }
+        if (draft['prioridad'] != null) {
+          final p = draft['prioridad'] as String;
+          _prioridad = Prioridad.values.cast<Prioridad?>().firstWhere((e) => e?.name == p, orElse: () => null);
+        }
+        if (draft['accesorios'] != null && draft['accesorios'] is Map) {
+          final mapAcc = Map<String, dynamic>.from(draft['accesorios'] as Map);
+          mapAcc.forEach((k, v) {
+            _accesoriosSeleccionados[k] = v == true;
+          });
+        }
+        if (draft['evidenciasPaths'] != null && draft['evidenciasPaths'] is List) {
+          final restauradas = BorradorStorageService.pathsToXFiles(draft['evidenciasPaths'] as List);
+          _archivosEvidencia.clear();
+          _archivosEvidencia.addAll(restauradas);
+        }
+        if (draft['evidenciasGarantiaPaths'] != null && draft['evidenciasGarantiaPaths'] is List) {
+          final restauradas = BorradorStorageService.pathsToXFiles(draft['evidenciasGarantiaPaths'] as List);
+          _archivosEvidenciaGarantia.clear();
+          _archivosEvidenciaGarantia.addAll(restauradas);
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.restore, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(child: Text('Borrador de ticket recuperado automáticamente.')),
+            ],
+          ),
+          backgroundColor: const Color(0xFF005A9C),
+          duration: const Duration(seconds: 4),
+          action: SnackBarAction(
+            label: 'Descartar',
+            textColor: Colors.amber,
+            onPressed: () {
+              _limpiarFormulario();
+            },
+          ),
+        ),
+      );
+    }
   }
 
   @override
   void dispose() {
+    _desconectarAutoGuardadoBorrador();
     // Innegociable: Destrucción de todos los punteros en memoria
     _clienteController.dispose();
     _customEquipoController.dispose();
@@ -96,10 +226,12 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
       _prioridad = null;
       _accesoriosSeleccionados.clear();
       _archivosEvidencia.clear();
+      _archivosEvidenciaGarantia.clear();
     });
     
     context.read<TicketBloc>().add(const SeleccionarTipoRequerimientoEvent(TipoRequerimiento.ninguno));
     _formKey.currentState?.reset();
+    BorradorStorageService.eliminarBorrador(BorradorStorageService.kClaveDraftCreacionTicket);
   }
 
   // 📷 SUBRUTINA DE ACTUADOR MULTIMEDIA
@@ -120,6 +252,7 @@ Future<void> _abrirSelectorMultimedia() async {
         setState(() {
           _archivosEvidenciaGarantia.addAll(fotos);
         });
+        _guardarBorrador();
 
         // 5. Feedback visual confirming the hardware state change
         if (mounted) {
@@ -209,7 +342,7 @@ Future<void> _abrirSelectorMultimedia() async {
 
     if (currentState.tipoSeleccionado == TipoRequerimiento.reclamoGarantia) {
       if (currentState.tipoGarantia == TipoGarantia.maquinaNueva) {
-        responsableAsignado = ResponsableFacturacion.agripotsa;
+        responsableAsignado = ResponsableFacturacion.agrispotsa;
       } else if (currentState.tipoGarantia == TipoGarantia.servicio) {
         responsableAsignado = ResponsableFacturacion.tallerInterno;
       }
@@ -297,6 +430,7 @@ final double? lecturaHorometro = _horometroController.text.trim().isNotEmpty
           if (state.status == TicketStatus.error) {
              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.red));
           } else if (state.status == TicketStatus.operationSuccess) { 
+            BorradorStorageService.eliminarBorrador(BorradorStorageService.kClaveDraftCreacionTicket);
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Registro Exitoso'), backgroundColor: Colors.green));
             
             final ticketReciente = state.currentTicket;
@@ -350,6 +484,7 @@ final double? lecturaHorometro = _horometroController.text.trim().isNotEmpty
                           setState(() {
                             _archivosEvidenciaGarantia.removeAt(index);
                           });
+                          _guardarBorrador();
                         },
                         
                         selectedSede: _selectedSede,
@@ -362,27 +497,51 @@ final double? lecturaHorometro = _horometroController.text.trim().isNotEmpty
                         lugarAtencion: state.lugarAtencion,
                         tipoGarantia: state.tipoGarantia,
                         marcaSeleccionada: _selectedMarca,
-                        onMarcaChanged: (val) => setState(() => _selectedMarca = val),
-                        onSedeChanged: (val) => setState(() => _selectedSede = val),
-                        onEquipoChanged: (val) => setState(() {
-                          _selectedEquipo = val;
-                          if (val != TipoEquipo.Otros) _customEquipoController.clear();
-                        }),
-                        onClienteSelected: (seleccion) => setState(() {
-                          _selectedClienteId = seleccion.camaronera;
-                          _clienteController.text = seleccion.camaronera;
-                          _campamentoController.text = seleccion.direccion;
-                          _nombreContactoController.text = seleccion.nombreContacto;
-                          _emailController.text = seleccion.emailContacto;
-                          _telefonoController.text = seleccion.celular;
-                        }),
-                        onClienteCleared: () => setState(() => _selectedClienteId = null),
-                        onPrioridadChanged: (val) => setState(() => _prioridad = val),
-                        onAccesorioChanged: (pieza, valor) => setState(() => _accesoriosSeleccionados[pieza] = valor),
-                        onArchivosActualizados: (archivos) => setState(() {
-                          _archivosEvidencia.clear();
-                          _archivosEvidencia.addAll(archivos);
-                        }),
+                        onMarcaChanged: (val) {
+                          setState(() => _selectedMarca = val);
+                          _guardarBorrador();
+                        },
+                        onSedeChanged: (val) {
+                          setState(() => _selectedSede = val);
+                          _guardarBorrador();
+                        },
+                        onEquipoChanged: (val) {
+                          setState(() {
+                            _selectedEquipo = val;
+                            if (val != TipoEquipo.Otros) _customEquipoController.clear();
+                          });
+                          _guardarBorrador();
+                        },
+                        onClienteSelected: (seleccion) {
+                          setState(() {
+                            _selectedClienteId = seleccion.camaronera;
+                            _clienteController.text = seleccion.camaronera;
+                            _campamentoController.text = seleccion.direccion;
+                            _nombreContactoController.text = seleccion.nombreContacto;
+                            _emailController.text = seleccion.emailContacto;
+                            _telefonoController.text = seleccion.celular;
+                          });
+                          _guardarBorrador();
+                        },
+                        onClienteCleared: () {
+                          setState(() => _selectedClienteId = null);
+                          _guardarBorrador();
+                        },
+                        onPrioridadChanged: (val) {
+                          setState(() => _prioridad = val);
+                          _guardarBorrador();
+                        },
+                        onAccesorioChanged: (pieza, valor) {
+                          setState(() => _accesoriosSeleccionados[pieza] = valor);
+                          _guardarBorrador();
+                        },
+                        onArchivosActualizados: (archivos) {
+                          setState(() {
+                            _archivosEvidencia.clear();
+                            _archivosEvidencia.addAll(archivos);
+                          });
+                          _guardarBorrador();
+                        },
                         onSubmit: _submitForm, 
                       ),
                     ),

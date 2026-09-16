@@ -9,8 +9,11 @@ import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_event.dart';
 import '../bloc/ticket_state.dart'; // ⚙️ Tu nuevo estado unificado
 import '../../../../core/enum/ticket_enums.dart';
+import '../../domain/entities/ticket_entity.dart'; // ⚙️ Necesario para el extension getter fechaInicioEstadoActual
+import '../widgets/tiempo_en_curso_widget.dart';
 import 'detalle_ticket_page.dart';
 import 'evaluacion_tecnica_page.dart';
+import '../../../../core/theme/ticket_visual_theme.dart';
 
 class BandejaEvaluacionesPage extends StatefulWidget {
   const BandejaEvaluacionesPage({super.key});
@@ -91,10 +94,41 @@ class _BandejaEvaluacionesPageState extends State<BandejaEvaluacionesPage> {
               itemBuilder: (context, index) {
                 final ticket = pendientes[index];
                 return Card(
+                  key: ValueKey(ticket.id),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(color: Colors.grey.shade300, width: 1),
+                  ),
                   child: ListTile(
-                    leading: const CircleAvatar(backgroundColor: Colors.orange, child: Icon(Icons.pending_actions, color: Colors.white)),
+                    leading: const AvatarSuave(color: kTicketAlerta, icono: Icons.pending_actions),
                     title: Text(ticket.id, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('Equipo: ${ticket.equipo.name}\nCliente: ${ticket.clienteId}'),
+                    // 🆕 Tiempo en vivo en el estado actual (sin backend: se
+                    // recalcula contra la hora real del dispositivo).
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 🆕 Cliente (empresa/camaronera) y Contacto (persona) son
+                        // datos distintos — se muestran ambos.
+                        Text(
+                          'Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}'
+                          '${ticket.clienteId.trim().isNotEmpty ? '\nCliente: ${ticket.clienteId}' : ''}'
+                          '\nContacto: ${ticket.nombreContacto}',
+                        ),
+                        const SizedBox(height: 4),
+                        TiempoEnCursoWidget(
+                          desde: ticket.fechaInicioEstadoActual,
+                          builder: (context, texto) => Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.hourglass_bottom, size: 12, color: kTicketIcono),
+                              const SizedBox(width: 4),
+                              Text(texto, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kTicketTextoSecundario)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                     onTap: () {
                       Navigator.push(context, MaterialPageRoute(builder: (_) => EvaluacionTecnicaPage(ticket: ticket)));

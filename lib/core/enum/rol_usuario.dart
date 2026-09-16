@@ -7,6 +7,7 @@ enum RolUsuario {
   comercial,
   costos, 
   compras,
+  bodega,
   procesoTrabajo,
   desconocido // Estado de fallo de seguridad
 }

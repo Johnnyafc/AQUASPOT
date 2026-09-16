@@ -7,7 +7,8 @@ import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_eve
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:url_launcher/url_launcher.dart'; // Útil para abrir los links de Storage
+import 'package:url_launcher/url_launcher.dart';
+import '../widgets/tarjeta_no_requiere_compras_widget.dart';
 
 class RevisionGarantiaPage extends StatelessWidget {
   final TicketEntity ticket;
@@ -23,6 +24,7 @@ class RevisionGarantiaPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ⚙️ Aquí extraemos el sub-módulo donde realmente están los nodos de garantía
     final evaluacion = ticket.evaluacionTecnica;
 
     return Scaffold(
@@ -49,7 +51,10 @@ class RevisionGarantiaPage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. ENCABEZADO DE INFORMACIÓN
+              TarjetaNoRequiereComprasWidget(ticket: ticket),
+              // =====================================================================
+              // 1. ENCABEZADO DE INFORMACIÓN Y TRAZABILIDAD
+              // =====================================================================
               Card(
                 elevation: 2,
                 child: Padding(
@@ -61,14 +66,33 @@ class RevisionGarantiaPage extends StatelessWidget {
                       const SizedBox(height: 8),
                       Text('Cliente ID: ${ticket.clienteId}'),
                       Text('Serie: ${ticket.numeroSerie ?? "No registrada"}'),
-                      Text('Responsable Facturación: ${ticket.responsableFacturacion ?? "N/A"}'),
+                      Text('Responsable Facturación: ${ticket.responsableFacturacionLegible}'),
+                      
+                      // 🟢 Inyección de la Orden de Venta (Apuntando a evaluacion)
+                      if (evaluacion?.numeroOVGarantia != null && evaluacion!.numeroOVGarantia!.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.1),
+                            border: Border.all(color: Colors.blue),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'OV Garantía: ${evaluacion.numeroOVGarantia}', 
+                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue[800]),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
               ),
               const SizedBox(height: 16),
 
-              // 2. REPORTE TÉCNICO (OBSERVACIÓN)
+              // =====================================================================
+              // 2. REPORTE TÉCNICO (OBSERVACIÓN DEL CAMPO)
+              // =====================================================================
               const Text('Reporte Técnico Inicial', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 8),
               Container(
@@ -79,28 +103,30 @@ class RevisionGarantiaPage extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  evaluacion?.observacion.isNotEmpty == true 
-                      ? evaluacion!.observacion 
+                  evaluacion?.observacion != null && evaluacion!.observacion.isNotEmpty 
+                      ? evaluacion.observacion 
                       : 'Sin observaciones registradas por el técnico.',
                   style: const TextStyle(fontSize: 14),
                 ),
               ),
               const SizedBox(height: 16),
 
-              // 3. ARCHIVOS ADJUNTOS Y COSTEO (EXCEL / PDF)
+              // =====================================================================
+              // 3. TUBERÍA DE EVIDENCIAS Y ARCHIVOS ADJUNTOS
+              // =====================================================================
               const Text('Evidencias y Costeo Adjunto', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 8),
               
               // Botón para Proforma / Costeo Excel
-              if (evaluacion?.urlProformaExcel != null)
+              if (evaluacion?.urlProformaExcel != null && evaluacion!.urlProformaExcel!.isNotEmpty)
                 ListTile(
                   leading: const Icon(Icons.table_chart, color: Colors.green),
                   title: const Text('Ver Proforma / Costeo (Excel)'),
                   trailing: const Icon(Icons.open_in_new, size: 16),
-                  onTap: () => _launchURL(evaluacion!.urlProformaExcel!),
+                  onTap: () => _launchURL(evaluacion.urlProformaExcel!),
                 ),
 
-              // Lista de PDFs adjuntos
+              // Lista de PDFs adjuntos (Diagnóstico regular)
               if (evaluacion?.urlsAdjuntosPdf != null && evaluacion!.urlsAdjuntosPdf.isNotEmpty)
                 ...evaluacion.urlsAdjuntosPdf.map((pdfUrl) {
                   return ListTile(
@@ -111,9 +137,31 @@ class RevisionGarantiaPage extends StatelessWidget {
                   );
                 }),
 
+              // 🟢 Tubería de PDFs específicos de Garantía (Apuntando a evaluacion)
+              if (evaluacion?.urlsAdjuntosPdfGarantia != null && evaluacion!.urlsAdjuntosPdfGarantia!.isNotEmpty)
+                ...evaluacion!.urlsAdjuntosPdfGarantia!.map((pdfGarantiaUrl) {
+                  return ListTile(
+                    leading: const Icon(Icons.verified_user, color: Colors.blue),
+                    title: Text('Documento de Garantía (${evaluacion.urlsAdjuntosPdfGarantia!.indexOf(pdfGarantiaUrl) + 1})'),
+                    trailing: const Icon(Icons.open_in_new, size: 16),
+                    onTap: () => _launchURL(pdfGarantiaUrl),
+                  );
+                }),
+
+              // 🟢 PDF de Revisión Técnica Antigua (Garantía de servicio)
+              if (evaluacion?.urlPdfRevisionTecnicaAntigua != null && evaluacion!.urlPdfRevisionTecnicaAntigua!.isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.history_edu, color: Colors.deepOrange),
+                  title: const Text('Revisión Técnica Antigua (PDF)'),
+                  trailing: const Icon(Icons.open_in_new, size: 16),
+                  onTap: () => _launchURL(evaluacion.urlPdfRevisionTecnicaAntigua!),
+                ),
+
               const SizedBox(height: 32),
 
+              // =====================================================================
               // 4. BOTONES DE MANDO CRÍTICO (APROBAR / RECHAZAR)
+              // =====================================================================
               Row(
                 children: [
                   Expanded(
@@ -160,7 +208,6 @@ class RevisionGarantiaPage extends StatelessWidget {
       rolUser = authState.usuario.rol.name.toUpperCase();
     }
 
-    // El ticket viaja intacto; el BLoC intercepta 'esGarantia' y actualiza la entidad en el repositorio
     context.read<TicketBloc>().add(
       DictaminarGarantiaEvent(
         ticket: ticket,

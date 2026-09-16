@@ -1,3 +1,7 @@
+import 'tiempos_operativos_model.dart';
+import 'item_despacho_bodega_model.dart';
+import 'registro_despacho_model.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:aquaspot_postventa/features/tickets/data/models/GestionComprasModel.dart';
 import 'package:aquaspot_postventa/features/tickets/data/models/evidencia_trabajo_model.dart';
 import 'package:aquaspot_postventa/features/tickets/data/models/proforma_model.dart';
@@ -7,6 +11,7 @@ import '../../../../core/enum/ticket_enums.dart';
 import 'evaluacion_tecnica_model.dart';
 import 'evento_auditoria_model.dart';
 import 'item_compra_model.dart'; // 🔌 CONECTOR SOLDADO
+import '../../../fallas/data/models/metrica_falla_model.dart';
 
 class TicketModel extends TicketEntity {
   const TicketModel({
@@ -52,6 +57,16 @@ class TicketModel extends TicketEntity {
     super.urlFactura,
     super.urlGuiaRemision,
     super.trabajoIniciado,
+    super.noRequiereCompras = false,
+    super.motivoNoRequiereCompras,
+    super.supervisorNoRequiereCompras,
+    super.fechaNoRequiereCompras,
+    super.itemsDespachoBodega = const [],
+    super.historialDespachos = const [],
+    super.tiemposOperativos,
+    super.tecnicosAsignados = const [],
+    super.diagnosticoFallas = const [],
+    super.urlInformeTecnico,
   });
 
   factory TicketModel.fromJson(Map<String, dynamic> json) {
@@ -136,8 +151,35 @@ class TicketModel extends TicketEntity {
           : [],
       urlGuiaRemision: json['urlGuiaRemision'] as String?,
       urlFactura: json['urlFactura'] as String?,
+      noRequiereCompras: json['noRequiereCompras'] as bool? ?? false,
+      motivoNoRequiereCompras: json['motivoNoRequiereCompras'] as String?,
+      supervisorNoRequiereCompras: json['supervisorNoRequiereCompras'] as String?,
+      fechaNoRequiereCompras: json['fechaNoRequiereCompras'] != null
+          ? (json['fechaNoRequiereCompras'] is Timestamp
+              ? (json['fechaNoRequiereCompras'] as Timestamp).toDate()
+              : DateTime.tryParse(json['fechaNoRequiereCompras'].toString()))
+          : null,
+      itemsDespachoBodega: json['itemsDespachoBodega'] != null
+          ? (json['itemsDespachoBodega'] as List)
+              .map((e) => ItemDespachoBodegaModel.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : const [],
+      historialDespachos: json['historialDespachos'] != null
+          ? (json['historialDespachos'] as List)
+              .map((e) => RegistroDespachoModel.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : const [],
+      tiemposOperativos: json['tiemposOperativos'] != null
+          ? TiemposOperativosModel.fromJson(Map<String, dynamic>.from(json['tiemposOperativos'] as Map))
+          : null,
+      tecnicosAsignados: (json['tecnicosAsignados'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      diagnosticoFallas: json['diagnosticoFallas'] != null
+          ? (json['diagnosticoFallas'] as List)
+              .map((e) => DiagnosticoFallaModel.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : const [],
+      urlInformeTecnico: json['urlInformeTecnico'] as String?,
     );
-    
   }
 
   factory TicketModel.fromEntity(TicketEntity entity) {
@@ -194,7 +236,21 @@ class TicketModel extends TicketEntity {
     tipoGarantia:entity.tipoGarantia,
     responsableFacturacion:entity.responsableFacturacion, 
     horometro: entity.horometro,  
-    urlsEvidenciasGarantia: entity.urlsEvidenciasGarantia,   
+    urlsEvidenciasGarantia: entity.urlsEvidenciasGarantia,
+    noRequiereCompras: entity.noRequiereCompras,
+    motivoNoRequiereCompras: entity.motivoNoRequiereCompras,
+    supervisorNoRequiereCompras: entity.supervisorNoRequiereCompras,
+    fechaNoRequiereCompras: entity.fechaNoRequiereCompras,
+      itemsDespachoBodega: entity.itemsDespachoBodega,
+      historialDespachos: entity.historialDespachos,
+      tiemposOperativos: entity.tiemposOperativos != null
+          ? (entity.tiemposOperativos is TiemposOperativosModel
+              ? entity.tiemposOperativos as TiemposOperativosModel
+              : TiemposOperativosModel.fromEntity(entity.tiemposOperativos!))
+          : null,
+      tecnicosAsignados: entity.tecnicosAsignados,
+      diagnosticoFallas: entity.diagnosticoFallas,
+      urlInformeTecnico: entity.urlInformeTecnico,
     );
 
   }
@@ -257,7 +313,29 @@ class TicketModel extends TicketEntity {
           : null,
           'urlGuiaRemision': urlGuiaRemision,
           'urlFactura': urlFactura,
-          
+          'noRequiereCompras': noRequiereCompras,
+          'motivoNoRequiereCompras': motivoNoRequiereCompras,
+          'supervisorNoRequiereCompras': supervisorNoRequiereCompras,
+          'fechaNoRequiereCompras': fechaNoRequiereCompras != null ? Timestamp.fromDate(fechaNoRequiereCompras!) : null,
+      'itemsDespachoBodega': itemsDespachoBodega.map((e) {
+        if (e is ItemDespachoBodegaModel) return e.toJson();
+        return ItemDespachoBodegaModel.fromEntity(e).toJson();
+      }).toList(),
+      'historialDespachos': historialDespachos.map((e) {
+        if (e is RegistroDespachoModel) return e.toJson();
+        return RegistroDespachoModel.fromEntity(e).toJson();
+      }).toList(),
+      'tiemposOperativos': tiemposOperativos != null
+          ? (tiemposOperativos is TiemposOperativosModel
+              ? (tiemposOperativos as TiemposOperativosModel).toJson()
+              : TiemposOperativosModel.fromEntity(tiemposOperativos!).toJson())
+          : null,
+      'tecnicosAsignados': tecnicosAsignados,
+      'diagnosticoFallas': diagnosticoFallas.map((e) {
+        if (e is DiagnosticoFallaModel) return e.toJson();
+        return DiagnosticoFallaModel.fromEntity(e).toJson();
+      }).toList(),
+      'urlInformeTecnico': urlInformeTecnico,
     };
   }
 }

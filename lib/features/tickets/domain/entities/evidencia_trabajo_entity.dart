@@ -4,13 +4,15 @@ class EvidenciaTrabajoEntity extends Equatable {
   final List<String> fotosUrls;
   final List<String> videosUrls;
   final String? notasTecnicas;
+  final String? nombreTecnico;
 
   const EvidenciaTrabajoEntity({
     required this.fotosUrls,
     required this.videosUrls,
     this.notasTecnicas,
+    this.nombreTecnico,
   });
 
   @override
-  List<Object?> get props => [fotosUrls, videosUrls, notasTecnicas];
+  List<Object?> get props => [fotosUrls, videosUrls, notasTecnicas, nombreTecnico];
 }

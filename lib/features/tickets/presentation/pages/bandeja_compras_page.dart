@@ -7,6 +7,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_state.dart';
 import '../../domain/entities/ticket_entity.dart';
+import '../widgets/tiempo_en_curso_widget.dart';
+import '../../../../core/theme/ticket_visual_theme.dart';
 // import 'gestion_compras_page.dart'; // La pantalla que haremos en el siguiente paso
 
 class BandejaComprasPage extends StatelessWidget {
@@ -25,16 +27,18 @@ class BandejaComprasPage extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
 
-          // ⚙️ FILTRO SCADA: Capturamos los tickets en tránsito o listos
+          // ⚙️ FILTRO SCADA: Capturamos los tickets en etapa de compras pendientes de subir OC
           final ticketsCompras = state.historial.where((t) {
-            return t.estadoActual == EstadoTicket.costos || 
-                   t.estadoActual == EstadoTicket.compras;
+            final enCompras = t.estadoActual == EstadoTicket.costos || 
+                              t.estadoActual == EstadoTicket.compras;
+            final pendienteOC = t.gestionCompras == null;
+            return enCompras && pendienteOC;
           }).toList();
 
           if (ticketsCompras.isEmpty) {
             return const Center(
               child: Text(
-                'Línea despejada. No hay requerimientos de compra.',
+                'Línea despejada. No hay requerimientos de compra pendientes de OC.',
                 style: TextStyle(fontSize: 16, color: Colors.grey),
               ),
             );
@@ -50,24 +54,25 @@ class BandejaComprasPage extends StatelessWidget {
               final bool procesadoPorCostos = ticket.estadoActual == EstadoTicket.compras || 
                                               ticket.isCostosCompletado;
 
+              // 🎨 Antes esta misma señal (¿ya se procesó por costos?) se
+              // repetía 4 veces con color (borde de la tarjeta, avatar,
+              // caja de semáforo y emoji 🟢/🔴) — mucha redundancia visual
+              // para un solo dato. Ahora un único color con significado
+              // (kTicketExito/kTicketAlerta) y una sola insignia lo dicen.
+              final colorEstadoCompra = procesadoPorCostos ? kTicketExito : kTicketAlerta;
               return Card(
-                elevation: procesadoPorCostos ? 4 : 2, 
+                key: ValueKey(ticket.id),
+                elevation: 2,
                 margin: const EdgeInsets.only(bottom: 12),
                 shape: RoundedRectangleBorder(
-                  side: BorderSide(
-                    color: procesadoPorCostos ? Colors.teal : Colors.red.shade300, 
-                    width: 1.5
-                  ),
+                  side: BorderSide(color: Colors.grey.shade300, width: 1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: ListTile(
                   contentPadding: const EdgeInsets.all(16),
-                  leading: CircleAvatar(
-                    backgroundColor: procesadoPorCostos ? Colors.teal.shade100 : Colors.red.shade50,
-                    child: Icon(
-                      procesadoPorCostos ? Icons.shopping_cart_checkout : Icons.warning_amber_rounded, 
-                      color: procesadoPorCostos ? Colors.teal.shade800 : Colors.red.shade700
-                    ),
+                  leading: AvatarSuave(
+                    color: colorEstadoCompra,
+                    icono: procesadoPorCostos ? Icons.shopping_cart_checkout : Icons.warning_amber_rounded,
                   ),
                   title: Text(
                     'Ticket: ${ticket.id}', 
@@ -77,31 +82,49 @@ class BandejaComprasPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 6),
-                      Text('Proyecto: ${ticket.codigoProyecto ?? 'PENDIENTE DE CREACIÓN'}', 
+                      Text(
+                        'Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}'
+                        '${ticket.clienteId.trim().isNotEmpty ? ' | Cliente: ${ticket.clienteId}' : ''}'
+                        ' | Contacto: ${ticket.nombreContacto}',
+                      ),
+                      const SizedBox(height: 4),
+                      Text('Proyecto: ${ticket.codigoProyecto ?? 'PENDIENTE DE CREACIÓN'}',
                         style: TextStyle(
-                          color: ticket.codigoProyecto != null ? Colors.black87 : Colors.red,
+                          color: ticket.codigoProyecto != null ? kTicketTextoPrincipal : kTicketAlerta,
                           fontWeight: ticket.codigoProyecto != null ? FontWeight.normal : FontWeight.bold
                         )
                       ),
                       const SizedBox(height: 8),
-                      
-                      // 🚦 SEMÁFORO DE ESTADO LOGÍSTICO
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: procesadoPorCostos ? Colors.green.shade50 : Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: procesadoPorCostos ? Colors.green : Colors.red.shade400),
-                        ),
-                        child: Text(
-                          procesadoPorCostos 
-                              ? '🟢 HABILITADO PARA COMPRA' 
-                              : '🔴 COSTOS NO PROCESADO',
-                          style: TextStyle(
-                            fontSize: 12, 
-                            fontWeight: FontWeight.bold,
-                            color: procesadoPorCostos ? Colors.green.shade700 : Colors.red.shade800,
+
+                      // 🚦 UNA sola insignia (antes: caja + emoji, redundante con el
+                      // avatar y el borde que ya se quitaron arriba).
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          InsigniaSuave(
+                            color: colorEstadoCompra,
+                            texto: procesadoPorCostos ? 'HABILITADO PARA COMPRA' : 'COSTOS NO PROCESADO',
                           ),
+                          if (ticket.noRequiereCompras)
+                            InsigniaSuave(
+                              color: Colors.deepOrange.shade900,
+                              texto: 'NO REQUIERE COMPRAS',
+                            ),
+                        ],
+                      ),
+                      // 🆕 Tiempo en vivo en el estado actual (sin backend: se
+                      // recalcula contra la hora real del dispositivo).
+                      const SizedBox(height: 8),
+                      TiempoEnCursoWidget(
+                        desde: ticket.fechaInicioEstadoActual,
+                        builder: (context, texto) => Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.hourglass_bottom, size: 12, color: kTicketIcono),
+                            const SizedBox(width: 4),
+                            Text(texto, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kTicketTextoSecundario)),
+                          ],
                         ),
                       ),
                     ],

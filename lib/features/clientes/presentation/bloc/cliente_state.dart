@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import '../../domain/entities/cliente_entity.dart';
 
 abstract class ClienteState extends Equatable {
   const ClienteState();
@@ -12,6 +13,17 @@ class ClienteInitial extends ClienteState {}
 class ClienteLoading extends ClienteState {}
 
 class ClienteSuccess extends ClienteState {}
+
+class ClienteActualizadoSuccess extends ClienteState {}
+
+class ClientesLoaded extends ClienteState {
+  final List<ClienteEntity> clientes;
+
+  const ClientesLoaded(this.clientes);
+
+  @override
+  List<Object> get props => [clientes];
+}
 
 class ClienteError extends ClienteState {
   final String message;

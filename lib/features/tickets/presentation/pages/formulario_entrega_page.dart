@@ -1,3 +1,4 @@
+import 'package:aquaspot_postventa/core/services/borrador_storage_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_picker/file_picker.dart' as fp;
@@ -10,6 +11,8 @@ import '../bloc/ticket_event.dart';
 import '../bloc/ticket_state.dart';
 import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../../../features/auth/presentation/bloc/auth_state.dart';
+import '../widgets/copy_icon_button_widget.dart';
+import '../widgets/tarjeta_no_requiere_compras_widget.dart';
 
 class FormularioEntregaPage extends StatefulWidget {
   final TicketEntity ticket;
@@ -24,6 +27,58 @@ class _FormularioEntregaPageState extends State<FormularioEntregaPage> {
   
   fp.PlatformFile? _guiaRemision;
   fp.PlatformFile? _factura;
+
+  @override
+  void initState() {
+    super.initState();
+    _observacionController.addListener(_guardarBorrador);
+    _cargarBorradorLocal();
+  }
+
+  void _guardarBorrador() {
+    BorradorStorageService.guardarBorrador(
+      clave: BorradorStorageService.claveDraftEntrega(widget.ticket.id),
+      datos: {
+        'observacion': _observacionController.text,
+        'guiaPath': _guiaRemision?.path,
+        'facturaPath': _factura?.path,
+      },
+    );
+  }
+
+  Future<void> _cargarBorradorLocal() async {
+    final draft = await BorradorStorageService.obtenerBorrador(
+      BorradorStorageService.claveDraftEntrega(widget.ticket.id),
+    );
+    if (draft != null && mounted) {
+      setState(() {
+        if (draft['observacion'] != null && (draft['observacion'] as String).isNotEmpty) {
+          _observacionController.text = draft['observacion'] as String;
+        }
+        if (draft['guiaPath'] != null) {
+          _guiaRemision = BorradorStorageService.pathToPlatformFile(draft['guiaPath'] as String);
+        }
+        if (draft['facturaPath'] != null) {
+          _factura = BorradorStorageService.pathToPlatformFile(draft['facturaPath'] as String);
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('💾 Borrador de entrega restaurado.'),
+          backgroundColor: Color(0xFF005A9C),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _observacionController.removeListener(_guardarBorrador);
+    _observacionController.dispose();
+    super.dispose();
+  }
 
   Future<void> _abrirEnlaceBD(String url) async {
     final uri = Uri.parse(url);
@@ -50,6 +105,7 @@ class _FormularioEntregaPageState extends State<FormularioEntregaPage> {
     );
     if (result != null) {
       setState(() => _guiaRemision = result.files.first);
+      _guardarBorrador();
     }
   }
 
@@ -61,11 +117,19 @@ class _FormularioEntregaPageState extends State<FormularioEntregaPage> {
     );
     if (result != null) {
       setState(() => _factura = result.files.first);
+      _guardarBorrador();
     }
   }
 
-  void _eliminarGuia() => setState(() => _guiaRemision = null);
-  void _eliminarFactura() => setState(() => _factura = null);
+  void _eliminarGuia() {
+    setState(() => _guiaRemision = null);
+    _guardarBorrador();
+  }
+
+  void _eliminarFactura() {
+    setState(() => _factura = null);
+    _guardarBorrador();
+  }
 
   Map<String, String> _obtenerDatosOperador() {
     final authState = context.read<AuthBloc>().state;
@@ -103,6 +167,21 @@ class _FormularioEntregaPageState extends State<FormularioEntregaPage> {
     );
   }
 
+  // ⚙️ SUBRUTINA: Fila de dato con botón de copiar
+  Widget _buildFilaDato(BuildContext context, String etiqueta, String valor, {TextStyle? style}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2.0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text('$etiqueta $valor', style: style),
+          ),
+          CopyIconButtonWidget(etiqueta: etiqueta, valor: valor),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // 🧠 LECTURA DE SENSORES ESTÁTICOS
@@ -133,6 +212,7 @@ class _FormularioEntregaPageState extends State<FormularioEntregaPage> {
           padding: const EdgeInsets.all(16.0),
           child: ListView(
             children: [
+              TarjetaNoRequiereComprasWidget(ticket: widget.ticket),
               Card(
                 elevation: 2,
                 color: Colors.blueGrey.shade50,
@@ -143,16 +223,76 @@ class _FormularioEntregaPageState extends State<FormularioEntregaPage> {
                     children: [
                       const Text('Datos de Salida', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                       const Divider(),
-                      Text('Equipo: ${widget.ticket.equipo.name.toUpperCase()}'),
-                      Text('Cliente: ${widget.ticket.clienteId}'),
-                      Text('Estación Actual: ${widget.ticket.estadoActual.name.toUpperCase()}', 
-                        style: TextStyle(color: Colors.blueGrey.shade800, fontWeight: FontWeight.bold)
+                      _buildFilaDato(context, 'Ticket:', widget.ticket.id),
+                      _buildFilaDato(context, 'Numero de serie:', '${widget.ticket.numeroSerie}'),
+                      _buildFilaDato(context, 'Marca:', '${widget.ticket.marca}'),
+                      _buildFilaDato(context, 'Equipo:', widget.ticket.equipo.name.toUpperCase()),
+                      _buildFilaDato(context, 'Cliente:', widget.ticket.clienteId),
+                      _buildFilaDato(
+                        context,
+                        'Estación Actual:',
+                        widget.ticket.estadoActual.name.toUpperCase(),
+                        style: TextStyle(color: Colors.blueGrey.shade800, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
                 ),
               ),
               const SizedBox(height: 20),
+
+              // ==========================================
+              // 🚨 BALIZA: SE FACTURA COMO GARANTÍA
+              // ==========================================
+              if (widget.ticket.esGarantia == true)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    border: Border.all(color: Colors.amber.shade700, width: 2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.policy, color: Colors.amber.shade900, size: 28),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Se factura como garantía',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // ==========================================
+              // 📎 ADJUNTO: ORDEN DE VENTA
+              // ==========================================
+              if (widget.ticket.codigoOrdenVenta.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: ListTile(
+                    leading: const Icon(Icons.receipt_long, color: Colors.blueAccent, size: 28),
+                    title: const Text('Orden de Venta', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    subtitle: const Text('Documento comercial adjunto al requerimiento.', style: TextStyle(fontSize: 11)),
+                    trailing: ElevatedButton.icon(
+                      icon: const Icon(Icons.download, size: 16),
+                      label: const Text('Ver'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueGrey.shade800,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      onPressed: () => _abrirEnlaceBD(widget.ticket.codigoOrdenVenta.first),
+                    ),
+                  ),
+                ),
 
               const Text('Circuitos de Despacho (Libre Acceso)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
               const SizedBox(height: 10),

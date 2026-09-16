@@ -4,6 +4,9 @@ import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_blo
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_event.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/AsignacionCostosPage.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/ticket_entity.dart'; // ⚙️ Necesario para el extension getter fechaInicioEstadoActual
+import 'package:aquaspot_postventa/features/tickets/presentation/widgets/tiempo_en_curso_widget.dart';
+import 'package:aquaspot_postventa/core/theme/ticket_visual_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -62,9 +65,35 @@ class _BandejaCostosPageState extends State<BandejaCostosPage> {
             itemBuilder: (context, index) {
               final ticket = ticketsPendientes[index];
               return ListTile(
-                leading: const Icon(Icons.assignment_ind, color: Colors.orange),
+                key: ValueKey(ticket.id),
+                leading: const AvatarSuave(color: kTicketAcento, icono: Icons.assignment_ind),
                 title: Text('Ticket: ${ticket.id}'),
-                subtitle: Text('Cliente: ${ticket.clienteId} | Máquina: ${ticket.equipo}'),
+                // 🆕 Tiempo en vivo en el estado actual (sin backend: se
+                // recalcula contra la hora real del dispositivo).
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 🆕 Cliente (empresa/camaronera) y Contacto (persona) son
+                    // datos distintos — se muestran ambos.
+                    Text(
+                      '${ticket.clienteId.trim().isNotEmpty ? 'Cliente: ${ticket.clienteId} | ' : ''}'
+                      'Contacto: ${ticket.nombreContacto} | Máquina: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}',
+                    ),
+                    const SizedBox(height: 4),
+                    TiempoEnCursoWidget(
+                      desde: ticket.fechaInicioEstadoActual,
+                      builder: (context, texto) => Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.hourglass_bottom, size: 12, color: kTicketIcono),
+                          const SizedBox(width: 4),
+                          Text(texto, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kTicketTextoSecundario)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(

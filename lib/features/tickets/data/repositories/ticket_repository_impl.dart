@@ -1,6 +1,5 @@
 // lib/features/tickets/data/repositories/ticket_repository_impl.dart
 
-import 'package:aquaspot_postventa/features/tickets/data/models/proforma_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dartz/dartz.dart';
 import 'package:file_picker/file_picker.dart';
@@ -11,15 +10,12 @@ import '../../../../core/network/network_info.dart';
 import '../../domain/entities/cliente_entity.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/repositories/ticket_repository.dart';
-import '../datasources/ticket_remote_datasource_impl.dart';
 import '../datasources/webhook_remote_datasource.dart';
 import '../models/ticket_model.dart';
-import '../models/evento_auditoria_model.dart';
 import '../datasources/storage_remote_datasource.dart';
 import '../../../../core/enum/segmento_operativo.dart';
 import '../../../../core/services/pdf_service.dart';
 import '../datasources/ticket_remote_datasource.dart';
-import 'dart:io';
 import 'dart:typed_data';
 
 
@@ -91,7 +87,7 @@ Future<Either<Failure, void>> anularTicket(String ticketId, Map<String, dynamic>
     if (await networkInfo.isConnected) {
       try {
         final modelos = await firebaseDataSource.obtenerClientes();
-        return Right(modelos); 
+        return Right(modelos.cast<ClienteEntity>()); 
       } on ServerException {
         return const Left(ServerFailure('Error al leer la matriz de clientes desde el servidor.'));
       }

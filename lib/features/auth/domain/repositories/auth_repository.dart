@@ -12,6 +12,7 @@ abstract class AuthRepository {
   
   // Para cuando el operador retire la tarjeta
   Future<Either<Failure, void>> cerrarSesion();
+  Future<Either<Failure, UsuarioEntity>> verificarSesion();
 
   Future<Either<Failure, void>> registrarUsuario({
     required String nombre,

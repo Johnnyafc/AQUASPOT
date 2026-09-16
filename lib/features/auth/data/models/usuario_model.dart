@@ -26,11 +26,20 @@ class UsuarioModel extends UsuarioEntity {
 
   // Subrutina para el Enum (Ajusta según tu implementación actual)
   static RolUsuario _parsearRol(String rolStr) {
-    switch (rolStr.toLowerCase()) {
+    switch (rolStr.toLowerCase().trim()) {
       case 'requerimiento': return RolUsuario.requerimiento;
       case 'tecnico': return RolUsuario.tecnico;
       case 'supervisor': return RolUsuario.supervisor;
       case 'recepcion': return RolUsuario.recepcion;
+      case 'admin': return RolUsuario.admin;
+      case 'comercial': return RolUsuario.comercial;
+      case 'costos': return RolUsuario.costos;
+      case 'compras': return RolUsuario.compras;
+      case 'bodega':
+      case 'despacho': return RolUsuario.bodega;
+      case 'procesotrabajo':
+      case 'proceso_trabajo':
+      case 'taller': return RolUsuario.procesoTrabajo;
       default: return RolUsuario.desconocido;
     }
   }

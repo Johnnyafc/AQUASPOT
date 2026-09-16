@@ -1,6 +1,6 @@
 import 'package:dartz/dartz.dart';
 import '../../../../core/errors/failures.dart';
-import '../../../../core/errors/exceptions.dart';
+import '../../domain/entities/cliente_entity.dart';
 import '../../domain/repositories/cliente_repository.dart';
 import '../datasources/cliente_remote_datasource.dart';
 import '../models/cliente_model.dart';
@@ -42,6 +42,27 @@ class ClienteRepositoryImpl implements ClienteRepository {
     } on Exception catch (e) {
       // 🛑 Salto del breaker de protección
       return Left(ServerFailure('Fallo de infraestructura en BD: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, List<ClienteEntity>>> obtenerClientes() async {
+    try {
+      final clientes = await remoteDataSource.obtenerClientes();
+      return Right(clientes.cast<ClienteEntity>());
+    } on Exception catch (e) {
+      return Left(ServerFailure('Error al obtener clientes: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> actualizarCliente(ClienteEntity cliente) async {
+    try {
+      final model = ClienteModel.fromEntity(cliente);
+      await remoteDataSource.actualizarCliente(model);
+      return const Right(null);
+    } on Exception catch (e) {
+      return Left(ServerFailure('Error al actualizar cliente: $e'));
     }
   }
 }

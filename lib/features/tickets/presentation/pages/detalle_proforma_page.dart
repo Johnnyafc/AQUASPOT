@@ -10,7 +10,9 @@ import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_state.dart';
 import '../widgets/full_photo_widget.dart';
 // 🔌 IMPORTACIÓN DEL NUEVO MÓDULO INDUSTRIAL
-import '../widgets/modal_aprobacion_comercial.dart'; 
+import '../widgets/modal_aprobacion_comercial.dart';
+import '../widgets/copy_icon_button_widget.dart';
+import '../widgets/tarjeta_no_requiere_compras_widget.dart';
 // Importa tus dependencias necesarias
 
 class DetalleProformaPage extends StatelessWidget {
@@ -184,11 +186,19 @@ void _mostrarDialogoAccion(BuildContext context, String accion) {
           foregroundColor: Colors.white,
           elevation: 0,
         ),
-        body: SingleChildScrollView(
+        // 📋 SELECCIÓN DE TEXTO: para poder subrayar y copiar cualquier dato
+        // de esta pantalla con el mouse.
+        body: SelectionArea(
+          child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ==========================================
+              // 🚨 ALERTA: ESTE TICKET NO NECESITA COMPRAS
+              // ==========================================
+              TarjetaNoRequiereComprasWidget(ticket: ticket),
+
               // ==========================================
               // 🚨 ENCLAVAMIENTO VISUAL DE FACTURACIÓN
               // ==========================================
@@ -196,7 +206,7 @@ void _mostrarDialogoAccion(BuildContext context, String accion) {
 
               const Text("Datos del Requerimiento", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
               const SizedBox(height: 12),
-              _buildDataCard(),
+              _buildDataCard(context),
               const SizedBox(height: 24),
               const Text("Evidencia Fotográfica", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
               const SizedBox(height: 12),
@@ -208,8 +218,9 @@ void _mostrarDialogoAccion(BuildContext context, String accion) {
               const SizedBox(height: 24),
               const Text("Trazabilidad y Auditoría", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
               const SizedBox(height: 12),
-              _buildTimelineCard(),
+              _buildTimelineCard(context),
             ],
+          ),
           ),
         ),
         bottomNavigationBar: Container(
@@ -254,7 +265,7 @@ Widget _buildAlarmaFacturacion() {
       return const SizedBox.shrink();
     }
 
-    final String responsable = (ticket.responsableFacturacion ?? 'NO DEFINIDO').toUpperCase();
+    final String responsable = ticket.responsableFacturacionLegible;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 24),
@@ -300,7 +311,7 @@ Widget _buildAlarmaFacturacion() {
     );
   }
 
-  Widget _buildDataCard() {
+  Widget _buildDataCard(BuildContext context) {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -309,16 +320,21 @@ Widget _buildAlarmaFacturacion() {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildDatoRow('Estado Actual:', ticket.estadoActual.name.toUpperCase()),
+            _buildDatoRow(context, 'Estado Actual:', ticket.estadoActual.name.toUpperCase()),
             const Divider(),
-            _buildDatoRow('Equipo:', ticket.equipo.name.toUpperCase()),
-            _buildDatoRow('Lugar de recepción:', ticket.sede.name.toUpperCase()),
+            _buildDatoRow(context, 'Equipo:', ticket.equipo.name.toUpperCase()),
+            _buildDatoRow(context, 'Lugar de recepción:', ticket.sede.name.toUpperCase()),
             const Divider(),
-            _buildDatoRow('Cliente:', ticket.clienteId),
-            _buildDatoRow('Campamento:', ticket.campamento),
-            _buildDatoRow('Contacto:', '${ticket.nombreContacto} (${ticket.telefonoContacto})'),
+            _buildDatoRow(context, 'Cliente:', ticket.clienteId),
+            _buildDatoRow(context, 'Campamento:', ticket.campamento),
+            _buildDatoRow(context, 'Contacto:', '${ticket.nombreContacto} (${ticket.telefonoContacto})'),
             const Divider(),
-            const Text('Falla Reportada:', style: TextStyle(color: Colors.grey, fontSize: 12)),
+            Row(
+              children: [
+                const Expanded(child: Text('Falla Reportada:', style: TextStyle(color: Colors.grey, fontSize: 12))),
+                CopyIconButtonWidget(etiqueta: 'Falla Reportada', valor: ticket.fallaReportada),
+              ],
+            ),
             const SizedBox(height: 4),
             Text(ticket.fallaReportada, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
           ],
@@ -375,7 +391,7 @@ Widget _buildAlarmaFacturacion() {
     );
   }
 
-  Widget _buildTimelineCard() {
+  Widget _buildTimelineCard(BuildContext context) {
     final eventosOrdenados = List.from(ticket.historialEventos)..sort((a, b) => b.timestamp.compareTo(a.timestamp));
     return Card(
       elevation: 2,
@@ -385,6 +401,20 @@ Widget _buildAlarmaFacturacion() {
         child: Column(
           children: eventosOrdenados.map((evento) {
             final fechaStr = evento.timestamp.toString().substring(0, 16);
+
+            // 📋 Igual que en detalle_ticket_page: copiamos lo que viene
+            // después del separador (".", o ":" si está más a la derecha).
+            final indicePunto = evento.accion.lastIndexOf('.');
+            final indiceDosPuntos = evento.accion.lastIndexOf(':');
+            final indiceSeparador = indicePunto > indiceDosPuntos ? indicePunto : indiceDosPuntos;
+            final valorCopiable = indiceSeparador != -1
+                ? evento.accion.substring(indiceSeparador + 1).trim()
+                : '';
+            final tieneDatoCopiable = valorCopiable.isNotEmpty;
+            final etiquetaCopiable = tieneDatoCopiable
+                ? evento.accion.substring(0, indiceSeparador).trim()
+                : '';
+
             return Padding(
               padding: const EdgeInsets.only(bottom: 16.0),
               child: Row(
@@ -396,7 +426,16 @@ Widget _buildAlarmaFacturacion() {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(evento.accion, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Text(evento.accion, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                            ),
+                            if (tieneDatoCopiable)
+                              CopyIconButtonWidget(etiqueta: etiquetaCopiable, valor: valorCopiable),
+                          ],
+                        ),
                         Text('Operador: ${evento.usuarioNombre} [${evento.usuarioRol}]', style: const TextStyle(fontSize: 13)),
                         Text('Marca de tiempo: $fechaStr', style: const TextStyle(color: Colors.grey, fontSize: 12)),
                       ],
@@ -411,7 +450,7 @@ Widget _buildAlarmaFacturacion() {
     );
   }
 
-  Widget _buildDatoRow(String etiqueta, String valor) {
+  Widget _buildDatoRow(BuildContext context, String etiqueta, String valor) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0),
       child: Row(
@@ -419,6 +458,7 @@ Widget _buildAlarmaFacturacion() {
         children: [
           Expanded(flex: 2, child: Text(etiqueta, style: const TextStyle(color: Colors.grey, fontSize: 13))),
           Expanded(flex: 3, child: Text(valor, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
+          CopyIconButtonWidget(etiqueta: etiqueta, valor: valor),
         ],
       ),
     );

@@ -1,5 +1,6 @@
 // lib/features/tickets/presentation/pages/formulario_recepcion_page.dart
 
+import 'package:aquaspot_postventa/core/services/borrador_storage_service.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/constant/catalogo_equipos_constants.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -46,10 +47,67 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
   @override
   void initState() {
     super.initState();
-    // ⚙️ PRECARGA DE DATOS: Inyectamos el estado previo del ticket
     _serieController = TextEditingController(text: widget.ticket.numeroSerie ?? '');
     _descripcionController = TextEditingController(text: widget.ticket.notasRecepcion ?? '');
     _inicializarAccesorios();
+
+    _serieController.addListener(_guardarBorrador);
+    _descripcionController.addListener(_guardarBorrador);
+    _cargarBorradorLocal();
+  }
+
+  void _guardarBorrador() {
+    BorradorStorageService.guardarBorrador(
+      clave: BorradorStorageService.claveDraftRecepcion(widget.ticket.id),
+      datos: {
+        'serie': _serieController.text,
+        'descripcion': _descripcionController.text,
+        'prioridad': _prioridad.name,
+        'accesorios': _accesoriosSeleccionados,
+        'evidenciasPaths': BorradorStorageService.xFilesToPaths(_archivosEvidenciaNuevos),
+      },
+    );
+  }
+
+  Future<void> _cargarBorradorLocal() async {
+    final draft = await BorradorStorageService.obtenerBorrador(
+      BorradorStorageService.claveDraftRecepcion(widget.ticket.id),
+    );
+    if (draft != null && mounted) {
+      setState(() {
+        if (draft['serie'] != null && (draft['serie'] as String).isNotEmpty) {
+          _serieController.text = draft['serie'] as String;
+        }
+        if (draft['descripcion'] != null && (draft['descripcion'] as String).isNotEmpty) {
+          _descripcionController.text = draft['descripcion'] as String;
+        }
+        if (draft['prioridad'] != null) {
+          final p = draft['prioridad'] as String;
+          _prioridad = Prioridad.values.firstWhere((e) => e.name == p, orElse: () => Prioridad.media);
+        }
+        if (draft['accesorios'] != null && draft['accesorios'] is Map) {
+          final mapAcc = Map<String, dynamic>.from(draft['accesorios'] as Map);
+          mapAcc.forEach((k, v) {
+            _accesoriosSeleccionados[k] = v == true;
+          });
+        }
+        if (draft['evidenciasPaths'] != null && draft['evidenciasPaths'] is List) {
+          final files = BorradorStorageService.pathsToXFiles(draft['evidenciasPaths'] as List);
+          if (files.isNotEmpty) {
+            _archivosEvidenciaNuevos.clear();
+            _archivosEvidenciaNuevos.addAll(files);
+          }
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('💾 Borrador de recepción restaurado.'),
+          backgroundColor: Color(0xFF005A9C),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   void _inicializarAccesorios() {
@@ -71,6 +129,8 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
 
   @override
   void dispose() {
+    _serieController.removeListener(_guardarBorrador);
+    _descripcionController.removeListener(_guardarBorrador);
     _descripcionController.dispose();
     _serieController.dispose();
     super.dispose();
@@ -125,6 +185,9 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
           if (state.status == TicketStatus.error) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.red));
           } else if (state.status == TicketStatus.operationSuccess) { 
+            BorradorStorageService.eliminarBorrador(
+              BorradorStorageService.claveDraftRecepcion(widget.ticket.id),
+            );
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Acta registrada exitosamente.'), backgroundColor: Colors.teal));
             
             // 🖨️ INTERLOCK DE IMPRESIÓN SINCRONIZADO (Importado de Creación)
@@ -201,7 +264,10 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
                             ChecklistDinamicoWidget(
                               equipo: widget.ticket.equipo,
                               selecciones: _accesoriosSeleccionados,
-                              onChanged: (pieza, valor) => setState(() => _accesoriosSeleccionados[pieza] = valor),
+                              onChanged: (pieza, valor) {
+                                setState(() => _accesoriosSeleccionados[pieza] = valor);
+                                _guardarBorrador();
+                              },
                             ),
                             const Divider(height: 32, thickness: 2),
 
@@ -266,10 +332,13 @@ class _FormularioRecepcionPageState extends State<FormularioRecepcionPage> {
                             const SizedBox(height: 8),
                             CameraManagerWidget(
                               archivosEvidencia: _archivosEvidenciaNuevos,
-                              onArchivosActualizados: (archivos) => setState(() {
-                                _archivosEvidenciaNuevos.clear();
-                                _archivosEvidenciaNuevos.addAll(archivos);
-                              }),
+                              onArchivosActualizados: (archivos) {
+                                setState(() {
+                                  _archivosEvidenciaNuevos.clear();
+                                  _archivosEvidenciaNuevos.addAll(archivos);
+                                });
+                                _guardarBorrador();
+                              },
                             ),
                           ],
                         ),

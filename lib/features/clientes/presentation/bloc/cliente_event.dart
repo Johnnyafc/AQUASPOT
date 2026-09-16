@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import '../../domain/entities/cliente_entity.dart';
 
 abstract class ClienteEvent extends Equatable {
   const ClienteEvent();
@@ -34,3 +35,14 @@ class RegistrarClienteSubmitEvent extends ClienteEvent {
         subSector,
       ];
 }
+
+class CargarClientesEvent extends ClienteEvent {}
+
+class ActualizarClienteSubmitEvent extends ClienteEvent {
+  final ClienteEntity cliente;
+
+  const ActualizarClienteSubmitEvent({required this.cliente});
+
+  @override
+  List<Object> get props => [cliente];
+}

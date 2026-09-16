@@ -8,6 +8,7 @@ import '../../../../../core/errors/failures.dart';
 import '../../../../core/enum/rol_usuario.dart';
 
 abstract class AuthRemoteDataSource {
+  Future<UsuarioEntity> verificarSesion();
   Future<UsuarioEntity> iniciarSesion(String email, String password);
 Future<void> guardarPerfilUsuario({
     required String uid,
@@ -51,8 +52,15 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
          return RolUsuario.costos;
       case 'COMPRAS':
          return RolUsuario.compras;
+      case 'BODEGA':
+      case 'DESPACHO':
+         return RolUsuario.bodega;
+      case 'PROCESOTRABAJO':
+      case 'PROCESO_TRABAJO':
+      case 'TALLER':
+         return RolUsuario.procesoTrabajo;
       default:
-        return RolUsuario.desconocido;
+         return RolUsuario.desconocido;
     }
   }
 
@@ -161,6 +169,43 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     }
   }
 
+  // ✅ NUEVA SUBRUTINA: ARRANQUE EN FRÍO (ANTI-F5)
+  @override
+  Future<UsuarioEntity> verificarSesion() async {
+    try {
+      // 1. Forzamos la memoria persistente
+      await firebaseAuth.setPersistence(Persistence.LOCAL);
+      
+      // 2. Revisamos el caché interno
+      final user = firebaseAuth.currentUser;
+      if (user != null) {
+        // 3. Buscamos el perfil maestro en Firestore
+        final docSnapshot = await firestore.collection('usuarios').doc(user.uid).get();
+        if (docSnapshot.exists && docSnapshot.data() != null) {
+          final data = docSnapshot.data()!;
+          final rol = _mapearRol(data['rol'] ?? '');
+          final segmento = _mapearSegmento(data['segmento'] as String?);
+
+          if (rol == RolUsuario.desconocido) {
+            await firebaseAuth.signOut();
+            throw ServerFailure('Nivel de acceso corrupto tras recarga.');
+          }
+
+          return UsuarioEntity(
+            uid: user.uid, email: user.email!, nombre: data['nombre'] ?? 'Operario', 
+            rol: rol, segmento: segmento, 
+          );
+        } else {
+          throw ServerFailure('Perfil no encontrado en base de datos al recargar.');
+        }
+      } else {
+        throw ServerFailure('No hay sesión en caché.');
+      }
+    } catch (e) {
+      throw ServerFailure('Fallo de lectura en memoria: $e');
+    }
+  }
+}
+
 
   
-}

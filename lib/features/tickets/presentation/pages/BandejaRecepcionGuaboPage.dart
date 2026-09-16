@@ -5,6 +5,8 @@ import 'package:aquaspot_postventa/features/tickets/domain/entities/ticket_entit
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_bloc.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_event.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/widgets/tiempo_en_curso_widget.dart';
+import 'package:aquaspot_postventa/core/theme/ticket_visual_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 // Asegúrese de importar sus modelos, enums y blocs
@@ -85,7 +87,7 @@ class BandejaRecepcionGuaboPage extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       itemCount: tickets.length,
       itemBuilder: (context, index) {
-        return _TicketCard(ticket: tickets[index]);
+        return _TicketCard(key: ValueKey(tickets[index].id), ticket: tickets[index]);
       },
     );
   }
@@ -93,18 +95,47 @@ class BandejaRecepcionGuaboPage extends StatelessWidget {
   // -----------------------------------------------------
   // 🖥️ VISTA EXPANDIDA (Monitores de Sala de Control)
   // -----------------------------------------------------
+  // 🔧 ANTES: GridView con `childAspectRatio: 2.5` (altura de celda calculada
+  // a partir del ancho, fija). Al agregar más datos a la tarjeta (equipo,
+  // cliente, reloj en vivo) el contenido pasó de esa altura fija y Flutter
+  // mostraba el aviso de "overflow" (franjas amarillas/negras).
+  //
+  // ✅ AHORA: se arman filas de 2 tarjetas con `Row` + `Expanded` (sin
+  // `mainAxisExtent`/`childAspectRatio`), así cada fila crece exactamente lo
+  // que necesite su tarjeta más alta — sin importar cuánto crezca el
+  // contenido en el futuro, nunca vuelve a recortarse.
   Widget _buildGridView(List<TicketEntity> tickets, BuildContext context) {
-    return GridView.builder(
+    const columnas = 2;
+    final filas = <List<TicketEntity>>[];
+    for (var i = 0; i < tickets.length; i += columnas) {
+      final fin = (i + columnas > tickets.length) ? tickets.length : i + columnas;
+      filas.add(tickets.sublist(i, fin));
+    }
+    return ListView.builder(
       padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2, // 2 columnas
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 2.5, // Ajuste según la cantidad de datos que muestre
-      ),
-      itemCount: tickets.length,
+      itemCount: filas.length,
       itemBuilder: (context, index) {
-        return _TicketCard(ticket: tickets[index]);
+        final fila = filas[index];
+        final hijos = <Widget>[];
+        for (var i = 0; i < columnas; i++) {
+          if (i > 0) hijos.add(const SizedBox(width: 16));
+          hijos.add(i < fila.length ? Expanded(child: _TicketCard(key: ValueKey(fila[i].id), ticket: fila[i])) : const Expanded(child: SizedBox.shrink()));
+        }
+        return Padding(
+          padding: EdgeInsets.only(bottom: index == filas.length - 1 ? 0 : 16),
+          // 🔧 `stretch` (antes `start`): las 2 tarjetas de la fila quedan con
+          // el mismo alto, así los bordes no se ven "desalineados" cuando
+          // una tiene más datos que la otra.
+          // 🔧 `IntrinsicHeight`: esta fila vive dentro de un ListView.builder
+          // (alto no acotado). `stretch` solo puede estirar a los hijos si
+          // la fila ya tiene un alto definido — sin esto Flutter lanza
+          // "BoxConstraints forces an infinite height". IntrinsicHeight le
+          // da a la fila el alto de su hijo más alto y RECIÉN AHÍ stretch
+          // iguala a los demás a ese alto.
+          child: IntrinsicHeight(
+            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: hijos),
+          ),
+        );
       },
     );
   }
@@ -136,23 +167,34 @@ class _TicketCard extends StatelessWidget {
                   'ID: ${ticket.id}',
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange),
-                  ),
-                  child: const Text(
-                    'EN CAMINO',
-                    style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
-                ),
+                // 🎨 Insignia suave con el color único del estado (antes: naranja
+                // fijo, sin relación con el resto de la app).
+                InsigniaSuave(color: colorPorEstadoTicket(ticket.estadoActual), texto: 'EN CAMINO'),
               ],
             ),
             const Divider(),
-            Text('Equipo: ${ticket.equipo.name} - ${ticket.marca}', style: const TextStyle(fontSize: 14)),
-            Text('Falla: ${ticket.fallaReportada}', maxLines: 2, overflow: TextOverflow.ellipsis),
+            Text('Equipo: ${ticket.equipo.name} - ${ticket.marca}', style: const TextStyle(fontSize: 14, color: kTicketTextoPrincipal)),
+            // 🆕 Cliente (camaronera/empresa, ej. "Acuarios del Golfo") y
+            // Contacto (persona, ej. "Jose Montalvo") son datos distintos —
+            // se muestran ambos.
+            if (ticket.clienteId.trim().isNotEmpty)
+              Text('Cliente: ${ticket.clienteId}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: kTicketTextoPrincipal)),
+            Text('Contacto: ${ticket.nombreContacto}', style: const TextStyle(fontSize: 14, color: kTicketTextoPrincipal)),
+            Text('Falla: ${ticket.fallaReportada}', style: const TextStyle(color: kTicketTextoPrincipal), maxLines: 2, overflow: TextOverflow.ellipsis),
+            // 🆕 Tiempo en vivo en el estado actual (sin backend: se
+            // recalcula contra la hora real del dispositivo).
+            const SizedBox(height: 6),
+            TiempoEnCursoWidget(
+              desde: ticket.fechaInicioEstadoActual,
+              builder: (context, texto) => Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.hourglass_bottom, size: 12, color: kTicketIcono),
+                  const SizedBox(width: 4),
+                  Text(texto, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kTicketTextoSecundario)),
+                ],
+              ),
+            ),
             const SizedBox(height: 16),// Aquí es seguro usar Spacer porque el Card tiene tamaño definido por el padre
             SizedBox(
               width: double.infinity,
@@ -162,7 +204,9 @@ class _TicketCard extends StatelessWidget {
                   _confirmarRecepcion(context, ticket);
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
+                  // 🎨 Acento único de la app (antes: blueAccent, un azul
+                  // distinto al del resto de las bandejas).
+                  backgroundColor: kTicketAcento,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
                 icon: const Icon(Icons.download_done, color: Colors.white),
@@ -201,7 +245,7 @@ void _confirmarRecepcion(BuildContext context, TicketEntity ticket) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Comando de recepción enviado para ${ticket.id}'),
-        backgroundColor: Colors.blueAccent, // Color estándar para acciones de proceso
+        backgroundColor: kTicketAcento, // Color estándar para acciones de proceso
         duration: const Duration(seconds: 2),
       ),
     );

@@ -1,8 +1,9 @@
 import 'dart:typed_data';
+import 'package:flutter/services.dart' show rootBundle; // ✅ Obligatorio para leer el disco
 import 'package:image_picker/image_picker.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:image/image.dart' as img; // ✅ Paquete 'image' para compresión
+import 'package:image/image.dart' as img; 
 import '../../features/tickets/domain/entities/ticket_entity.dart';
 
 class PdfService {
@@ -10,35 +11,39 @@ class PdfService {
   Future<Uint8List> generateActaRecepcion({
     required TicketEntity ticket,
     required String tipoRequerimiento,
-    // Eliminamos 'descripcion' porque no se usaba
     required List<XFile> evidencias, 
   }) async {
     final pdf = pw.Document();
     final List<pw.MemoryImage> imagenesProcesadas = [];
 
+    // ⚙️ EXTRACCIÓN DEL LOGO A LA RAM
+    pw.MemoryImage? logoMemoria;
+    try {
+      // ⚠️ Ajuste esta ruta exactamente a como la tiene en su pubspec.yaml
+      final ByteData dataLogo = await rootBundle.load('assets/images/logo.png');
+      logoMemoria = pw.MemoryImage(dataLogo.buffer.asUint8List());
+    } catch (e) {
+      print('Cortocircuito al cargar el logo físico: $e');
+    }
+
     // ⚙️ PROCESAMIENTO Y COMPRESIÓN DE IMÁGENES (Prevención de OOM)
     for (var file in evidencias) {
-      // Validación más segura usando mimeType si está disponible
       if (file.mimeType?.startsWith('video/') ?? false) continue;
       
-      // Fallback para extensiones en móvil (evitando web paths ciegamente)
       final pathLower = file.path.toLowerCase();
       if (pathLower.endsWith('.mp4') || pathLower.endsWith('.mov')) continue;
 
       try {
         final Uint8List rawBytes = await file.readAsBytes();
         
-        // Redimensionamos la imagen para que el PDF no pese una tonelada
-        // Esto requiere el paquete 'image' en tu pubspec.yaml
         final img.Image? decodedImage = img.decodeImage(rawBytes);
         if (decodedImage != null) {
-          final img.Image resizedImage = img.copyResize(decodedImage, width: 800); // Ancho estándar para A4
+          final img.Image resizedImage = img.copyResize(decodedImage, width: 800); 
           final Uint8List compressedBytes = img.encodeJpg(resizedImage, quality: 75);
           
           imagenesProcesadas.add(pw.MemoryImage(compressedBytes));
         }
       } catch (e) {
-        // En un log de telemetría real registraríamos esto
         print('Error procesando evidencia visual: $e');
       }
     }
@@ -47,14 +52,16 @@ class PdfService {
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(32),
-        header: (pw.Context context) => _buildHeader(ticket),
+        // Inyectamos la variable del logo al cabezal
+        header: (pw.Context context) => _buildHeader(ticket, logoMemoria),
         footer: (pw.Context context) => _buildFooter(context),
         build: (pw.Context context) {
           return [
             pw.SizedBox(height: 20),
             
             _buildGridSection("DATOS DEL CLIENTE", {
-              "Razón Social / Cliente": ticket.clienteId,
+              "Grupo": ticket.clienteId,
+              "Campamento": ticket.campamento,
               "Persona que entrega": ticket.nombreContacto,
               "Teléfono de Contacto": ticket.telefonoContacto ?? 'N/A',
               "Lugar de recepción": ticket.sede.name.toUpperCase(),
@@ -69,7 +76,6 @@ class PdfService {
             
             _buildGridSection("INSPECCIÓN TÉCNICA", {
               "Tipo de Requerimiento": tipoRequerimiento,
-              // ✅ La Entidad ya viene procesada desde el Mapper/BLoC. Cero lógica aquí.
               "Falla Reportada (Cliente)": ticket.fallaReportada, 
               "Notas de Recepción (Físico)": ticket.notasRecepcion ?? 'N/A',
             }),
@@ -90,13 +96,11 @@ class PdfService {
     );
     return pdf.save();
   }
+
   // --- SUBRUTINAS ---
 
-  // (Mantenemos _buildHeader, _buildGridSection, _buildSignatureBlock y _buildFooter igual que antes)
-  
-
-  
-  pw.Widget _buildHeader(TicketEntity ticket) {
+  // ⚙️ CABEZAL RECTIFICADO: Ahora recibe y renderiza el binario del logo
+  pw.Widget _buildHeader(TicketEntity ticket, pw.MemoryImage? logo) {
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey700, width: 1),
       columnWidths: {
@@ -108,8 +112,13 @@ class PdfService {
         pw.TableRow(
           children: [
             pw.Container(
-              height: 60, padding: const pw.EdgeInsets.all(8), alignment: pw.Alignment.center,
-              child: pw.Text('LOGO EMPRESA', style: const pw.TextStyle(color: PdfColors.grey500, fontSize: 10)),
+              height: 60, 
+              padding: const pw.EdgeInsets.all(8), 
+              alignment: pw.Alignment.center,
+              // Lógica condicional: Si el logo cargó bien, lo dibuja. Si falló, pone el texto por defecto.
+              child: logo != null 
+                  ? pw.Image(logo, fit: pw.BoxFit.contain)
+                  : pw.Text('LOGO EMPRESA', style: const pw.TextStyle(color: PdfColors.grey500, fontSize: 10)),
             ),
             pw.Container(
               height: 60, alignment: pw.Alignment.center,
@@ -120,8 +129,6 @@ class PdfService {
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start, mainAxisAlignment: pw.MainAxisAlignment.center,
                 children: [
-                  pw.Text('CÓDIGO: FR-ST-01', style: const pw.TextStyle(fontSize: 8)),
-                  pw.SizedBox(height: 4),
                   pw.Text('TICKET: ${ticket.id}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
                   pw.SizedBox(height: 4),
                   pw.Text('FECHA: ${DateTime.now().toString().substring(0, 10)}', style: const pw.TextStyle(fontSize: 8)),
@@ -159,7 +166,6 @@ class PdfService {
     );
   }
 
-  // ✅ NUEVO: Subrutina para pintar las fotos como un rack industrial
   pw.Widget _buildEvidenciasVisuales(List<pw.MemoryImage> imagenes) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -170,14 +176,13 @@ class PdfService {
           child: pw.Text("REGISTRO FOTOGRÁFICO DE RECEPCIÓN", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
         ),
         pw.SizedBox(height: 10),
-        // pw.Wrap permite que las imágenes se acomoden automáticamente en filas y columnas
         pw.Wrap(
           spacing: 10,
           runSpacing: 10,
           children: imagenes.map((img) {
             return pw.Container(
-              width: 150, // Ancho fijo para mantener simetría
-              height: 150, // Alto fijo
+              width: 150, 
+              height: 150, 
               decoration: pw.BoxDecoration(
                 border: pw.Border.all(color: PdfColors.grey500, width: 1),
               ),

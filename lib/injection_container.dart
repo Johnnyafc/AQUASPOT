@@ -1,9 +1,12 @@
 // lib/injection_container.dart
 
+import 'package:aquaspot_postventa/features/auth/domain/usecases/verificar_sesion_usecase.dart';
 import 'package:aquaspot_postventa/features/clientes/data/datasources/cliente_remote_datasource.dart';
 import 'package:aquaspot_postventa/features/clientes/data/datasources/cliente_remote_datasource_impl.dart';
 import 'package:aquaspot_postventa/features/clientes/data/repositories/cliente_repository_impl.dart';
 import 'package:aquaspot_postventa/features/clientes/domain/repositories/cliente_repository.dart';
+import 'package:aquaspot_postventa/features/clientes/domain/usecases/actualizar_cliente_usecase.dart';
+import 'package:aquaspot_postventa/features/clientes/domain/usecases/obtener_todos_clientes_usecase.dart';
 import 'package:aquaspot_postventa/features/clientes/domain/usecases/registrar_cliente_usecase.dart';
 import 'package:aquaspot_postventa/features/clientes/presentation/bloc/cliente_bloc.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/SubirOrdenVentaUseCase.dart';
@@ -47,9 +50,24 @@ import 'features/auth/domain/usecases/cerrar_sesion_usecase.dart';
 import 'features/auth/domain/usecases/iniciar_sesion_usecase.dart';
 import 'features/auth/domain/usecases/registrar_usuario_usecase.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
-
 // --- FEATURE: CLIENTES (Las rutas que definimos) ---
 
+// --- FEATURE: CATALOGO ---
+import 'features/catalogo/data/datasources/catalogo_remote_datasource.dart';
+import 'features/catalogo/data/repositories/catalogo_repository_impl.dart';
+import 'features/catalogo/domain/repositories/catalogo_repository.dart';
+import 'features/catalogo/domain/usecases/catalogo_usecases.dart';
+import 'features/catalogo/presentation/bloc/catalogo_bloc.dart';
+
+// --- FEATURE: INVENTARIO ---
+import 'features/inventario/data/datasources/inventario_remote_datasource.dart';
+import 'features/inventario/data/datasources/inventario_remote_datasource_impl.dart';
+import 'features/inventario/data/repositories/inventario_repository_impl.dart';
+import 'features/inventario/domain/repositories/inventario_repository.dart';
+import 'features/inventario/domain/usecases/cargar_stock_desde_excel_usecase.dart';
+import 'features/inventario/domain/usecases/obtener_stock_inventario_usecase.dart';
+import 'features/inventario/domain/usecases/consultar_stock_items_usecase.dart';
+import 'features/inventario/presentation/bloc/inventario_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -101,6 +119,11 @@ Future<void> init() async {
   sl.registerLazySingleton<AuthRemoteDataSource>(
     () => AuthRemoteDataSourceImpl(firebaseAuth: sl(), firestore: sl()),
   );
+
+  sl.registerLazySingleton(() => VerificarSesionUseCase(sl()));
+
+  
+  
   sl.registerLazySingleton<AuthRepository>(
     () => AuthRepositoryImpl(
       remoteDataSource: sl(),
@@ -116,6 +139,22 @@ Future<void> init() async {
   );
   sl.registerLazySingleton<ClienteRepository>(
     () => ClienteRepositoryImpl(remoteDataSource: sl()),
+  );
+
+  // --- CATALOGO ---
+  sl.registerLazySingleton<CatalogoRemoteDataSource>(
+    () => CatalogoRemoteDataSourceImpl(firestore: sl()),
+  );
+  sl.registerLazySingleton<CatalogoRepository>(
+    () => CatalogoRepositoryImpl(remoteDataSource: sl()),
+  );
+
+  // --- INVENTARIO ---
+  sl.registerLazySingleton<InventarioRemoteDataSource>(
+    () => InventarioRemoteDataSourceImpl(firestore: sl()),
+  );
+  sl.registerLazySingleton<InventarioRepository>(
+    () => InventarioRepositoryImpl(remoteDataSource: sl()),
   );
 
   // ===========================================================================
@@ -139,6 +178,8 @@ Future<void> init() async {
   
   // --- CLIENTES ---
   sl.registerLazySingleton(() => RegistrarClienteUseCase(sl()));
+  sl.registerLazySingleton(() => ObtenerTodosClientesUseCase(sl()));
+  sl.registerLazySingleton(() => ActualizarClienteUseCase(sl()));
   sl.registerLazySingleton(() => SubirDocumentoEvaluacionUseCase(sl()));
 
   sl.registerLazySingleton(() => SubirDocumentoComercialUseCase(sl()));
@@ -172,8 +213,37 @@ sl.registerLazySingleton(() => EscucharEstadoExcelUseCase(sl()));
         iniciarSesion: sl(),
         cerrarSesion: sl(),
         registrarUsuarioUseCase: sl(),
+        verificarSesionUseCase: sl(),
       ));
       
   // --- CLIENTES ---
-  sl.registerFactory(() => ClienteBloc(registrarClienteUseCase: sl()));
+  sl.registerFactory(() => ClienteBloc(
+        registrarClienteUseCase: sl(),
+        obtenerTodosClientesUseCase: sl(),
+        actualizarClienteUseCase: sl(),
+      ));
+
+  // --- CATALOGO ---
+  sl.registerLazySingleton(() => ObtenerActividadesPorEquipoUseCase(sl()));
+  sl.registerLazySingleton(() => GuardarActividadCatalogoUseCase(sl()));
+  sl.registerLazySingleton(() => EliminarActividadCatalogoUseCase(sl()));
+  sl.registerLazySingleton(() => CargarCatalogoInicialUseCase(sl()));
+
+  sl.registerFactory(() => CatalogoBloc(
+        obtenerActividadesPorEquipo: sl(),
+        guardarActividadCatalogo: sl(),
+        eliminarActividadCatalogo: sl(),
+        cargarCatalogoInicial: sl(),
+      ));
+
+  // --- INVENTARIO ---
+  sl.registerLazySingleton(() => CargarStockDesdeExcelUseCase(sl()));
+  sl.registerLazySingleton(() => ObtenerStockInventarioUseCase(sl()));
+  sl.registerLazySingleton(() => ConsultarStockItemsUseCase(sl()));
+
+  sl.registerFactory(() => InventarioBloc(
+        cargarStockDesdeExcel: sl(),
+        obtenerStockInventario: sl(),
+        consultarStockItems: sl(),
+      ));
 }

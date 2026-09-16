@@ -6,12 +6,9 @@ import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.da
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_bloc.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_event.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
-import '../../../../core/enum/ticket_enums.dart';
 import '../../domain/entities/ticket_entity.dart';
-import 'dart:io';
-import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
-import 'package:cross_file/cross_file.dart'; // O 'package:image_picker/image_picker.dart' si ya lo tienes
+import 'tarjeta_no_requiere_compras_widget.dart';
 
 class ModalAprobacionComercial extends StatefulWidget {
   final TicketEntity ticket;
@@ -204,18 +201,37 @@ void _dispararAprobacion() {
                   const Divider(thickness: 2),
                   const SizedBox(height: 16),
 
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.orange.shade200)),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.warning_amber_rounded, color: Colors.orange),
-                        SizedBox(width: 12),
-                        Expanded(child: Text('Al confirmar, el ticket se derivará simultáneamente a Costos y Compras.', style: TextStyle(fontSize: 13))),
-                      ],
+                  if (widget.ticket.noRequiereCompras) ...[
+                    TarjetaNoRequiereComprasWidget(
+                      ticket: widget.ticket,
+                      margin: const EdgeInsets.only(bottom: 16),
                     ),
-                  ),
-                  const SizedBox(height: 24),
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.blue.shade200)),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.blue),
+                          SizedBox(width: 12),
+                          Expanded(child: Text('Al confirmar, el ticket se derivará a Costos (omitiendo Compras al estar exonerado).', style: TextStyle(fontSize: 13))),
+                        ],
+                      ),
+                    ),
+                  ] else
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.orange.shade200)),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                          SizedBox(width: 12),
+                          Expanded(child: Text('Al confirmar, el ticket se derivará simultáneamente a Costos y Compras.', style: TextStyle(fontSize: 13))),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 8),
 
                   // ⚙️ MÓDULO 1: ORDEN DE VENTA
                   _buildBandejaArchivos(

@@ -3,14 +3,15 @@
 import 'package:equatable/equatable.dart';
 
 class GestionComprasEntity extends Equatable {
-  final String urlOrdenCompra; // 📄 El PDF de la orden de compra
+  // 🔌 CAMBIO DE CALIBRE: De String simple a Matriz (Lista)
+  final List<String> urlsOrdenCompra; 
   final String observacion;    // 📝 Notas del operador de compras
 
   const GestionComprasEntity({
-    required this.urlOrdenCompra,
+    this.urlsOrdenCompra = const [], // Tolerancia a fallos: inicializa vacío
     this.observacion = '',
   });
 
   @override
-  List<Object?> get props => [urlOrdenCompra, observacion];
+  List<Object?> get props => [urlsOrdenCompra, observacion];
 }

@@ -10,6 +10,8 @@ import '../bloc/ticket_event.dart';
 import '../bloc/ticket_state.dart'; 
 import '../../../../core/enum/ticket_enums.dart';
 import '../../domain/entities/ticket_entity.dart'; // ⚙️ Importación necesaria para el tipado de la subrutina
+import '../widgets/tiempo_en_curso_widget.dart';
+import '../../../../core/theme/ticket_visual_theme.dart';
 
 import 'formulario_recepcion_page.dart';
 
@@ -173,6 +175,7 @@ class _BandejaRecepcionPageState extends State<BandejaRecepcionPage> {
             itemBuilder: (context, index) {
               final ticket = tickets[index];
               return Card(
+                key: ValueKey(ticket.id),
                 elevation: 2,
                 margin: const EdgeInsets.only(bottom: 12),
                 shape: RoundedRectangleBorder(
@@ -184,15 +187,42 @@ class _BandejaRecepcionPageState extends State<BandejaRecepcionPage> {
                   )
                 ),
                 child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: ticket.esRegistroCompleto ? Colors.green[700] : Colors.orange[700],
-                    child: Icon(
-                      ticket.esRegistroCompleto ? Icons.check_circle : Icons.warning_amber, 
-                      color: Colors.white
-                    ),
+                  // 🎨 Insignia suave (antes: círculo de relleno sólido). El
+                  // color sigue siendo significativo (completo/incompleto),
+                  // solo que ahora diluido en vez de saturado.
+                  leading: AvatarSuave(
+                    color: ticket.esRegistroCompleto ? kTicketExito : kTicketAlerta,
+                    icono: ticket.esRegistroCompleto ? Icons.check_circle : Icons.warning_amber,
                   ),
                   title: Text(ticket.id, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('Equipo: ${ticket.equipo.name.toUpperCase()}\nCliente: ${ticket.clienteId}'),
+                  // 🆕 Se agrega, debajo de equipo/cliente, cuánto tiempo lleva el
+                  // ticket en su estado actual — con reloj en vivo (ver
+                  // TiempoEnCursoWidget: no depende de ningún backend).
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 🆕 Cliente (empresa/camaronera) y Contacto (persona) son
+                      // datos distintos — se muestran ambos.
+                      Text(
+                        'Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}'
+                        '${ticket.clienteId.trim().isNotEmpty ? '\nCliente: ${ticket.clienteId}' : ''}'
+                        '\nContacto: ${ticket.nombreContacto}',
+                      ),
+                      const SizedBox(height: 4),
+                      TiempoEnCursoWidget(
+                        desde: ticket.fechaInicioEstadoActual,
+                        builder: (context, texto) => Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.hourglass_bottom, size: 12, color: kTicketIcono),
+                            const SizedBox(width: 4),
+                            Text(texto, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kTicketTextoSecundario)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                   onTap: () {
                     Navigator.push(

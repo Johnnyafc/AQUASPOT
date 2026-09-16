@@ -10,6 +10,7 @@ class ClienteEntity extends Equatable {
   final DateTime? fechaRegistro; 
   final String nombreContacto;
   final String subSector;      // En la UI será la "Sede"
+  final String? notasRecepcion;
 
   const ClienteEntity({
     required this.id,
@@ -21,7 +22,34 @@ class ClienteEntity extends Equatable {
     this.fechaRegistro,
     required this.nombreContacto,
     required this.subSector,
+    this.notasRecepcion,
   });
+
+  ClienteEntity copyWith({
+    String? id,
+    String? camaronera,
+    String? celular,
+    String? direccion,
+    String? emailContacto,
+    String? estadoActual,
+    DateTime? fechaRegistro,
+    String? nombreContacto,
+    String? subSector,
+    String? notasRecepcion,
+  }) {
+    return ClienteEntity(
+      id: id ?? this.id,
+      camaronera: camaronera ?? this.camaronera,
+      celular: celular ?? this.celular,
+      direccion: direccion ?? this.direccion,
+      emailContacto: emailContacto ?? this.emailContacto,
+      estadoActual: estadoActual ?? this.estadoActual,
+      fechaRegistro: fechaRegistro ?? this.fechaRegistro,
+      nombreContacto: nombreContacto ?? this.nombreContacto,
+      subSector: subSector ?? this.subSector,
+      notasRecepcion: notasRecepcion ?? this.notasRecepcion,
+    );
+  }
 
   @override
   List<Object?> get props => [
@@ -34,5 +62,6 @@ class ClienteEntity extends Equatable {
         fechaRegistro,
         nombreContacto,
         subSector,
+        notasRecepcion,
       ];
 }

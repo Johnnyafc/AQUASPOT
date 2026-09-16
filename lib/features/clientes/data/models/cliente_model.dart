@@ -1,7 +1,4 @@
-// lib/features/tickets/data/models/cliente_model.dart
-
-import '../../../tickets/domain/entities/cliente_entity.dart';
-// data/models/cliente_model.dart
+import '../../domain/entities/cliente_entity.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ClienteModel extends ClienteEntity {
@@ -15,6 +12,7 @@ class ClienteModel extends ClienteEntity {
     super.fechaRegistro,
     required super.nombreContacto,
     required super.subSector,
+    super.notasRecepcion,
   });
 
   factory ClienteModel.fromJson(Map<String, dynamic> json, String documentId) {
@@ -30,10 +28,26 @@ class ClienteModel extends ClienteEntity {
       fechaRegistro: (json['fechaRegistro'] as Timestamp?)?.toDate(), 
       nombreContacto: json['nombreContacto'] ?? '',
       subSector: json['subSector'] ?? '',
+      notasRecepcion: json['notasRecepcion'],
     );
   }
 
-  // ⚙️ EL CONVERSOR DE SALIDA (Para inyectar en Firestore)
+  factory ClienteModel.fromEntity(ClienteEntity entity) {
+    return ClienteModel(
+      id: entity.id,
+      camaronera: entity.camaronera,
+      celular: entity.celular,
+      direccion: entity.direccion,
+      emailContacto: entity.emailContacto,
+      estadoActual: entity.estadoActual,
+      fechaRegistro: entity.fechaRegistro,
+      nombreContacto: entity.nombreContacto,
+      subSector: entity.subSector,
+      notasRecepcion: entity.notasRecepcion,
+    );
+  }
+
+  // ⚙️ EL CONVERSOR DE SALIDA (Para inyectar en Firestore al crear)
   Map<String, dynamic> toJson() {
     return {
       'camaronera': camaronera,
@@ -44,6 +58,20 @@ class ClienteModel extends ClienteEntity {
       'fechaRegistro': FieldValue.serverTimestamp(), // Telemetría de tiempo exacta del servidor
       'nombreContacto': nombreContacto,
       'subSector': subSector,
+    };
+  }
+
+  // 🔄 CONVERSOR PARA ACTUALIZACIONES (Preserva fecha original de registro)
+  Map<String, dynamic> toUpdateJson() {
+    return {
+      'camaronera': camaronera,
+      'celular': celular,
+      'direccion': direccion,
+      'emailContacto': emailContacto,
+      'estadoActual': estadoActual,
+      'nombreContacto': nombreContacto,
+      'subSector': subSector,
+      'fechaActualizacion': FieldValue.serverTimestamp(),
     };
   }
 }

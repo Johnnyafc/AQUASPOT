@@ -1,5 +1,6 @@
 // lib/features/auth/data/repositories/auth_repository_impl.dart
 
+import 'package:aquaspot_postventa/features/auth/data/models/usuario_model.dart';
 import 'package:dartz/dartz.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../../core/errors/failures.dart';
@@ -39,6 +40,24 @@ class AuthRepositoryImpl implements AuthRepository {
       return const Left(NetworkFailure('Sin conexión a la red de telemetría.'));
     }
   }
+
+
+@override
+Future<Either<Failure, UsuarioEntity>> verificarSesion() async {
+  if (await networkInfo.isConnected) {
+    try {
+      // Llamamos al nuevo método del DataSource
+      final usuario = await remoteDataSource.verificarSesion();
+      return Right(usuario); 
+    } on ServerFailure catch (e) {
+      return Left(e); // Propagamos la alarma que mandó el DataSource
+    } catch (e) {
+      return const Left(ServerFailure('Fallo eléctrico no clasificado al verificar sesión.'));
+    }
+  } else {
+    return const Left(NetworkFailure('Sin conexión a la red.'));
+  }
+}
 
 
   

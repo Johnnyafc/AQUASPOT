@@ -20,92 +20,230 @@ const transporter = nodemailer.createTransport({
 });
 
 // ============================================================================
-// 📱 MÓDULO 1: ALARMA A SUPERVISORES (PUSH)
+// 📱 MÓDULO 1: ALARMA DE ARRANQUE (NUEVO TICKET -> SUPERVISOR)
 // ============================================================================
-export const notificarSupervisor = onDocumentCreated(
+export const notificarNuevoTicket = onDocumentCreated(
   "tickets/{ticketId}",
   async (event) => {
     const snap = event.data;
-    if (!snap) {
-      console.error("Fallo: Evento sin datos.");
-      return;
-    }
+    if (!snap) return;
 
     const ticket = snap.data();
-    const supervisores = await admin.firestore()
-      .collection("usuarios")
-      .where("rol", "==", "SUPERVISOR")
-      .get();
+    
+    // ⚙️ EXTRACCIÓN Y NORMALIZACIÓN: El "equipo" define el "segmento"
+    const equipo = ticket.equipo || "indefinido";
+    const segmentoDestino = equipo.toLowerCase().trim();
 
-    const mensajes: Promise<any>[] = [];
-
-    supervisores.forEach((doc) => {
-      const data = doc.data();
-      if (data.fcmToken) {
-        const mensaje = {
-          token: data.fcmToken,
-          notification: {
-            title: "⚠️ Nuevo Requerimiento",
-            body: `Equipo: ${ticket.equipo} - Cliente: ${ticket.clienteId}`,
-          },
-        };
-        mensajes.push(admin.messaging().send(mensaje));
-      }
-    });
-
-    if (mensajes.length > 0) {
-      await Promise.all(mensajes);
-      console.log(`Éxito: ${mensajes.length} notificaciones encoladas.`);
-    }
+    await dispararAlarmaFiltroSegmento(
+      ["supervisor"], // ⚙️ CALIBRADO A MINÚSCULAS EXACTAS
+      segmentoDestino,
+      "⚠️ Nuevo Requerimiento Ingresado",
+      `Equipo: ${ticket.equipo} - Cliente: ${ticket.clienteId}`
+    );
   }
 );
 
 // ============================================================================
-// 📱 MÓDULO 2: NOTIFICACIÓN A TÉCNICOS (PUSH)
+// 📱 MÓDULO 2: ORQUESTADOR CENTRAL DE CAMBIOS DE ESTADO (ENRUTADOR)
 // ============================================================================
-export const notificarRecepcion = onDocumentUpdated(
+export const enrutadorNotificacionesPush = onDocumentUpdated(
   "tickets/{ticketId}",
   async (event) => {
     const snap = event.data;
-    if (!snap) {
-      console.error("Fallo: Evento sin datos.");
-      return;
-    }
+    if (!snap) return;
 
     const ticketAntes = snap.before.data();
     const ticketAhora = snap.after.data();
+    const estadoNuevo = ticketAhora.estadoActual;
 
-    // Válvula lógica: Solo disparamos cuando el estado cambia a "evaluacionTecnica"
-    if (ticketAntes.estadoActual !== "evaluacionTecnica" && ticketAhora.estadoActual === "evaluacionTecnica") {
+    // Filtro de ruido: Cortocircuito si el estado físico no cambió
+    if (ticketAntes.estadoActual === estadoNuevo) return;
+
+    const ticketId = event.params.ticketId;
+    const cliente = ticketAhora.clienteId;
+    
+    // ⚙️ EXTRACCIÓN Y NORMALIZACIÓN: El "equipo" define el "segmento"
+    const equipo = ticketAhora.equipo || "indefinido";
+    const segmentoDestino = equipo.toLowerCase().trim(); 
+
+    // ⚙️ MATRIZ DE CONMUTACIÓN LÓGICA (Routing Avanzado)
+    switch (estadoNuevo) {
       
-      const receptores = await admin.firestore()
-        .collection("usuarios")
-        .where("rol", "==", "recepcion") 
-        .get();
+      case "recepcionFisica":
+        await dispararAlarmaFiltroSegmento(
+          ["supervisor"], // ⚙️ CALIBRADO A MINÚSCULAS
+          segmentoDestino, 
+          "📦 Equipo en Recepción Física", 
+          `El equipo ${equipo} de ${cliente} ha ingresado a recepción.`
+        );
+        break;
 
-      const mensajes: Promise<any>[] = [];
+      case "revisionGarantia":
+        await dispararAlarmaFiltroSegmento(
+          ["supervisor"], // ⚙️ CALIBRADO A MINÚSCULAS
+          segmentoDestino, 
+          "⚠️ Revisión de Garantía Solicitada", 
+          `Ticket #${ticketId}: El equipo requiere evaluación de garantía.`
+        );
+        break;
+        
+      case "comercial":
+        await dispararAlarmaFiltroSegmento(
+          ["comercial"], 
+          segmentoDestino, 
+          "💲 Acción Comercial Requerida", 
+          `Ticket #${ticketId} - Se requiere intervención del perfil comercial.`
+        );
+        break;
 
-      receptores.forEach((doc) => {
-        const data = doc.data();
-        if (data.fcmToken) {
-          const mensaje = {
-            token: data.fcmToken,
-            notification: {
-              title: "📸 Registro Fotográfico Requerido",
-              body: `El equipo ${ticketAhora.equipo} de ${ticketAhora.clienteId} ha sido aprobado. Proceder con fotos.`,
-            },
-          };
-          mensajes.push(admin.messaging().send(mensaje));
-        }
-      });
+      case "cotizado":
+        // Estación de tránsito silenciosa (Sin alarma)
+        return;
 
-      if (mensajes.length > 0) {
-        await Promise.all(mensajes);
-        console.log(`Éxito: ${mensajes.length} notificaciones de recepción encoladas.`);
-      }
+      case "costos":
+        // 🚀 DISPARO DUAL: Dos actuadores independientes para distintos departamentos
+        await dispararAlarmaFiltroSegmento(
+          ["costos"], 
+          segmentoDestino, 
+          "📊 Análisis de Proyecto Requerido", 
+          `Ticket #${ticketId}: Es necesario generar el proyecto de costos.`
+        );
+        await dispararAlarmaFiltroSegmento(
+          ["compras"], 
+          segmentoDestino, 
+          "🛒 Cotización de Requerimiento", 
+          `Ticket #${ticketId}: Ya puede cotizar los repuestos requeridos.`
+        );
+        break;
+
+      case "compras":
+        await dispararAlarmaFiltroSegmento(
+          ["compras"], 
+          segmentoDestino, 
+          "🛍️ Ejecutar Compra", 
+          `Ticket #${ticketId}: Realice la compra y suba la Orden de Compra al sistema.`
+        );
+        break;
+
+      case "bodega":
+        // Estación de tránsito silenciosa (Sin alarma)
+        return;
+
+      case "procesoTrabajo":
+        await dispararAlarmaFiltroSegmento(
+          ["supervisor"], // ⚙️ CALIBRADO A MINÚSCULAS
+          segmentoDestino, 
+          "⚙️ Trabajo Liberado", 
+          `Todo listo en bodega. Puede iniciar el trabajo en el ticket #${ticketId}.`
+        );
+        break;
+
+      case "validacionFacturacion":
+        await dispararAlarmaFiltroSegmento(
+          ["comercial"], 
+          segmentoDestino, 
+          "🧾 Revisión de Facturas", 
+          `Ticket #${ticketId}: Realice la revisión de facturas impagas del cliente.`
+        );
+        break;
+
+      case "entrega":
+      case "finalizado":
+      case "anulado":
+      default:
+        // Estados inactivos / silenciosos
+        return; 
     }
   }
 );
+
+// ============================================================================
+// ⚙️ SUBRUTINA DE EJECUCIÓN (FILTRO LÓGICO Y BOMBA MULTICAST)
+// ============================================================================
+async function dispararAlarmaFiltroSegmento(
+  rolesDestino: string[], 
+  segmentoTicket: string, 
+  titulo: string, 
+  cuerpo: string
+) {
+  try {
+    // 🔌 BYPASS MAESTRO: Forzamos la inclusión del rol administrador en todas las consultas.
+    // Usamos Set para evitar duplicados en la matriz por si acaso.
+    // OJO: Asumo que su rol se guarda como "admin" (minúsculas) o "ADMIN".
+    const rolesConAdmin = [...new Set([...rolesDestino, "admin", "ADMIN"])];
+
+    // 1. Recolección primaria: Traemos los roles requeridos + Administradores
+    const querySnapshot = await admin.firestore()
+      .collection("usuarios")
+      .where("rol", "in", rolesConAdmin)
+      .get();
+
+    let tokensDestino: string[] = [];
+
+    // 2. Filtro Secundario en RAM (Compuerta OR Exclusiva)
+    querySnapshot.forEach((doc) => {
+      const usuario = doc.data();
+      const segmentoUsuario = usuario.segmento || "ninguno";
+      
+      // Normalizamos el rol para blindar el circuito contra errores de tipeo
+      const rolUsuario = (usuario.rol || "indefinido").toLowerCase();
+
+      // 🧠 Lógica de enclavamiento actualizada: 
+      // ¿Es administrador (llave maestra global) O su segmento coincide?
+      const tieneAccesoAlSegmento = (
+        rolUsuario === "admin" || 
+        segmentoUsuario === "general" || 
+        segmentoUsuario === "ninguno" || 
+        segmentoUsuario === segmentoTicket
+      );
+
+      if (tieneAccesoAlSegmento && usuario.fcmTokens && Array.isArray(usuario.fcmTokens)) {
+        tokensDestino = tokensDestino.concat(usuario.fcmTokens);
+      }
+    });
+
+    // 3. Disparo del cañón FCM con soporte híbrido (Móvil + WebPush)
+    if (tokensDestino.length > 0) {
+      const payload = {
+        notification: {
+          title: titulo,
+          body: cuerpo,
+        },
+        webpush: {
+          notification: {
+            title: titulo,
+            body: cuerpo,
+            icon: '/icons/Icon-192.png',
+            requireInteraction: true,
+          },
+        },
+        android: {
+          priority: 'high' as const,
+          notification: {
+            channelId: 'canal_alta_prioridad',
+            sound: 'default',
+          },
+        },
+        tokens: tokensDestino, 
+      };
+
+      const response = await admin.messaging().sendEachForMulticast(payload);
+      logger.info(`✅ Alerta [${titulo}] enviada a ${tokensDestino.length} terminales. Fallos: ${response.failureCount}`);
+      
+      if (response.failureCount > 0) {
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            logger.error(`❌ Token inválido en índice ${idx}:`, resp.error);
+          }
+        });
+      }
+    } else {
+      logger.warn(`⚠️ No se encontraron tokens activos para Rol: ${rolesConAdmin} | Seg: ${segmentoTicket}`);
+    }
+  } catch (error) {
+    logger.error("💥 Falla crítica en la subrutina Multicast FCM:", error);
+  }
+}
 
 // ============================================================================
 // ✉️ MÓDULO 3: ACTA DE RECEPCIÓN AL CLIENTE (EMAIL SMTP)
@@ -124,7 +262,7 @@ export const orquestadorNotificacionesTicket = onDocumentWritten(
     const estadoNuevo = docAfter.estadoActual;
     const estadoAnterior = docBefore ? docBefore.estadoActual : null;
     
-    // ⚠️ FILTRO DE RUIDO: Si el estado no cambió (ej. solo editaron un texto), abortamos.
+    // ⚠️ FILTRO DE RUIDO: Si el estado físico no cambió, abortamos.
     if (estadoNuevo === estadoAnterior) return;
 
     const emailCliente = docAfter.emailContacto;
@@ -136,15 +274,18 @@ export const orquestadorNotificacionesTicket = onDocumentWritten(
       return;
     }
 
+    // ⚙️ SENSOR DE UBICACIÓN GLOBAL
+    // Lo sacamos al bus principal para que toda la máquina de estados sepa dónde estamos
+    const lugarAtencion = (docAfter.lugarAtencion || "taller").toLowerCase();
+
     // =========================================================
     // 🔀 MÁQUINA DE ESTADOS (Enrutador Principal)
     // =========================================================
 
     try {
-      // 🟢 ESTADO A: INGRESO / RECEPCIÓN (Bifurcado por Lugar de Atención)
+      // 🟢 ESTADO A: INGRESO / RECEPCIÓN
       if (estadoNuevo === "recepcionFisica") {
-        const lugarAtencion = docAfter.lugarAtencion;
-           logger.info(`Despachando telemetría de RECEPCIÓN EN CAMPO para ticket ${lugarAtencion}`);
+        
         // Rama 1: Operación en Campo
         if (lugarAtencion === "campo") {
           logger.info(`Despachando telemetría de RECEPCIÓN EN CAMPO para ticket ${ticketId}`);
@@ -156,9 +297,9 @@ export const orquestadorNotificacionesTicket = onDocumentWritten(
           });
           return;
         } 
-                // Rama 2: Operación en Taller / Laboratorio (Lógica Original)
+                
+        // Rama 2: Operación en Taller
         const urlPdf = docAfter.pdfActaUrl;
-        
         if (!urlPdf) {
           logger.warn(`[Ticket ${ticketId}] Sin PDF de acta. Cortando transmisión para recepción en taller.`);
           return;
@@ -169,21 +310,36 @@ export const orquestadorNotificacionesTicket = onDocumentWritten(
           from: '"Soporte Técnico" <ingenieria2@aquaspot.ec>',
           to: emailCliente,
           subject: `Acuse de Recepción Técnica - Ticket #${ticketId}`,
-          html: _generarPlantillaRecepcion(nombreContacto, urlPdf)
+          html: _generarPlantillaRecepcion(nombreContacto, urlPdf, docAfter) 
         });
         return;
       }
 
-      // 🔵 ESTADO B: TRABAJO FINALIZADO (Llegada a fin de línea logística)
-      // 🛑 INGENIERÍA: Evaluamos que sea "finalizado" y que ANTES no lo fuera.
-      // Así garantizamos que el correo salga tanto si hizo escala en "entrega" 
-      // como si hizo un bypass directo por tener los documentos anticipados.
-      if (estadoNuevo === "finalizado" && estadoAnterior !== "finalizado") {
-        logger.info(`Despachando telemetría de FINALIZACIÓN para ticket ${ticketId}`);
+      // 🔵 ESTADO B: FINALIZACIÓN DEL TRABAJO TÉCNICO (Compuertas Lógicas)
+      
+      // Condición 1 (CAMPO): Dispara al pasar de Trabajo a Facturación
+      const esFinDeCampo = lugarAtencion === "campo" && 
+                           estadoAnterior === "procesoTrabajo" && 
+                           estadoNuevo === "validacionFacturacion";
+
+      // Condición 2 (TALLER): Dispara al llegar al estado Finalizado
+      const esFinDeTaller = lugarAtencion !== "campo" && 
+                            estadoNuevo === "finalizado" && 
+                            estadoAnterior !== "finalizado";
+
+      // ⚡ DISPARADOR UNIFICADO
+      if (esFinDeCampo || esFinDeTaller) {
+        logger.info(`Despachando telemetría de FINALIZACIÓN para ticket ${ticketId} (Modo: ${lugarAtencion})`);
+        
+        // Ajuste dinámico del asunto del correo según el entorno
+        const asuntoCorreo = lugarAtencion === "campo" 
+            ? `✅ Trabajo Técnico Concluido - Ticket #${ticketId}` 
+            : `✅ Equipo Listo para Retiro / Despacho - Ticket #${ticketId}`;
+
         await transporter.sendMail({
           from: '"Soporte Técnico" <ingenieria2@aquaspot.ec>',
           to: emailCliente,
-          subject: `✅ Equipo Listo para Retiro / Despacho - Ticket #${ticketId}`,
+          subject: asuntoCorreo,
           html: _generarPlantillaFinalizado(nombreContacto, ticketId, docAfter)
         });
         return;
@@ -194,11 +350,6 @@ export const orquestadorNotificacionesTicket = onDocumentWritten(
     }
   }
 );
-
-// =========================================================
-// ⚙️ SUBMÓDULOS DE RENDERIZADO HTML (HMI)
-// =========================================================
-
 
 function _generarPlantillaRecepcionCampo(nombre: string, ticketId: string, datos: any): string {
   const equipo = datos.equipo || "No especificado";
@@ -230,7 +381,13 @@ function _generarPlantillaRecepcionCampo(nombre: string, ticketId: string, datos
 }
 
 
-function _generarPlantillaRecepcion(nombre: string, urlPdf: string): string {
+function _generarPlantillaRecepcion(nombre: string, urlPdf: string, datos: any): string {
+  // ⚙️ Extracción segura de telemetría
+  const equipo = datos.equipo || "No especificado";
+  const serie = datos.numeroSerie || "N/A";
+  const marca = datos.marca || "N/a"
+  const motivo = datos.fallaReportada || "Inspección general";
+
   return `
     <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: auto; border: 1px solid #ddd; border-radius: 8px;">
         <div style="background-color: #005A9C; padding: 20px; text-align: center;">
@@ -238,12 +395,23 @@ function _generarPlantillaRecepcion(nombre: string, urlPdf: string): string {
         </div>
         <div style="padding: 30px;">
             <p>Estimado/a <strong>${nombre}</strong>,</p>
-            <p>Le notificamos de manera oficial que su equipo ha sido ingresado a nuestro laboratorio para su inspección.</p>
+            <p>Le notificamos de manera oficial que su equipo ha sido ingresado a nuestro taller para su inspección técnica.</p>
+            
+            <div style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #005A9C; margin: 20px 0;">
+                <p style="margin: 5px 0;"><strong>Equipo:</strong> ${equipo}</p>
+                <p style="margin: 5px 0;"><strong>Número de Serie:</strong> ${serie}</p>
+                <p style="margin: 5px 0;"><strong>Marca:</strong> ${marca}</p>
+                <p style="margin: 5px 0;"><strong>Motivo de Ingreso:</strong> ${motivo}</p>
+            </div>
+
             <div style="text-align: center; margin: 40px 0;">
                 <a href="${urlPdf}" style="background-color: #005A9C; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold;">
                     📄 Descargar Acta PDF
                 </a>
             </div>
+            
+            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+            <p style="font-size: 12px; color: #777; text-align: center;">Atentamente,<br>Departamento de Soporte Técnico</p>
         </div>
     </div>
   `;

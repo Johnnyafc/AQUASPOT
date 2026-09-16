@@ -1,0 +1,1 @@
+{\n  "indexes": [\n    {\n      "collectionGroup": "catalogo_tecnicos",\n      "queryScope": "COLLECTION",\n      "fields": [\n        {\n          "fieldPath": "activo",\n          "order": "ASCENDING"\n        },\n        {\n          "fieldPath": "nombre",\n          "order": "ASCENDING"\n        }\n      ]\n    }\n  ],\n  "fieldOverrides": []\n}

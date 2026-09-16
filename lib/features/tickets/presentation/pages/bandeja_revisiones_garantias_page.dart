@@ -10,7 +10,10 @@ import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_event.dart';
 import '../bloc/ticket_state.dart';
 import '../../../../core/enum/ticket_enums.dart';
+import '../../domain/entities/ticket_entity.dart'; // ⚙️ Necesario para el extension getter fechaInicioEstadoActual
+import '../widgets/tiempo_en_curso_widget.dart';
 import 'detalle_ticket_page.dart'; // O la página de dictamen de garantía correspondiente
+import '../../../../core/theme/ticket_visual_theme.dart';
 
 class BandejaRevisionesGarantiasPage extends StatefulWidget {
   const BandejaRevisionesGarantiasPage({super.key});
@@ -87,16 +90,46 @@ class _BandejaRevisionesGarantiasPageState extends State<BandejaRevisionesGarant
               itemCount: garantiasPendientes.length,
               itemBuilder: (context, index) {
                 final ticket = garantiasPendientes[index];
+                // 🎨 Antes: borde Y avatar en naranja sólido (la misma señal
+                // repetida dos veces). Ahora una sola insignia suave.
                 return Card(
+                  key: ValueKey(ticket.id),
                   elevation: 2,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
-                    side: const BorderSide(color: Colors.orange, width: 1), // Distintivo visual de garantía
+                    side: BorderSide(color: Colors.grey.shade300, width: 1),
                   ),
                   child: ListTile(
-                    leading: const CircleAvatar(backgroundColor: Colors.orange, child: Icon(Icons.gavel, color: Colors.white)),
+                    leading: const AvatarSuave(color: kTicketAlerta, icono: Icons.gavel),
                     title: Text(ticket.id, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('Equipo: ${ticket.equipo.name}\nCliente: ${ticket.clienteId}\nResponsable Fact.: ${ticket.responsableFacturacion ?? "Sin definir"}'),
+                    // 🆕 Tiempo en vivo en el estado actual (sin backend: se
+                    // recalcula contra la hora real del dispositivo).
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 🆕 Cliente (empresa/camaronera) y Contacto (persona) son
+                        // datos distintos — se muestran ambos.
+                        Text(
+                          'Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}'
+                          '${ticket.clienteId.trim().isNotEmpty ? '\nCliente: ${ticket.clienteId}' : ''}'
+                          '\nContacto: ${ticket.nombreContacto}'
+                          '\nResponsable Fact.: ${ticket.responsableFacturacionLegible}',
+                        ),
+                        const SizedBox(height: 4),
+                        TiempoEnCursoWidget(
+                          desde: ticket.fechaInicioEstadoActual,
+                          builder: (context, texto) => Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.hourglass_bottom, size: 12, color: kTicketIcono),
+                              const SizedBox(width: 4),
+                              Text(texto, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kTicketTextoSecundario)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                     onTap: () {
                       // 🚀 Aquí se enruta a la pantalla donde se procesa el dictamen final (Aprobar/Rechazar garantía)

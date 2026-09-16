@@ -1,0 +1,1500 @@
+[
+  {
+    "id": "caracol_mo001",
+    "codigo": "MO001",
+    "nombre": "MANTENIMIENTO DE MOTOR HIDRÁULICO CHAR-LYNN",
+    "equipo": "caracol",
+    "horasHombre": 4.0,
+    "esVariable": false,
+    "descripcionTrabajo": "MANTENIMIENTO DE MOTOR HIDRÁULICO CHAR-LYNN",
+    "incluye": "Incluye: 1 KIT DE MANTENIMIENTO PARA MOTOR CHAR-LYNN SERIE 2000, 1 TUERCA CASTILLA NEGRA 1\" - 20 HILOS, 1 ANILLO PLANO INOX. 1\", 2 ADAPTADORES 8FPX - 10MB (1/2FPX - 5/8MB), 1 PLACA SEPARADORA DE MOTOR HIDRÁULICO DE ALUMINIO 3 MM.",
+    "itemsInternos": [
+      {
+        "codigo": "HID00355",
+        "descripcion": "EJE CONICO DE MOTOR CHAR-LYNN SERIE 2000 (IMP)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "HID00339",
+        "descripcion": "KIT DE EMPAQUES VITON CHARLYN SERIE 2000",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000119",
+        "descripcion": "TUERCA CASTILLA NEGRA  1'' - 20 HILOS",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000013",
+        "descripcion": "ANILLO PLANO INOX. 1\"",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "HID00035",
+        "descripcion": "ADAPTADOR 8FPX - 10MB (1/2FPX - 5/8MB)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "PRT000181",
+        "descripcion": "PLACA SEPARADORA DE MOTOR HIDRÁULICO DE ALUMINIO 3MM",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000065",
+        "descripcion": "DISCO DE CORTE DE 4.5'' X 1MM",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS0000019",
+        "descripcion": "BROCHA 1''",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000060",
+        "descripcion": "DILUYENTE",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000132",
+        "descripcion": "SILICONA TRANSPARENTE",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "itemsComerciales": [
+      {
+        "codigo": "HID00239",
+        "descripcion": "KIT DE MANTENIMIENTO PARA MOTOR CHARLYNN SERIE 2000",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000119",
+        "descripcion": "TUERCA CASTILLA NEGRA  1'' - 20 HILOS",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000013",
+        "descripcion": "ANILLO PLANO INOX. 1\"",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "HID00035",
+        "descripcion": "ADAPTADOR 8FPX - 10MB (1/2FPX - 5/8MB)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "PRT000181",
+        "descripcion": "PLACA SEPARADORA DE MOTOR HIDRÁULICO DE ALUMINIO 3MM",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "activo": true
+  },
+  {
+    "id": "caracol_mo0002",
+    "codigo": "MO0002",
+    "nombre": "CAMBIO DE MOTOR HIDRÁULICO CHAR-LYNN",
+    "equipo": "caracol",
+    "horasHombre": 4.0,
+    "esVariable": false,
+    "descripcionTrabajo": "CAMBIO DE MOTOR HIDRÁULICO CHAR-LYNN",
+    "incluye": "Incluye: 1 MOTOR CHAR-LYNN SERIE 2000 CON EMPAQUES DE VITON,  1 ANILLO PLANO INOX. 1\", 2 ADAPTADORES 8FPX - 10MB (1/2FPX - 5/8MB), 1 PLACA SEPARADORA DE MOTOR HIDRÁULICO DE ALUMINIO 3 MM.",
+    "itemsInternos": [
+      {
+        "codigo": "HID00161",
+        "descripcion": "MOTOR HIDRAULICO CHARLYNN 105-1002-006",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "HID00339",
+        "descripcion": "KIT DE EMPAQUES VITON CHARLYN SERIE 2000",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000013",
+        "descripcion": "ANILLO PLANO INOX. 1\"",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "HID00035",
+        "descripcion": "ADAPTADOR 8FPX - 10MB (1/2FPX - 5/8MB)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "PRT000181",
+        "descripcion": "PLACA SEPARADORA DE MOTOR HIDRÁULICO DE ALUMINIO 3MM",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000065",
+        "descripcion": "DISCO DE CORTE DE 4.5'' X 1MM",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS0000019",
+        "descripcion": "BROCHA 1''",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000060",
+        "descripcion": "DILUYENTE",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000132",
+        "descripcion": "SILICONA TRANSPARENTE",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "itemsComerciales": [
+      {
+        "codigo": "HID00161",
+        "descripcion": "MOTOR HIDRAULICO CHARLYNN 105-1002-006",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000013",
+        "descripcion": "ANILLO PLANO INOX. 1\"",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "HID00035",
+        "descripcion": "ADAPTADOR 8FPX - 10MB (1/2FPX - 5/8MB)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      }
+    ],
+    "activo": true
+  },
+  {
+    "id": "caracol_mo003",
+    "codigo": "MO003",
+    "nombre": "CAMBIO DE TAPA TRASERA",
+    "equipo": "caracol",
+    "horasHombre": 3.0,
+    "esVariable": false,
+    "descripcionTrabajo": "",
+    "incluye": "",
+    "itemsInternos": [
+      {
+        "codigo": "HID00180",
+        "descripcion": "TAPA TRASERA (CARACOL AQ)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000132",
+        "descripcion": "SILICONA TRANSPARENTE",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "itemsComerciales": [
+      {
+        "codigo": "HID00180",
+        "descripcion": "TAPA TRASERA (CARACOL AQ)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "activo": true
+  },
+  {
+    "id": "caracol_mo004",
+    "codigo": "MO004",
+    "nombre": "CAMBIO DE TAPA DELANTERA",
+    "equipo": "caracol",
+    "horasHombre": 3.0,
+    "esVariable": false,
+    "descripcionTrabajo": "CAMBIO DE TAPA DELANTERA",
+    "incluye": "Incluye: 1 TAPA DELANTERA (CARACOL AQ), 1 GUÍA DE DESGASTE DE NYLON",
+    "itemsInternos": [
+      {
+        "codigo": "HID00177",
+        "descripcion": "TAPA DELANTERA (CARACOL AQ)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "MAP000088",
+        "descripcion": "CUADRANTE DE NYLON ESPESOR 15MM (33CM x 33CM)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000131",
+        "descripcion": "SILICON NEGRO RTV3OZ PERMATEX",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "itemsComerciales": [
+      {
+        "codigo": "HID00177",
+        "descripcion": "TAPA DELANTERA (CARACOL AQ)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "MAP000088",
+        "descripcion": "CUADRANTE DE NYLON ESPESOR 15MM (33CM x 33CM)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "activo": true
+  },
+  {
+    "id": "caracol_mo005",
+    "codigo": "MO005",
+    "nombre": "CAMBIO DE PERNOS DE TAPAS 1/4''",
+    "equipo": "caracol",
+    "horasHombre": null,
+    "esVariable": true,
+    "descripcionTrabajo": "",
+    "incluye": "",
+    "itemsInternos": [
+      {
+        "codigo": "PER000050",
+        "descripcion": "PERNO AVELLANADO INOX. 1/4'' x 2''",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000021",
+        "descripcion": "ANILLO PLANO INOX. M6 (1/4\")",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000005",
+        "descripcion": "ANILLO DE PRESION INOX. M6 (1/4\")",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000135",
+        "descripcion": "TUERCA NORMAL INOX. 1/4\"",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000091",
+        "descripcion": "LOCTITE 271 ROJO (50ML)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "itemsComerciales": [
+      {
+        "codigo": "PER000050",
+        "descripcion": "PERNO AVELLANADO INOX. 1/4'' x 2''",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000021",
+        "descripcion": "ANILLO PLANO INOX. M6 (1/4\")",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000005",
+        "descripcion": "ANILLO DE PRESION INOX. M6 (1/4\")",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000135",
+        "descripcion": "TUERCA NORMAL INOX. 1/4\"",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "activo": true
+  },
+  {
+    "id": "caracol_mo005",
+    "codigo": "MO005",
+    "nombre": "CAMBIO DE PERNOS DE TAPAS 5/16''",
+    "equipo": "caracol",
+    "horasHombre": null,
+    "esVariable": true,
+    "descripcionTrabajo": "CAMBIO DE PERNO",
+    "incluye": "Incluye: KIT DE PERNO, TUERCA Y ARANDELAS 5/16''",
+    "itemsInternos": [
+      {
+        "codigo": "PER000052",
+        "descripcion": "PERNO AVELLANADO INOX. 5/16'' x 2''",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000022",
+        "descripcion": "ANILLO PLANO INOX. M8 (5/16\")",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000006",
+        "descripcion": "ANILLO DE PRESION INOX. M8 (5/16\")",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000136",
+        "descripcion": "TUERCA NORMAL INOX. 5/16\"",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000091",
+        "descripcion": "LOCTITE 271 ROJO (50ML)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "itemsComerciales": [
+      {
+        "codigo": "PER000052",
+        "descripcion": "PERNO AVELLANADO INOX. 5/16'' x 2''",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000022",
+        "descripcion": "ANILLO PLANO INOX. M8 (5/16\")",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000006",
+        "descripcion": "ANILLO DE PRESION INOX. M8 (5/16\")",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000136",
+        "descripcion": "TUERCA NORMAL INOX. 5/16\"",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "activo": true
+  },
+  {
+    "id": "caracol_mo006",
+    "codigo": "MO006",
+    "nombre": "REPARACIÓN DE CARCASA",
+    "equipo": "caracol",
+    "horasHombre": null,
+    "esVariable": true,
+    "descripcionTrabajo": "REPARACIÓN DE CARCASA",
+    "incluye": "Incluye: 30CM PLATINA DE ALUMINIO NAVAL 4''X1/2''",
+    "itemsInternos": [
+      {
+        "codigo": "MAP000188",
+        "descripcion": "PLATINA DE ALUMINIO NAVAL 4''X1/2''",
+        "unidad": "CENTÍMETRO",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000049",
+        "descripcion": "CONTACTIL 0.9MM",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000127",
+        "descripcion": "ROLLO DE ALUMINIO 4043 MIG 0.9MM",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000060",
+        "descripcion": "DILUYENTE",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000010",
+        "descripcion": "VARILLA APORTE ALUMINIO 4043 3/32''",
+        "unidad": "UNIDAD",
+        "cantidad": 10.0
+      },
+      {
+        "codigo": "INS000065",
+        "descripcion": "DISCO DE CORTE DE 4.5'' X 1MM",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "INS000061",
+        "descripcion": "DISCO DE CIRCONIO 4'' NO 40",
+        "unidad": "UNIDAD",
+        "cantidad": 4.0
+      },
+      {
+        "codigo": "INS000160",
+        "descripcion": "DISCO DE DESBASTE NORTON 4 1/2\" X 3/16\" BDA50",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000074",
+        "descripcion": "FILTRO GAS LENS TIG. 3/32''",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000034",
+        "descripcion": "CERAMICA TIG #8",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000148",
+        "descripcion": "TUNGSTENO PUNTA GRIS 3/32\"",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "SER00052",
+        "descripcion": "SERVICIO DE SANDBLASTING PARA LIMPIEZA DE PINTURA DE CARACOLES",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000118",
+        "descripcion": "PRIMER EPOXICO GRIS",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000110",
+        "descripcion": "PINTURA EPOXICA CELESTE",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "itemsComerciales": [
+      {
+        "codigo": "MAP000188",
+        "descripcion": "PLATINA DE ALUMINIO NAVAL 4''X1/2''",
+        "unidad": "CENTÍMETRO",
+        "cantidad": 1.0
+      }
+    ],
+    "activo": true
+  },
+  {
+    "id": "caracol_mo007",
+    "codigo": "MO007",
+    "nombre": "CAMBIO DE IMPULSOR",
+    "equipo": "caracol",
+    "horasHombre": 3.0,
+    "esVariable": false,
+    "descripcionTrabajo": "CAMBIO DE IMPULSOR",
+    "incluye": "Incluye: 1 IMPULSOR AQ,1 TAPÓN DE ALUMINIO PARA CARACOL, 1 GUÍA DE DESGASTE",
+    "itemsInternos": [
+      {
+        "codigo": "HID00098",
+        "descripcion": "IMPELER (CARACOL AQ)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "HID00183",
+        "descripcion": "TAPON DE ALUMINIO PARA CARACOL",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "MAP000088",
+        "descripcion": "CUADRANTE DE NYLON ESPESOR 15MM (33CM x 33CM)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000131",
+        "descripcion": "SILICON NEGRO RTV3OZ PERMATEX",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "itemsComerciales": [
+      {
+        "codigo": "HID00098",
+        "descripcion": "IMPELER (CARACOL AQ)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "HID00183",
+        "descripcion": "TAPON DE ALUMINIO PARA CARACOL",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "MAP000088",
+        "descripcion": "CUADRANTE DE NYLON ESPESOR 15MM (33CM x 33CM)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "activo": true
+  },
+  {
+    "id": "caracol_mo008",
+    "codigo": "MO008",
+    "nombre": "CAMBIO DE ACOPLE MACHO SOLDABLE DE 8''",
+    "equipo": "caracol",
+    "horasHombre": 2.0,
+    "esVariable": false,
+    "descripcionTrabajo": "CAMBIO DE ACOPLE MACHO SOLDABLE DE 8''",
+    "incluye": "Incluye: ACOPLE SOLDABLE MACHO 8''",
+    "itemsInternos": [
+      {
+        "codigo": "HID00017",
+        "descripcion": "ACOPLE SOLDABLE MACHO 8''",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000010",
+        "descripcion": "VARILLA APORTE ALUMINIO 4043 3/32''",
+        "unidad": "UNIDAD",
+        "cantidad": 10.0
+      },
+      {
+        "codigo": "INS000065",
+        "descripcion": "DISCO DE CORTE DE 4.5'' X 1MM",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "INS000061",
+        "descripcion": "DISCO DE CIRCONIO 4'' NO 40",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      }
+    ],
+    "itemsComerciales": [
+      {
+        "codigo": "HID00017",
+        "descripcion": "ACOPLE SOLDABLE MACHO 8''",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "activo": true
+  },
+  {
+    "id": "caracol_mo009",
+    "codigo": "MO009",
+    "nombre": "MONTAJE DE SERPENTÍN",
+    "equipo": "caracol",
+    "horasHombre": 1.0,
+    "esVariable": false,
+    "descripcionTrabajo": "MONTAJE DE SERPENTÍN",
+    "incluye": "Incluye: 1 SERPENTÍN AQUASPOT, 2 JUEGOS DE ADAPATADORES DESDE 12FP A 8FPX",
+    "itemsInternos": [
+      {
+        "codigo": "MAP000147",
+        "descripcion": "TUBO ALUMINIO NAVAL DIAM. 3/4'' CEDULA 40",
+        "unidad": "CENTIMETRO",
+        "cantidad": 580.0
+      },
+      {
+        "codigo": "SER00035",
+        "descripcion": "ROLADO DE TUBO ALUMINIO NAVAL DIAM. 3/4\" CEDULA 40",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "HID00206",
+        "descripcion": "ADAPTADOR 12FP - 12FP (3/4FP - 3/4FP)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "HID00037",
+        "descripcion": "ADAPTADOR 8FPX - 8MP (1/2FPX - 1/2MP)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "HID00072",
+        "descripcion": "BUSHING 12MP - 8FP (3/4MP - 1/2FP)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "INS000145",
+        "descripcion": "TEFLON AMARILLO",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      }
+    ],
+    "itemsComerciales": [
+      {
+        "codigo": "PRT000061",
+        "descripcion": "SERPENTIN PARA CARACOL AQUASPOT",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "HID00206",
+        "descripcion": "ADAPTADOR 12FP - 12FP (3/4FP - 3/4FP)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "HID00037",
+        "descripcion": "ADAPTADOR 8FPX - 8MP (1/2FPX - 1/2MP)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "HID00072",
+        "descripcion": "BUSHING 12MP - 8FP (3/4MP - 1/2FP)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      }
+    ],
+    "activo": true
+  },
+  {
+    "id": "caracol_mo010",
+    "codigo": "MO010",
+    "nombre": "FABRICACIÓN DE SOPORTES 2D/3D SERPETÍN",
+    "equipo": "caracol",
+    "horasHombre": 3.0,
+    "esVariable": false,
+    "descripcionTrabajo": "",
+    "incluye": "",
+    "itemsInternos": [
+      {
+        "codigo": "MAP000126",
+        "descripcion": "PLATINA DE ALUMINIO NAVAL 3\" X 1/4\"",
+        "unidad": "CENTIMETRO",
+        "cantidad": 50.0
+      },
+      {
+        "codigo": "MEC000003",
+        "descripcion": "ABRAZADERA DE SERPENTIN 3D",
+        "unidad": "UNIDAD",
+        "cantidad": 4.0
+      },
+      {
+        "codigo": "MEC000002",
+        "descripcion": "ABRAZADERA DE SERPENTIN 2D",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "PER000066",
+        "descripcion": "PERNO INOX. 1/4'' x 3\"",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      },
+      {
+        "codigo": "PER000135",
+        "descripcion": "TUERCA NORMAL INOX. 1/4\"",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      },
+      {
+        "codigo": "PER000021",
+        "descripcion": "ANILLO PLANO INOX. M6 (1/4\")",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      },
+      {
+        "codigo": "PER000005",
+        "descripcion": "ANILLO DE PRESION INOX. M6 (1/4\")",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      },
+      {
+        "codigo": "INS000010",
+        "descripcion": "VARILLA APORTE ALUMINIO 4043 3/32''",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "INS000065",
+        "descripcion": "DISCO DE CORTE DE 4.5'' X 1MM",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "INS000061",
+        "descripcion": "DISCO DE CIRCONIO 4'' NO 40",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      }
+    ],
+    "itemsComerciales": [
+      {
+        "codigo": "MAP000126",
+        "descripcion": "PLATINA DE ALUMINIO NAVAL 3\" X 1/4\"",
+        "unidad": "CENTIMETRO",
+        "cantidad": 50.0
+      },
+      {
+        "codigo": "MEC000003",
+        "descripcion": "ABRAZADERA DE SERPENTIN 3D",
+        "unidad": "UNIDAD",
+        "cantidad": 4.0
+      },
+      {
+        "codigo": "MEC000002",
+        "descripcion": "ABRAZADERA DE SERPENTIN 2D",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "PER000066",
+        "descripcion": "PERNO INOX. 1/4'' x 3\"",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      },
+      {
+        "codigo": "PER000135",
+        "descripcion": "TUERCA NORMAL INOX. 1/4\"",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      },
+      {
+        "codigo": "PER000021",
+        "descripcion": "ANILLO PLANO INOX. M6 (1/4\")",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      },
+      {
+        "codigo": "PER000005",
+        "descripcion": "ANILLO DE PRESION INOX. M6 (1/4\")",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      }
+    ],
+    "activo": true
+  },
+  {
+    "id": "caracol_mo011",
+    "codigo": "MO011",
+    "nombre": "MONTAJE DE SERPENTÍN Y SOPORTES EN CHASIS",
+    "equipo": "caracol",
+    "horasHombre": 4.0,
+    "esVariable": false,
+    "descripcionTrabajo": "MONTAJE DE SERPENTÍN Y SOPORTES EN CHASIS",
+    "incluye": "Incluye: 1 SERPENTÍN PARA CARACOL AQUASPOT, 2 ADAPTADORES 12FP - 12FP (3/4FP - 3/4FP), 2 ADAPTADORES 8FPX - 8MP (1/2FPX - 1/2MP), 2 BUSHING 12MP - 8FP (3/4MP - 1/2FP), 50 CM DE PLATINA DE ALUMINIO NAVAL 3\" X 1/4\", 4 ABRAZADERAS DE SERPENTÍN 3D, 2 ABRAZADERAS DE SERPENTÍN 2D, 6 PERNOS INOX. 1/4\" X 3\", 6 TUERCAS NORMALES INOX. 1/4\", 6 ANILLOS PLANOS INOX. M6 (1/4\") Y 6 ANILLOS DE PRESIÓN INOX. M6 (1/4\").",
+    "itemsInternos": [
+      {
+        "codigo": "MAP000147",
+        "descripcion": "TUBO ALUMINIO NAVAL DIAM. 3/4'' CEDULA 40",
+        "unidad": "CENTIMETRO",
+        "cantidad": 580.0
+      },
+      {
+        "codigo": "SER00035",
+        "descripcion": "ROLADO DE TUBO ALUMINIO NAVAL DIAM. 3/4\" CEDULA 40",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "HID00206",
+        "descripcion": "ADAPTADOR 12FP - 12FP (3/4FP - 3/4FP)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "HID00037",
+        "descripcion": "ADAPTADOR 8FPX - 8MP (1/2FPX - 1/2MP)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "HID00072",
+        "descripcion": "BUSHING 12MP - 8FP (3/4MP - 1/2FP)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "MAP000126",
+        "descripcion": "PLATINA DE ALUMINIO NAVAL 3\" X 1/4\"",
+        "unidad": "CENTIMETRO",
+        "cantidad": 50.0
+      },
+      {
+        "codigo": "MEC000003",
+        "descripcion": "ABRAZADERA DE SERPENTIN 3D",
+        "unidad": "UNIDAD",
+        "cantidad": 4.0
+      },
+      {
+        "codigo": "MEC000002",
+        "descripcion": "ABRAZADERA DE SERPENTIN 2D",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "PER000066",
+        "descripcion": "PERNO INOX. 1/4'' x 3\"",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      },
+      {
+        "codigo": "PER000135",
+        "descripcion": "TUERCA NORMAL INOX. 1/4\"",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      },
+      {
+        "codigo": "PER000021",
+        "descripcion": "ANILLO PLANO INOX. M6 (1/4\")",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      },
+      {
+        "codigo": "PER000005",
+        "descripcion": "ANILLO DE PRESION INOX. M6 (1/4\")",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      },
+      {
+        "codigo": "INS000010",
+        "descripcion": "VARILLA APORTE ALUMINIO 4043 3/32''",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      },
+      {
+        "codigo": "INS000065",
+        "descripcion": "DISCO DE CORTE DE 4.5'' X 1MM",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "INS000061",
+        "descripcion": "DISCO DE CIRCONIO 4'' NO 40",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "INS000142",
+        "descripcion": "SUPER BONDER PEGAMENTO LIQUIDO (BRUJITA) 5GR LOCTITE",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "itemsComerciales": [
+      {
+        "codigo": "PRT000061",
+        "descripcion": "SERPENTIN PARA CARACOL AQUASPOT",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "HID00206",
+        "descripcion": "ADAPTADOR 12FP - 12FP (3/4FP - 3/4FP)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "HID00037",
+        "descripcion": "ADAPTADOR 8FPX - 8MP (1/2FPX - 1/2MP)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "HID00072",
+        "descripcion": "BUSHING 12MP - 8FP (3/4MP - 1/2FP)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "MAP000126",
+        "descripcion": "PLATINA DE ALUMINIO NAVAL 3\" X 1/4\"",
+        "unidad": "CENTIMETRO",
+        "cantidad": 50.0
+      },
+      {
+        "codigo": "MEC000003",
+        "descripcion": "ABRAZADERA DE SERPENTIN 3D",
+        "unidad": "UNIDAD",
+        "cantidad": 4.0
+      },
+      {
+        "codigo": "MEC000002",
+        "descripcion": "ABRAZADERA DE SERPENTIN 2D",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "PER000066",
+        "descripcion": "PERNO INOX. 1/4'' x 3\"",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      },
+      {
+        "codigo": "PER000135",
+        "descripcion": "TUERCA NORMAL INOX. 1/4\"",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      },
+      {
+        "codigo": "PER000021",
+        "descripcion": "ANILLO PLANO INOX. M6 (1/4\")",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      },
+      {
+        "codigo": "PER000005",
+        "descripcion": "ANILLO DE PRESION INOX. M6 (1/4\")",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      }
+    ],
+    "activo": true
+  },
+  {
+    "id": "caracol_mo012",
+    "codigo": "MO012",
+    "nombre": "FABRICACIÓN DE CHASIS",
+    "equipo": "caracol",
+    "horasHombre": 4.0,
+    "esVariable": false,
+    "descripcionTrabajo": "FABRICACIÓN Y MONTAJE DE CHASIS",
+    "incluye": "Incluye: 1 CHASIS (CARACOL AQ), 50 CM DE PLATINA DE ALUMINIO NAVAL 3\" X 1/4\", 4 PERNOS INOX. 1/2\" X 2\", 5 ANILLOS PLANOS INOX. M12, 5 ANILLOS DE PRESIÓN INOX. M12 (1/2\"), 1 TUERCA NORMAL INOX. 1/2\", 1 PERNO INOX. 1/2\" X 3\".",
+    "itemsInternos": [
+      {
+        "codigo": "MAP000146",
+        "descripcion": "TUBO ALUMINIO NAVAL DIAM. 1 1/4'' CEDULA 40",
+        "unidad": "CENTIMETRO",
+        "cantidad": 1200.0
+      },
+      {
+        "codigo": "SER00036",
+        "descripcion": "DOBLADO DE TUBO ALUMINIO NAVAL DIAM. 1 1/4\" CED. 40",
+        "unidad": "UNIDAD",
+        "cantidad": 8.0
+      },
+      {
+        "codigo": "MAP000126",
+        "descripcion": "PLATINA DE ALUMINIO NAVAL 3\" X 1/4\"",
+        "unidad": "CENTIMETRO",
+        "cantidad": 80.0
+      },
+      {
+        "codigo": "PER000063",
+        "descripcion": "PERNO INOX. 1/2\" x 2\"",
+        "unidad": "UNIDAD",
+        "cantidad": 4.0
+      },
+      {
+        "codigo": "PER000018",
+        "descripcion": "ANILLO PLANO INOX. M12",
+        "unidad": "UNIDAD",
+        "cantidad": 5.0
+      },
+      {
+        "codigo": "PER000004",
+        "descripcion": "ANILLO DE PRESION INOX. M12 (1/2'')",
+        "unidad": "UNIDAD",
+        "cantidad": 5.0
+      },
+      {
+        "codigo": "PER000134",
+        "descripcion": "TUERCA NORMAL INOX. 1/2\"",
+        "unidad": "UNIDAD",
+        "cantidad": 5.0
+      },
+      {
+        "codigo": "PER000061",
+        "descripcion": "PERNO INOX. 1/2'' x 3''",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000010",
+        "descripcion": "VARILLA APORTE ALUMINIO 4043 3/32''",
+        "unidad": "UNIDAD",
+        "cantidad": 10.0
+      },
+      {
+        "codigo": "INS000065",
+        "descripcion": "DISCO DE CORTE DE 4.5'' X 1MM",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "INS000061",
+        "descripcion": "DISCO DE CIRCONIO 4'' NO 40",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "INS000063",
+        "descripcion": "DISCO DE CORTE 14''",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "itemsComerciales": [
+      {
+        "codigo": "PRT000024",
+        "descripcion": "CHASIS (CARACOL AQ)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "MAP000126",
+        "descripcion": "PLATINA DE ALUMINIO NAVAL 3\" X 1/4\"",
+        "unidad": "CENTIMETRO",
+        "cantidad": 40.0
+      },
+      {
+        "codigo": "PER000063",
+        "descripcion": "PERNO INOX. 1/2\" x 2\"",
+        "unidad": "UNIDAD",
+        "cantidad": 4.0
+      },
+      {
+        "codigo": "PER000018",
+        "descripcion": "ANILLO PLANO INOX. M12",
+        "unidad": "UNIDAD",
+        "cantidad": 5.0
+      },
+      {
+        "codigo": "PER000004",
+        "descripcion": "ANILLO DE PRESION INOX. M12 (1/2'')",
+        "unidad": "UNIDAD",
+        "cantidad": 5.0
+      },
+      {
+        "codigo": "PER000134",
+        "descripcion": "TUERCA NORMAL INOX. 1/2\"",
+        "unidad": "UNIDAD",
+        "cantidad": 5.0
+      },
+      {
+        "codigo": "PER000061",
+        "descripcion": "PERNO INOX. 1/2'' x 3''",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "activo": true
+  },
+  {
+    "id": "caracol_mo0013",
+    "codigo": "MO0013",
+    "nombre": "MONTAJE DE NUEVO CHASIS",
+    "equipo": "caracol",
+    "horasHombre": 2.0,
+    "esVariable": false,
+    "descripcionTrabajo": "",
+    "incluye": "",
+    "itemsInternos": [],
+    "itemsComerciales": [],
+    "activo": true
+  },
+  {
+    "id": "caracol_mo0014",
+    "codigo": "MO0014",
+    "nombre": "REPARACIÓN DE CHASIS",
+    "equipo": "caracol",
+    "horasHombre": null,
+    "esVariable": true,
+    "descripcionTrabajo": "REPARACIÓN DE CHASIS",
+    "incluye": "Incluye: 100 CM DE TUBO DE ALUMINIO NAVAL DIAM. 1 1/4'' CÉDULA 40, 80 CM DE PLATINA DE ALUMINIO NAVAL 3'' X 1/4''",
+    "itemsInternos": [
+      {
+        "codigo": "MAP000146",
+        "descripcion": "TUBO ALUMINIO NAVAL DIAM. 1 1/4'' CEDULA 40",
+        "unidad": "CENTIMETRO",
+        "cantidad": 50.0
+      },
+      {
+        "codigo": "MAP000126",
+        "descripcion": "PLATINA DE ALUMINIO NAVAL 3\" X 1/4\"",
+        "unidad": "CENTIMETRO",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000010",
+        "descripcion": "VARILLA APORTE ALUMINIO 4043 3/32''",
+        "unidad": "UNIDAD",
+        "cantidad": 10.0
+      },
+      {
+        "codigo": "INS000065",
+        "descripcion": "DISCO DE CORTE DE 4.5'' X 1MM",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "INS000061",
+        "descripcion": "DISCO DE CIRCONIO 4'' NO 40",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      }
+    ],
+    "itemsComerciales": [
+      {
+        "codigo": "MAP000146",
+        "descripcion": "TUBO ALUMINIO NAVAL DIAM. 1 1/4'' CEDULA 40",
+        "unidad": "CENTIMETRO",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "MAP000126",
+        "descripcion": "PLATINA DE ALUMINIO NAVAL 3\" X 1/4\"",
+        "unidad": "CENTIMETRO",
+        "cantidad": 1.0
+      }
+    ],
+    "activo": true
+  },
+  {
+    "id": "caracol_mo015",
+    "codigo": "MO015",
+    "nombre": "MONTAJE DE MANGUERA HIDRÁULICA BOMBA - MOTOR",
+    "equipo": "caracol",
+    "horasHombre": 0.25,
+    "esVariable": false,
+    "descripcionTrabajo": "MONTAJE DE MANGUERA HIDRÁULICA BOMBA - MOTOR",
+    "incluye": "Incluye: 2 MANGUERA R2 1/2\" X 15M CON RECUBRIMIENTO CONECTORES INOX (8MP - 8MP), 2 ACOPLES RÁPIDOS 1/2'' PUNTA",
+    "itemsInternos": [
+      {
+        "codigo": "HID00127",
+        "descripcion": "MANGUERA R2 1/2\" X 15 M CON RECUBRIMIENTO CONECTORES INOX (8MP - 8MP)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "HID00014",
+        "descripcion": "ACOPLE RÁPIDO 1/2'' PUNTA",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      }
+    ],
+    "itemsComerciales": [
+      {
+        "codigo": "HID00127",
+        "descripcion": "MANGUERA R2 1/2\" X 15 M CON RECUBRIMIENTO CONECTORES INOX (8MP - 8MP)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "HID00014",
+        "descripcion": "ACOPLE RÁPIDO 1/2'' PUNTA",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      }
+    ],
+    "activo": true
+  },
+  {
+    "id": "caracol_mo016",
+    "codigo": "MO016",
+    "nombre": "MONTAJE DE MANGUERA HIDRÁULICA INTERNA (MOTOR-SERPENTÍN)",
+    "equipo": "caracol",
+    "horasHombre": 0.25,
+    "esVariable": false,
+    "descripcionTrabajo": "MONTAJE DE MANGUERA HIDRÁULICA INTERNA (MOTOR-SERPENTÍN)",
+    "incluye": "Incluye: 1 MANGUERA R2 1/2\" X 0.90 M CON RECUBRIMIENTO CONECTORES INOX (8MP - 8MP)",
+    "itemsInternos": [
+      {
+        "codigo": "HID00118",
+        "descripcion": "MANGUERA R2 1/2\" X 0.90 M CON RECUBRIMIENTO CONECTORES INOX (8MP - 8MP)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "itemsComerciales": [
+      {
+        "codigo": "HID00118",
+        "descripcion": "MANGUERA R2 1/2\" X 0.90 M CON RECUBRIMIENTO CONECTORES INOX (8MP - 8MP)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "activo": true
+  },
+  {
+    "id": "caracol_mo017",
+    "codigo": "MO017",
+    "nombre": "TRANSFORMACION A CARACOL PLANO",
+    "equipo": "caracol",
+    "horasHombre": 20.0,
+    "esVariable": false,
+    "descripcionTrabajo": "",
+    "incluye": "",
+    "itemsInternos": [
+      {
+        "codigo": "HID00177",
+        "descripcion": "TAPA DELANTERA DE CARACOL AQUASPOT",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "HID00180",
+        "descripcion": "TAPA TRASERA (CARACOL AQ)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "HID00098",
+        "descripcion": "IMPELER (CARACOL AQ)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "HID00118",
+        "descripcion": "MANGUERA R2 1/2\" X 0.90 M CON RECUBRIMIENTO CONECTORES INOX (8MP - 8MP)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "HID00035",
+        "descripcion": "ADAPTADOR 8FPX - 10MB (1/2FPX - 5/8MB)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "HID00206",
+        "descripcion": "ADAPTADOR 12FP - 12FP (3/4FP - 3/4FP)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "HID00037",
+        "descripcion": "ADAPTADOR 8FPX - 8MP (1/2FPX - 1/2MP)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "HID00072",
+        "descripcion": "BUSHING 12MP - 8FP (3/4MP - 1/2FP)",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "MAP000147",
+        "descripcion": "TUBO ALUMINIO NAVAL DIAM. 3/4'' CEDULA 40",
+        "unidad": "CENTIMETRO",
+        "cantidad": 580.0
+      },
+      {
+        "codigo": "SER00035",
+        "descripcion": "ROLADO DE TUBO ALUMINIO NAVAL DIAM. 3/4\" CEDULA 40",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "MEC000003",
+        "descripcion": "ABRAZADERA DE SERPENTIN 3D",
+        "unidad": "UNIDAD",
+        "cantidad": 4.0
+      },
+      {
+        "codigo": "MEC000002",
+        "descripcion": "ABRAZADERA DE SERPENTIN 2D",
+        "unidad": "UNIDAD",
+        "cantidad": 2.0
+      },
+      {
+        "codigo": "MAP000126",
+        "descripcion": "PLATINA DE ALUMINIO NAVAL 3\" X 1/4\"",
+        "unidad": "CENTIMETRO",
+        "cantidad": 50.0
+      },
+      {
+        "codigo": "HID00183",
+        "descripcion": "TAPON DE ALUMINIO PARA CARACOL",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000066",
+        "descripcion": "PERNO INOX. 1/4'' x 3\"",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      },
+      {
+        "codigo": "PER000061",
+        "descripcion": "PERNO INOX. 1/2'' x 3''",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000063",
+        "descripcion": "PERNO INOX. 1/2\" x 2\"",
+        "unidad": "UNIDAD",
+        "cantidad": 4.0
+      },
+      {
+        "codigo": "PER000013",
+        "descripcion": "ANILLO PLANO INOX. 1\"",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000018",
+        "descripcion": "ANILLO PLANO INOX. M12",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000021",
+        "descripcion": "ANILLO PLANO INOX. M6 (1/4\")",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      },
+      {
+        "codigo": "PER000004",
+        "descripcion": "ANILLO DE PRESION INOX. M12 (1/2'')",
+        "unidad": "UNIDAD",
+        "cantidad": 5.0
+      },
+      {
+        "codigo": "PER000005",
+        "descripcion": "ANILLO DE PRESION INOX. M6 (1/4\")",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      },
+      {
+        "codigo": "PER000134",
+        "descripcion": "TUERCA NORMAL INOX. 1/2\"",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "PER000135",
+        "descripcion": "TUERCA NORMAL INOX. 1/4\"",
+        "unidad": "UNIDAD",
+        "cantidad": 6.0
+      },
+      {
+        "codigo": "SER00052",
+        "descripcion": "SERVICIO DE SANDBLASTING PARA LIMPIEZA DE PINTURA DE CARACOLES",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "MAP000088",
+        "descripcion": "CUADRANTE DE NYLON ESPESOR 15MM (33CM x 33CM)",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000131",
+        "descripcion": "SILICON NEGRO RTV 3 OZ PERMATEX",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000132",
+        "descripcion": "SILICONA TRANSPARENTE",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000145",
+        "descripcion": "TEFLÓN AMARILLO",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000010",
+        "descripcion": "VARILLA APORTE ALUMINIO 4043 3/32\"",
+        "unidad": "UNIDAD",
+        "cantidad": 25.0
+      },
+      {
+        "codigo": "INS000065",
+        "descripcion": "DISCO DE CORTE 4.5\" X 1 MM",
+        "unidad": "UNIDAD",
+        "cantidad": 4.0
+      },
+      {
+        "codigo": "INS000061",
+        "descripcion": "DISCO DE CIRCONIO 4\" N° 40",
+        "unidad": "UNIDAD",
+        "cantidad": 4.0
+      },
+      {
+        "codigo": "INS000142",
+        "descripcion": "SUPER BONDER PEGAMENTO LÍQUIDO LOCTITE 5 G",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000074",
+        "descripcion": "FILTRO GAS LENS TIG. 3/32''",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000034",
+        "descripcion": "CERAMICA TIG #8",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000148",
+        "descripcion": "TUNGSTENO PUNTA GRIS 3/32\"",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000118",
+        "descripcion": "PRIMER EPOXICO GRIS",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      },
+      {
+        "codigo": "INS000110",
+        "descripcion": "PINTURA EPOXICA CELESTE",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "itemsComerciales": [
+      {
+        "codigo": "PRT000086",
+        "descripcion": "KIT DE TRANSFORMACION A CARACOL PLANO",
+        "unidad": "UNIDAD",
+        "cantidad": 1.0
+      }
+    ],
+    "activo": true
+  }
+]

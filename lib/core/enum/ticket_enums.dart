@@ -13,9 +13,21 @@ enum TipoGarantia {
 enum ResponsableFacturacion {
   pendiente,      // Aún no calculado
   cliente,        // Facturación normal al cliente final
-  agripotsa,      // Absorbido por la matriz (Ej: Garantía máquina nueva)
+  agrispotsa,     // Absorbido por la matriz AGRISPOTSA (Ej: Garantía máquina nueva)
   tallerInterno,  // Absorbido por el taller (Ej: Garantía de servicio)
   noAplica
+}
+
+/// Formatea de forma segura y consistente el responsable de facturación
+String formatearResponsableFacturacion(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return 'NO DEFINIDO';
+  final lower = raw.trim().toLowerCase();
+  if (lower == 'agripotsa' || lower == 'agrispotsa') return 'AGRISPOTSA';
+  if (lower == 'tallerinterno') return 'TALLER INTERNO';
+  if (lower == 'cliente') return 'CLIENTE';
+  if (lower == 'pendiente') return 'PENDIENTE';
+  if (lower == 'noaplica') return 'NO APLICA';
+  return raw.toUpperCase();
 }
 
 enum TipoEquipo { Caracol, Cosechadora, Contador, Otros}
@@ -53,4 +65,41 @@ enum LugarAtencion {
   campo,
   pendiente, // ⚙️ Clave para mantener el submenú abierto
   noAplica
+}
+
+extension EstadoTicketExtension on EstadoTicket {
+  String get nombreLegible {
+    switch (this) {
+      case EstadoTicket.creado:
+        return 'Creado';
+      case EstadoTicket.enCamino:
+        return 'En camino';
+      case EstadoTicket.recepcionFisica:
+        return 'Evaluación técnica';
+      case EstadoTicket.revisionGarantia:
+        return 'Revisión garantía';
+      case EstadoTicket.comercial:
+        return 'Comercial';
+      case EstadoTicket.cotizado:
+        return 'Cotizado';
+      case EstadoTicket.costos:
+        return 'Costos';
+      case EstadoTicket.compras:
+        return 'Compras';
+      case EstadoTicket.bodega:
+        return 'Bodega';
+      case EstadoTicket.procesoTrabajo:
+        return 'Proceso de trabajo';
+      case EstadoTicket.validacionFacturacion:
+        return 'Revisión de pagos';
+      case EstadoTicket.entrega:
+        return 'Entrega';
+      case EstadoTicket.finalizado:
+        return 'Finalizado';
+      case EstadoTicket.anulado:
+        return 'Anulado';
+    }
+  }
+
+  String get nombreMayusculas => nombreLegible.toUpperCase();
 }

@@ -10,9 +10,11 @@ import '../bloc/ticket_event.dart';
 import '../bloc/ticket_state.dart'; 
 import '../../../../core/enum/ticket_enums.dart';
 import '../../domain/entities/ticket_entity.dart';
+import '../widgets/tiempo_en_curso_widget.dart';
+import '../../../../core/theme/ticket_visual_theme.dart';
 
 // 🔌 CONEXIÓN ESTRUCTURAL AL MÓDULO DE DESPACHO
-import 'formulario_entrega_page.dart'; 
+import 'formulario_entrega_page.dart';
 
 class BandejaEntregasPage extends StatefulWidget {
   const BandejaEntregasPage({super.key});
@@ -166,30 +168,26 @@ class _BandejaEntregasPageState extends State<BandejaEntregasPage> {
               if (tieneGuia) progreso++;
               if (tieneFactura) progreso++;
 
+              // 🎨 Avatar suave (antes: círculo azul sólido) + insignia de
+              // progreso más discreta (antes: círculo naranja sólido).
               return Card(
-                elevation: 3,
+                key: ValueKey(ticket.id),
+                elevation: 2,
                 margin: const EdgeInsets.only(bottom: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(
-                    color: Colors.blue.shade200, 
-                    width: 1.5
-                  )
+                  side: BorderSide(color: Colors.grey.shade300, width: 1),
                 ),
                 child: ListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   leading: Stack(
                     alignment: Alignment.bottomRight,
                     children: [
-                      const CircleAvatar(
-                        backgroundColor: Color(0xFF005A9C), 
-                        radius: 26,
-                        child: Icon(Icons.local_shipping, color: Colors.white, size: 28),
-                      ),
+                      const AvatarSuave(color: kTicketAcento, icono: Icons.local_shipping, radio: 26),
                       if (progreso > 0)
                         Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(color: kTicketAlerta, borderRadius: BorderRadius.circular(8)),
                           child: Text('$progreso/2', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                         )
                     ],
@@ -203,8 +201,11 @@ class _BandejaEntregasPageState extends State<BandejaEntregasPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('📦 Equipo: ${ticket.equipo.name.toUpperCase()}'),
-                        Text('👤 Cliente: ${ticket.clienteId}'),
+                        Text('📦 Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}'),
+                        // 🆕 Cliente (empresa/camaronera) y Contacto (persona) son
+                        // datos distintos — se muestran ambos.
+                        if (ticket.clienteId.trim().isNotEmpty) Text('🏢 Cliente: ${ticket.clienteId}'),
+                        Text('👤 Contacto: ${ticket.nombreContacto}'),
                         const SizedBox(height: 8),
                         
                         // 🚥 PANELES PILOTO DE ESTADO DOCUMENTAL
@@ -214,7 +215,21 @@ class _BandejaEntregasPageState extends State<BandejaEntregasPage> {
                             const SizedBox(width: 8),
                             _construirLuzPiloto('Factura', tieneFactura),
                           ],
-                        )
+                        ),
+                        // 🆕 Tiempo en vivo en el estado actual (sin backend: se
+                        // recalcula contra la hora real del dispositivo).
+                        const SizedBox(height: 8),
+                        TiempoEnCursoWidget(
+                          desde: ticket.fechaInicioEstadoActual,
+                          builder: (context, texto) => Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.hourglass_bottom, size: 12, color: kTicketIcono),
+                              const SizedBox(width: 4),
+                              Text(texto, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kTicketTextoSecundario)),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -234,21 +249,10 @@ class _BandejaEntregasPageState extends State<BandejaEntregasPage> {
 
   // ⚙️ SUBRUTINA: INDICADORES LED VISUALES (Vistos y X)
   Widget _construirLuzPiloto(String etiqueta, bool activo) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: activo ? Colors.green.shade50 : Colors.red.shade50,
-        border: Border.all(color: activo ? Colors.green.shade400 : Colors.red.shade200),
-        borderRadius: BorderRadius.circular(4)
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(activo ? Icons.check_circle : Icons.cancel, size: 14, color: activo ? Colors.green : Colors.red),
-          const SizedBox(width: 4),
-          Text(etiqueta, style: TextStyle(fontSize: 12, color: activo ? Colors.green.shade800 : Colors.red.shade800, fontWeight: FontWeight.w600)),
-        ],
-      ),
+    return InsigniaSuave(
+      color: activo ? kTicketExito : kTicketAlerta,
+      icono: activo ? Icons.check_circle : Icons.cancel,
+      texto: etiqueta,
     );
   }
 }

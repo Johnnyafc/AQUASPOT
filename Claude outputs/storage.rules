@@ -1,0 +1,28 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ==========================================
+    // 🛑 1. BLOQUEO MAESTRO (Cortocircuito por defecto)
+    // ==========================================
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+    // ==========================================
+    // 📂 2. TUBERÍA DE ACTAS (Raíz Paralela)
+    // ==========================================
+    match /actas_recepcion/{documento} {
+      allow read, write: if request.auth != null;
+    }
+    // ==========================================
+    // 🗄️ 3. MATRIZ JERÁRQUICA DE TICKETS
+    // ==========================================
+    // El sufijo {rutasInternas=**} actúa como un bypass recursivo.
+    // Autoriza la lectura/escritura en cualquier subcarpeta interna
+    // (comercial, despachos, evidencia, etc.) siempre que el operario esté logueado.
+    match /tickets/{ticketId}/{rutasInternas=**} {
+      allow read, write: if request.auth != null;
+    }
+
+  }
+}

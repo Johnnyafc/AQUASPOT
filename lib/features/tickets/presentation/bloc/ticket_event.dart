@@ -1,14 +1,16 @@
-import 'dart:io';
-
 import 'package:aquaspot_postventa/core/enum/marca_equipo.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/item_compra_entity.dart';
 import 'package:equatable/equatable.dart';
 import 'package:file_picker/file_picker.dart' as fp;
 import 'package:image_picker/image_picker.dart';
 import '../../domain/entities/ticket_entity.dart';
+import '../../domain/entities/item_despacho_bodega_entity.dart';
+import '../../domain/entities/registro_despacho_entity.dart';
 import '../../../../core/enum/ticket_enums.dart'; 
 import '../../../../core/enum/segmento_operativo.dart';
 import 'package:file_picker/file_picker.dart';
+import '../../domain/entities/actividad_evaluacion_seleccionada.dart';
+import '../../../fallas/domain/entities/metrica_falla_entity.dart';
 
 abstract class TicketEvent extends Equatable {
   const TicketEvent();
@@ -206,6 +208,10 @@ class ProcesarEvaluacionDocumentalEvent extends TicketEvent {
   final String rolUsuario;
   final String? numeroOVGarantia;
   final List<fp.PlatformFile>? documentosPdfGarantia;
+  final fp.PlatformFile? documentoRevisionAntigua; // 🆕 PDF de revisión técnica antigua (Garantía servicio)
+  final bool noRequiereCompras; // 🛑 Check de si necesita compras o no
+  final String? motivoNoRequiereCompras;
+  final List<ActividadEvaluacionSeleccionada>? actividadesSeleccionadas; // 🚀 Actividades del Plan Maestro y Repuestos
 
   const ProcesarEvaluacionDocumentalEvent({
     required this.ticket,
@@ -216,6 +222,10 @@ class ProcesarEvaluacionDocumentalEvent extends TicketEvent {
     required this.rolUsuario,
     required this.documentosPdfGarantia,
     required this.numeroOVGarantia,
+    this.documentoRevisionAntigua,
+    this.noRequiereCompras = false,
+    this.motivoNoRequiereCompras,
+    this.actividadesSeleccionadas,
   });
 
 @override
@@ -227,7 +237,11 @@ class ProcesarEvaluacionDocumentalEvent extends TicketEvent {
         nombreUsuario, 
         rolUsuario,
         documentosPdfGarantia,
-        numeroOVGarantia
+        numeroOVGarantia,
+        documentoRevisionAntigua,
+        noRequiereCompras,
+        motivoNoRequiereCompras,
+        actividadesSeleccionadas,
       ];
 }
 
@@ -394,21 +408,28 @@ class AnularTicketEvent extends TicketEvent {
 
 class ProcesarGestionComprasEvent extends TicketEvent {
   final TicketEntity ticket;
-  final XFile archivoOrdenCompra; // ⚙️ CAMBIO A XFILE
+  // ⚙️ CALIBRE RECTIFICADO: Ahora transporta una matriz de archivos
+  final List<XFile> archivosOrdenCompra; 
   final String observacion;
   final String nombreUsuario;
   final String rolUsuario;
 
   const ProcesarGestionComprasEvent({
     required this.ticket,
-    required this.archivoOrdenCompra,
+    required this.archivosOrdenCompra,
     required this.observacion,
     required this.nombreUsuario,
     required this.rolUsuario,
   });
 
   @override
-  List<Object> get props => [ticket, archivoOrdenCompra, observacion, nombreUsuario, rolUsuario];
+  List<Object> get props => [
+        ticket, 
+        archivosOrdenCompra, 
+        observacion, 
+        nombreUsuario, 
+        rolUsuario
+      ];
 }
 // Añada esta clase a su archivo de eventos
 class ProcesarBodegaEvent extends TicketEvent {
@@ -433,6 +454,7 @@ class ProcesarEvidenciaTrabajoEvent extends TicketEvent {
   final List<PlatformFile> fotos;
   final List<PlatformFile> videos;
   final String? notasTecnicas;
+  final String nombreTecnico;
   final String nombreUsuario;
   final String rolUsuario;
 
@@ -441,12 +463,13 @@ class ProcesarEvidenciaTrabajoEvent extends TicketEvent {
     required this.fotos,
     required this.videos,
     this.notasTecnicas,
+    required this.nombreTecnico,
     required this.nombreUsuario,
     required this.rolUsuario,
   });
 
   @override
-  List<Object?> get props => [ticket, fotos, videos, notasTecnicas, nombreUsuario, rolUsuario];
+  List<Object?> get props => [ticket, fotos, videos, notasTecnicas, nombreTecnico, nombreUsuario, rolUsuario];
 }
 
 class ActualizarEstadoTicketEvent extends TicketEvent {
@@ -595,3 +618,116 @@ class ReportarIncidenciaComercialEvent extends TicketEvent {
   @override
   List<Object?> get props => [ticket, reporteComercial, nombreUsuario, rolUsuario];
 }
+
+class DeclararNoRequiereComprasEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final bool noRequiereCompras;
+  final String? motivo;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const DeclararNoRequiereComprasEvent({
+    required this.ticket,
+    required this.noRequiereCompras,
+    this.motivo,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, noRequiereCompras, motivo, nombreUsuario, rolUsuario];
+}
+
+class GuardarValidacionBodegaComprasEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final List<ItemDespachoBodegaEntity> items;
+  final bool transferirABodega;
+  final bool transferirDirectoATaller;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const GuardarValidacionBodegaComprasEvent({
+    required this.ticket,
+    required this.items,
+    this.transferirABodega = false,
+    this.transferirDirectoATaller = false,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, items, transferirABodega, transferirDirectoATaller, nombreUsuario, rolUsuario];
+}
+
+class RegistrarDespachoBodegaEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final List<ItemDespachoBodegaEntity> itemsActualizados;
+  final RegistroDespachoEntity nuevoRegistro;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const RegistrarDespachoBodegaEvent({
+    required this.ticket,
+    required this.itemsActualizados,
+    required this.nuevoRegistro,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, itemsActualizados, nuevoRegistro, nombreUsuario, rolUsuario];
+}
+
+// ==========================================
+// MÓDULO DE PROCESO DE TRABAJO (TALLER)
+// ==========================================
+class AsignarTecnicosTrabajoEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final List<String> tecnicos;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const AsignarTecnicosTrabajoEvent({
+    required this.ticket,
+    required this.tecnicos,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, tecnicos, nombreUsuario, rolUsuario];
+}
+
+class GuardarDiagnosticoFallasEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final List<DiagnosticoFallaEntity> fallas;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const GuardarDiagnosticoFallasEvent({
+    required this.ticket,
+    required this.fallas,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, fallas, nombreUsuario, rolUsuario];
+}
+
+class SubirInformeTecnicoEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final PlatformFile archivo;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const SubirInformeTecnicoEvent({
+    required this.ticket,
+    required this.archivo,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, archivo, nombreUsuario, rolUsuario];
+}

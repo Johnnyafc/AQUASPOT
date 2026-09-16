@@ -7,11 +7,7 @@ import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_sta
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
-// ⚠️ Ajuste estos imports a sus rutas reales
-// import '../../domain/entities/ticket_entity.dart';
-// import '../widgets/full_photo_widget.dart';
-// import '../bloc/ticket_bloc.dart';
-// import 'package:url_launcher/url_launcher.dart'; // Necesario para abrir el PDF
+import '../widgets/tarjeta_no_requiere_compras_widget.dart';
 
 class EstacionBodegaPage extends StatelessWidget {
   final TicketEntity ticket;
@@ -19,42 +15,39 @@ class EstacionBodegaPage extends StatelessWidget {
   const EstacionBodegaPage({super.key, required this.ticket});
 
   // Función puente para abrir el documento en el navegador/visor nativo
-Future<void> _abrirDocumento(BuildContext context, String urlString) async {
-  if (urlString.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Error: La URL del documento está vacía.'),
-        backgroundColor: Colors.red,
-      ),
-    );
-    return;
-  }
-
-  final Uri url = Uri.parse(urlString);
-
-  try {
-    // LaunchMode.externalApplication fuerza a que el OS decida qué hacer.
-    // En Web: Abre una nueva pestaña.
-    // En Móvil: Abre el navegador o el visor de PDFs predeterminado del teléfono.
-    if (await canLaunchUrl(url)) {
-      await launchUrl(
-        url,
-        mode: LaunchMode.externalApplication, 
-      );
-    } else {
-      throw Exception('No se pudo establecer conexión con el puerto de salida.');
-    }
-  } catch (e) {
-    if (context.mounted) {
+  Future<void> _abrirDocumento(BuildContext context, String urlString) async {
+    if (urlString.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Falla de sistema al abrir el documento: $e'),
+        const SnackBar(
+          content: Text('Error: La URL del documento está vacía.'),
           backgroundColor: Colors.red,
         ),
       );
+      return;
+    }
+
+    final Uri url = Uri.parse(urlString);
+
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(
+          url,
+          mode: LaunchMode.externalApplication, 
+        );
+      } else {
+        throw Exception('No se pudo establecer conexión con el puerto de salida.');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Falla de sistema al abrir el documento: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
-}
 
   void _accionarValidacionBodega(BuildContext context) {
     final authState = context.read<AuthBloc>().state;
@@ -66,14 +59,14 @@ Future<void> _abrirDocumento(BuildContext context, String urlString) async {
       rolOperario = authState.usuario.rol.name.toUpperCase();
     }
 
-  context.read<TicketBloc>().add(
-    ProcesarBodegaEvent(
-      ticket: ticket,
-      nombreUsuario: nombreOperario, // Inyectar desde AuthBloc
-      rolUsuario: rolOperario,             // Inyectar desde AuthBloc
-    ),
-  );
-}
+    context.read<TicketBloc>().add(
+      ProcesarBodegaEvent(
+        ticket: ticket,
+        nombreUsuario: nombreOperario, 
+        rolUsuario: rolOperario,            
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +74,7 @@ Future<void> _abrirDocumento(BuildContext context, String urlString) async {
       backgroundColor: const Color(0xFFF4F7F6),
       appBar: AppBar(
         title: Text('Estación Bodega: ${ticket.id}', style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.brown.shade800, // Color de la zona de Bodega
+        backgroundColor: Colors.brown.shade800, 
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -104,7 +97,7 @@ Future<void> _abrirDocumento(BuildContext context, String urlString) async {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              
+              TarjetaNoRequiereComprasWidget(ticket: ticket),
               // 📦 NUEVO MÓDULO VISUAL: Verificación de Compras
               const Text("Inspección de Compras", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
               const SizedBox(height: 12),
@@ -116,6 +109,12 @@ Future<void> _abrirDocumento(BuildContext context, String urlString) async {
               BlocBuilder<TicketBloc, TicketState>(
                 builder: (context, state) {
                   final bool procesando = state.status == TicketStatus.loading;
+                  final String textoBoton = procesando 
+                      ? 'PROCESANDO...' 
+                      : (ticket.noRequiereCompras 
+                          ? 'EQUIPO SIN COMPRAS - APROBAR A TALLER' 
+                          : 'COMPRAS VALIDADO - APROBAR');
+
                   return SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
@@ -124,11 +123,11 @@ Future<void> _abrirDocumento(BuildContext context, String urlString) async {
                           ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                           : const Icon(Icons.check_circle_outline, size: 24),
                       label: Text(
-                        procesando ? 'PROCESANDO...' : 'COMPRAS VALIDADO - APROBAR',
+                        textoBoton,
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green.shade700,
+                        backgroundColor: ticket.noRequiereCompras ? Colors.orange.shade900 : Colors.green.shade700,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 18),
                         elevation: 4,
@@ -177,6 +176,9 @@ Future<void> _abrirDocumento(BuildContext context, String urlString) async {
       );
     }
 
+    // ⚙️ EXTRACCIÓN DE LA MATRIZ: Leemos la lista de URLs rectificada
+    final urlsOrdenes = compras.urlsOrdenCompra;
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(
@@ -190,32 +192,44 @@ Future<void> _abrirDocumento(BuildContext context, String urlString) async {
           children: [
             _buildDatoRow('Aprobación Comercial:', ticket.numeroOrdenVenta ?? 'N/A'),
             const Divider(),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.receipt_long, color: Colors.brown, size: 32),
-              title: const Text('Orden de Compra Generada', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              subtitle: const Text('Toque para descargar el PDF validado por Compras.', style: TextStyle(fontSize: 12)),
-              trailing: ElevatedButton(
-                onPressed: () => _abrirDocumento(context, compras.urlOrdenCompra),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.brown.shade700, foregroundColor: Colors.white),
-                child: const Text('VER ORDEN'),
-              ),
-            ),
-            if (compras.observacion != null && compras.observacion!.isNotEmpty) ...[
+            
+            // ⚙️ BUCLE DE RENDERIZADO PARA MÚLTIPLES ARCHIVOS
+            const Text('Órdenes de Compra Generadas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            const SizedBox(height: 8),
+            
+            if (urlsOrdenes.isEmpty)
+              const Text('⚠️ Alarma: No se detectaron documentos adjuntos.', style: TextStyle(color: Colors.red, fontSize: 12))
+            else
+              ...urlsOrdenes.asMap().entries.map((entry) {
+                int index = entry.key;
+                String url = entry.value;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.receipt_long, color: Colors.brown, size: 32),
+                    title: Text('Documento #${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    subtitle: const Text('Toque para descargar el PDF validado.', style: TextStyle(fontSize: 12)),
+                    trailing: ElevatedButton(
+                      onPressed: () => _abrirDocumento(context, url),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.brown.shade700, foregroundColor: Colors.white),
+                      child: const Text('VER ORDEN'),
+                    ),
+                  ),
+                );
+              }).toList(),
+
+            if (compras.observacion.isNotEmpty) ...[
               const Divider(),
               const Text('Notas del Operador de Compras:', style: TextStyle(color: Colors.grey, fontSize: 12)),
               const SizedBox(height: 4),
-              Text(compras.observacion!, style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic)),
+              Text(compras.observacion, style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic)),
             ]
           ],
         ),
       ),
     );
   }
-
-  // Los métodos _buildDataCard, _buildEvidenciasCard, _buildTimelineCard y _buildDatoRow
-  // se mantienen idénticos a su diseño original, ya que estructuralmente estaban correctos.
-  // (Insértelos aquí desde su código base).
 
   Widget _buildDataCard() {
     return Card(

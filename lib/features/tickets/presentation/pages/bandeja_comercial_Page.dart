@@ -1,10 +1,11 @@
-import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/GenerarCotizacionPage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../features/tickets/presentation/bloc/ticket_bloc.dart';
 import '../../../../features/tickets/domain/entities/ticket_entity.dart';
+import '../widgets/tiempo_en_curso_widget.dart';
+import '../../../../core/theme/ticket_visual_theme.dart';
 
 class BandejaComercialPage extends StatelessWidget {
   const BandejaComercialPage({super.key});
@@ -41,15 +42,50 @@ class BandejaComercialPage extends StatelessWidget {
             itemBuilder: (context, index) {
               final ticket = ticketsComerciales[index];
               return Card(
-                elevation: 4,
+                key: ValueKey(ticket.id),
+                elevation: 2,
                 margin: const EdgeInsets.only(bottom: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(color: Colors.grey.shade300, width: 1),
+                ),
                 child: ListTile(
-                  leading: const CircleAvatar(
-                    backgroundColor: Colors.green,
-                    child: Icon(Icons.monetization_on, color: Colors.white),
-                  ),
+                  leading: const AvatarSuave(color: kTicketAcento, icono: Icons.monetization_on),
                   title: Text("Ticket: ${ticket.id}"),
-                  subtitle: Text("Cliente: ${ticket.clienteId} | Equipo: ${ticket.equipo}"),
+                  // 🆕 Tiempo en vivo en el estado actual (sin backend: se
+                  // recalcula contra la hora real del dispositivo).
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 🆕 Cliente (empresa/camaronera) y Contacto (persona) son
+                      // datos distintos — se muestran ambos.
+                      Text(
+                        "${ticket.clienteId.trim().isNotEmpty ? 'Cliente: ${ticket.clienteId} | ' : ''}"
+                        "Contacto: ${ticket.nombreContacto} | Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}",
+                      ),
+                      if (ticket.noRequiereCompras) ...[
+                        const SizedBox(height: 4),
+                        const InsigniaSuave(
+                          color: Colors.deepOrange,
+                          icono: Icons.remove_shopping_cart,
+                          texto: 'NO REQUIERE COMPRAS',
+                        ),
+                      ],
+                      const SizedBox(height: 4),
+                      TiempoEnCursoWidget(
+                        desde: ticket.fechaInicioEstadoActual,
+                        builder: (context, texto) => Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.hourglass_bottom, size: 12, color: kTicketIcono),
+                            const SizedBox(width: 4),
+                            Text(texto, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kTicketTextoSecundario)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                   trailing: const Icon(Icons.arrow_forward_ios),
                   onTap: () {
                     // 🚀 Ruteo hacia la celda de cotización inyectando la entidad del ticket

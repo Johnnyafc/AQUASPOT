@@ -40,3 +40,9 @@ class RegistrarUsuarioEvent extends AuthEvent {
   @override
   List<Object> get props => [nombre, email, password, segmento, rol];
 }
+class VerificarSesionEvent extends AuthEvent {
+  const VerificarSesionEvent();
+
+  @override
+  List<Object> get props => [];
+}

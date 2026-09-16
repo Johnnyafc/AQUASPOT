@@ -5,6 +5,9 @@ import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_eve
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/DetalleValidacionFacturacionPage.dart';
 // import 'package:aquaspot_postventa/features/tickets/presentation/pages/detalle_validacion_facturacion_page.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/ticket_entity.dart'; // ⚙️ Necesario para tipar el ticket y usar fechaInicioEstadoActual
+import 'package:aquaspot_postventa/features/tickets/presentation/widgets/tiempo_en_curso_widget.dart';
+import 'package:aquaspot_postventa/core/theme/ticket_visual_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -87,8 +90,13 @@ class _BandejaValidacionFacturacionPageState extends State<BandejaValidacionFact
   }
 
   // ⚙️ SUBRUTINA: Tarjeta del Ticket (Diseño unificado)
-  Widget _buildTicketCard(BuildContext context, dynamic ticket) {
+  // 🔧 Se tipa explícitamente como TicketEntity (antes era `dynamic`): así
+  // el getter fechaInicioEstadoActual (usado por el reloj en vivo) se
+  // resuelve en tiempo de compilación en vez de fallar en tiempo de
+  // ejecución, que es lo que pasa con los extension methods sobre `dynamic`.
+  Widget _buildTicketCard(BuildContext context, TicketEntity ticket) {
     return Card(
+      key: ValueKey(ticket.id),
       elevation: 2,
       margin: const EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(
@@ -117,23 +125,36 @@ class _BandejaValidacionFacturacionPageState extends State<BandejaValidacionFact
                     "TICKET: ${ticket.id}", 
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF003057))
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.shade100,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.amber.shade700),
-                    ),
-                    child: Text(
-                      "PENDIENTE FACTURACIÓN", 
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.amber.shade900)
-                    ),
+                  Wrap(
+                    spacing: 6,
+                    children: [
+                      const InsigniaSuave(color: kTicketAlerta, texto: "PENDIENTE FACTURACIÓN", tamanoTexto: 10),
+                      if (ticket.noRequiereCompras)
+                        const InsigniaSuave(color: Colors.deepOrange, texto: "SIN COMPRAS", tamanoTexto: 10),
+                    ],
                   ),
                 ],
               ),
               const Divider(height: 24),
-              _buildDataRow(Icons.business, "Cliente:", ticket.clienteId),
-              _buildDataRow(Icons.precision_manufacturing, "Equipo:", ticket.equipo.toString()),
+              // 🆕 Cliente (empresa/camaronera) y Contacto (persona) son datos
+              // distintos — se muestran ambos.
+              if (ticket.clienteId.trim().isNotEmpty) _buildDataRow(Icons.apartment, "Cliente:", ticket.clienteId),
+              _buildDataRow(Icons.business, "Contacto:", ticket.nombreContacto),
+              _buildDataRow(Icons.precision_manufacturing, "Equipo:", "${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}"),
+              // 🆕 Tiempo en vivo en el estado actual (sin backend: se
+              // recalcula contra la hora real del dispositivo).
+              const SizedBox(height: 4),
+              TiempoEnCursoWidget(
+                desde: ticket.fechaInicioEstadoActual,
+                builder: (context, texto) => Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.hourglass_bottom, size: 12, color: kTicketIcono),
+                    const SizedBox(width: 4),
+                    Text(texto, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kTicketTextoSecundario)),
+                  ],
+                ),
+              ),
             ],
           ),
         ),

@@ -328,11 +328,7 @@ if (snapshot.docs.isEmpty) {
       // 4. Mapeo seguro
 return snapshot.docs.map((doc) {
   final data = doc.data() as Map<String, dynamic>;
-  data['id'] = doc.id; 
-
-  // --- [DEBUG] INSPECCIÓN DE CONTRATO ---
-  print("🔍 [SERIALIZACIÓN] Documento ID: ${doc.id}");
-  print("📦 [DATA RAW]: $data");
+  data['id'] = doc.id;
   
   try {
     return TicketModel.fromJson(data);
