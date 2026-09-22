@@ -27,7 +27,8 @@ class BandejaDespachoBodegaPage extends StatelessWidget {
           }
 
           // Filtro: Tickets con repuestos registrados para despacho en Bodega (Caracol)
-          // Donde Compras haya validado al menos un ítem (o esté formalmente en Bodega)
+          // Se muestran en paralelo al asignarse código de proyecto (para despachar lo que haya en stock)
+          // o cuando Compras haya validado al menos un ítem o esté formalmente en Bodega,
           // y que aún no estén despachados al 100%
           final ticketsDespacho = state.historial.where((t) {
             // Solo tickets que tengan repuestos para despacho en bodega
@@ -44,11 +45,12 @@ class BandejaDespachoBodegaPage extends StatelessWidget {
               return false;
             }
 
+            final tieneProyecto = t.codigoProyecto != null && t.codigoProyecto!.trim().isNotEmpty;
             final enEstadoBodega = t.estadoActual == EstadoTicket.bodega;
             final visiblePorCompras = t.tieneAlMenosUnCheckCompras;
             final despachoIncompleto = !t.bodegaDespachoCompleto;
 
-            return (enEstadoBodega || visiblePorCompras) && despachoIncompleto;
+            return (tieneProyecto || enEstadoBodega || visiblePorCompras) && despachoIncompleto;
           }).toList();
 
           if (ticketsDespacho.isEmpty) {

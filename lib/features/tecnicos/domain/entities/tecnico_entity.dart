@@ -8,6 +8,8 @@ class TecnicoEntity extends Equatable {
   final String rol;
   final bool activo;
   final DateTime fechaRegistro;
+  final bool esExterno;
+  final String? usuarioUid;
 
   const TecnicoEntity({
     required this.id,
@@ -15,6 +17,8 @@ class TecnicoEntity extends Equatable {
     required this.rol,
     this.activo = true,
     required this.fechaRegistro,
+    this.esExterno = false,
+    this.usuarioUid,
   });
 
   TecnicoEntity copyWith({
@@ -23,6 +27,8 @@ class TecnicoEntity extends Equatable {
     String? rol,
     bool? activo,
     DateTime? fechaRegistro,
+    bool? esExterno,
+    String? usuarioUid,
   }) {
     return TecnicoEntity(
       id: id ?? this.id,
@@ -30,9 +36,11 @@ class TecnicoEntity extends Equatable {
       rol: rol ?? this.rol,
       activo: activo ?? this.activo,
       fechaRegistro: fechaRegistro ?? this.fechaRegistro,
+      esExterno: esExterno ?? this.esExterno,
+      usuarioUid: usuarioUid ?? this.usuarioUid,
     );
   }
 
   @override
-  List<Object?> get props => [id, nombre, rol, activo, fechaRegistro];
+  List<Object?> get props => [id, nombre, rol, activo, fechaRegistro, esExterno, usuarioUid];
 }

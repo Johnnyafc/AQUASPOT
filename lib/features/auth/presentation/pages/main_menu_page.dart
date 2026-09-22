@@ -16,6 +16,7 @@ import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_c
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_entregas_page.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_revisiones_garantias_page.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_despacho_bodega_page.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_recepcion_bodega_page.dart';
 import 'package:aquaspot_postventa/features/inventario/presentation/pages/gestion_stock_bodega_page.dart';
 import 'package:aquaspot_postventa/features/catalogo/presentation/pages/gestion_catalogo_actividades_page.dart';
 import 'package:aquaspot_postventa/features/tecnicos/presentation/pages/gestion_tecnicos_page.dart';
@@ -63,12 +64,13 @@ class _MainMenuPageState extends State<MainMenuPage> {
 
         final operador = state.usuario;
         final bool isAdmin = operador.rol == RolUsuario.admin;
+        final bool esTecnico = operador.rol == RolUsuario.tecnico;
 
         // ✅ EL MULTIPLEXOR DE VISTAS 
-        // Aquí conectamos los módulos independientes
+        // Para técnicos internos, solo se habilita el módulo de recepción sin historial
         final List<Widget> modulosHMI = [
           _InicioView(operador: operador),
-          const HistorialTicketsPage(), // ✅ SEÑAL CONECTADA AL PUERTO 2
+          if (!esTecnico) const HistorialTicketsPage(),
         ];
 
       return Scaffold(
@@ -76,20 +78,21 @@ class _MainMenuPageState extends State<MainMenuPage> {
           appBar: AppBar(
             backgroundColor: Colors.white,
             elevation: 0,
-            // 🔧 FIX "CONTENEDOR DE ORIGEN": el título ahora es contextual según
-            // la pestaña activa. Antes historial_tickets_page.dart traía su PROPIO
-            // Scaffold+AppBar con el texto "Panel de Historial", que se dibujaba
-            // apilado justo debajo de este AppBar ("Aquaspot"), duplicando barra
-            // de herramientas + padding de status bar y dejando muy poco alto
-            // disponible para las tarjetas (se veían cortadas junto al
-            // BottomNavigationBar). Ahora ese AppBar interno ya no existe: este es
-            // el ÚNICO AppBar de toda la pantalla, y simplemente cambia su título
-            // según el módulo activo.
             title: Text(
-              _selectedIndex == 1 ? "Panel de Historial" : "Aquaspot",
+              esTecnico
+                  ? "Recepción Bodega - Aquaspot"
+                  : (_selectedIndex == 1 ? "Panel de Historial" : "Aquaspot"),
               style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
             ),
             actions: [
+              // 🚪 Botón directo de cerrar sesión para técnicos
+              if (esTecnico)
+                IconButton(
+                  icon: const Icon(Icons.logout, color: Colors.red),
+                  tooltip: 'Cerrar Sesión',
+                  onPressed: _logout,
+                ),
+
               // ⚙️ COMPUERTA LÓGICA: Acceso restringido a Comerciales y Administradores
               if (operador.rol.name.toLowerCase() == 'comercial' || isAdmin)
                 IconButton(
@@ -102,7 +105,8 @@ class _MainMenuPageState extends State<MainMenuPage> {
                   },
                 ),
                 
-              IconButton(icon: const Icon(Icons.notifications_none, color: Colors.black), onPressed: () {}),
+              if (!esTecnico)
+                IconButton(icon: const Icon(Icons.notifications_none, color: Colors.black), onPressed: () {}),
               Padding(
                 padding: const EdgeInsets.only(right: 16.0),
                 child: CircleAvatar(
@@ -113,12 +117,35 @@ class _MainMenuPageState extends State<MainMenuPage> {
             ],
           ),
           // ✅ EL CONMUTADOR
-          // IndexedStack mantiene el estado (scroll, inputs) de las vistas inactivas
           body: IndexedStack(
-            index: _selectedIndex,
+            index: esTecnico ? 0 : _selectedIndex,
             children: modulosHMI,
           ),
-          bottomNavigationBar: BottomNavigationBar(
+          bottomNavigationBar: esTecnico
+              ? SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.logout, size: 20),
+                        label: const Text(
+                          'Cerrar Sesión',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red.shade700,
+                          foregroundColor: Colors.white,
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: _logout,
+                      ),
+                    ),
+                  ),
+                )
+              : BottomNavigationBar(
             currentIndex: _selectedIndex,
             selectedItemColor: const Color(0xFF005A9C),
             unselectedItemColor: Colors.grey,
@@ -182,15 +209,15 @@ class _InicioView extends StatelessWidget {
     List<Widget> modules = [];
     final bool isAdmin = operador.rol == RolUsuario.admin;
 
-    // 📚 BIBLIOTECA DE DOCUMENTOS — sin restricción de rol: cualquier
-    // usuario autenticado puede consultar todas las fotos y documentos
-    // subidos a cualquier ticket.
-    modules.add(_buildCardOption(
-      title: 'Biblioteca de Documentos',
-      icon: Icons.perm_media_outlined,
-      color: Colors.indigo,
-      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BibliotecaDocumentosPage())),
-    ));
+    // 📚 BIBLIOTECA DE DOCUMENTOS — no disponible para rol técnico
+    if (operador.rol != RolUsuario.tecnico) {
+      modules.add(_buildCardOption(
+        title: 'Biblioteca de Documentos',
+        icon: Icons.perm_media_outlined,
+        color: Colors.indigo,
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BibliotecaDocumentosPage())),
+      ));
+    }
 
     // 🔒 ACCESO EXCLUSIVO PARA SUPER ADMINISTRADORES
     if (isAdmin) {
@@ -221,8 +248,8 @@ class _InicioView extends StatelessWidget {
       ));
     }
 
-    // 🔧 MÓDULOS TÉCNICOS
-    if (isAdmin || operador.rol == RolUsuario.tecnico || operador.rol == RolUsuario.supervisor) {
+    // 🔧 MÓDULOS TÉCNICOS (Reservados para Supervisión y Administración)
+    if (isAdmin || operador.rol == RolUsuario.supervisor) {
       modules.add(_buildCardOption(
         title: 'Recepción del Guabo',
         icon: Icons.car_rental,
@@ -242,6 +269,19 @@ class _InicioView extends StatelessWidget {
         icon: Icons.toll,
         color: Colors.orange.shade800,
         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaTrabajosPage())),
+      ));
+    }
+
+    // 📦 MÓDULO DE RECEPCIÓN EN BODEGA
+    if (isAdmin ||
+        operador.rol == RolUsuario.tecnico ||
+        operador.rol == RolUsuario.supervisor) {
+      modules.add(_buildCardOption(
+        title: 'Recepción Bodega',
+        icon: Icons.assignment_turned_in_outlined,
+        color: const Color(0xFF00796B),
+        onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const BandejaRecepcionBodegaPage())),
       ));
     }
 

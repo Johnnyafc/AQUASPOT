@@ -339,23 +339,6 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
                       _tecnicoController.text = _tecnicosAsignados.join(', ');
                     });
                     _guardarBorrador();
-
-                    final authState = context.read<AuthBloc>().state;
-                    String operador = 'SUPERVISOR';
-                    String rol = 'SUPERVISOR';
-                    if (authState is Authenticated) {
-                      operador = authState.usuario.nombre;
-                      rol = authState.usuario.rol.name.toUpperCase();
-                    }
-
-                    context.read<TicketBloc>().add(
-                      AsignarTecnicosTrabajoEvent(
-                        ticket: widget.ticket,
-                        tecnicos: seleccionados.toList(),
-                        nombreUsuario: operador,
-                        rolUsuario: rol,
-                      ),
-                    );
                     Navigator.pop(ctx);
                   },
                   child: Text('Guardar (${seleccionados.length})'),
@@ -603,23 +586,6 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
                               _diagnosticoFallas.addAll(seleccionadas);
                             });
                             _guardarBorrador();
-
-                            final authState = context.read<AuthBloc>().state;
-                            String operador = 'SUPERVISOR';
-                            String rol = 'SUPERVISOR';
-                            if (authState is Authenticated) {
-                              operador = authState.usuario.nombre;
-                              rol = authState.usuario.rol.name.toUpperCase();
-                            }
-
-                            context.read<TicketBloc>().add(
-                              GuardarDiagnosticoFallasEvent(
-                                ticket: widget.ticket,
-                                fallas: seleccionadas,
-                                nombreUsuario: operador,
-                                rolUsuario: rol,
-                              ),
-                            );
                             Navigator.pop(ctx);
                           },
                         ),
@@ -698,6 +664,37 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
   }
 
   void _ejecutarEnvio() {
+    final ticketState = context.read<TicketBloc>().state;
+    final liveTicket = ticketState.tickets.firstWhere(
+      (t) => t.id == widget.ticket.id,
+      orElse: () => ticketState.historial.firstWhere(
+        (t) => t.id == widget.ticket.id,
+        orElse: () => widget.ticket,
+      ),
+    );
+
+    if (!liveTicket.trabajoIniciado) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Debe iniciar el trabajo físico antes de registrar evidencias.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (!liveTicket.puedeLiberarEnTaller) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            '⚠️ Para finalizar el trabajo, se requiere que al menos un lote de repuestos haya sido recibido en taller y validado su consumo por el supervisor.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     if (_fotosSeleccionadas.isEmpty && _videosSeleccionados.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Debe adjuntar al menos una evidencia visual.'), backgroundColor: Colors.orange),
@@ -715,10 +712,10 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
 
     final String nombreTecnico = _tecnicosAsignados.isNotEmpty
         ? _tecnicosAsignados.join(', ')
-        : (widget.ticket.evidenciaTrabajo?.nombreTecnico?.isNotEmpty == true
-            ? widget.ticket.evidenciaTrabajo!.nombreTecnico!
+        : (liveTicket.evidenciaTrabajo?.nombreTecnico?.isNotEmpty == true
+            ? liveTicket.evidenciaTrabajo!.nombreTecnico!
             : nombreOperario);
-    final ticketConDatosActuales = widget.ticket.copyWith(
+    final ticketConDatosActuales = liveTicket.copyWith(
       tecnicosAsignados: _tecnicosAsignados,
       diagnosticoFallas: _diagnosticoFallas,
       urlInformeTecnico: _urlInformeTecnicoExistente,
@@ -985,17 +982,17 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
             _buildInfoRow(context, 'Código de Proyecto:', widget.ticket.codigoProyecto!.toUpperCase()),
 
           _buildInfoRow(context, 'Estado Actual:', widget.ticket.estadoActual.nombreMayusculas),
-          _buildInfoRow(context, 'Tipo de requerimiento:', widget.ticket.tipoRequerimiento?.name.toUpperCase() ?? 'NINGUNO'),
+          _buildInfoRow(context, 'Tipo de requerimiento:', widget.ticket.tipoRequerimiento.name.toUpperCase()),
           const Divider(height: 24, color: Colors.black12),
 
           _buildInfoRow(context, 'Equipo:', widget.ticket.equipo.name.toUpperCase()),
-          _buildInfoRow(context, 'Lugar de recepción:', widget.ticket.lugarAtencion?.name.toUpperCase() ?? 'NINGUNO'),
-          _buildInfoRow(context, 'Marca:', widget.ticket.marca?.toUpperCase() ?? 'NINGUNO'),
+          _buildInfoRow(context, 'Lugar de recepción:', widget.ticket.lugarAtencion.name.toUpperCase()),
+          _buildInfoRow(context, 'Marca:', widget.ticket.marca.toUpperCase()),
           const Divider(height: 24, color: Colors.black12),
 
           _buildInfoRow(context, 'Cliente:', widget.ticket.clienteId.toUpperCase()),
           _buildInfoRow(context, 'Campamento:', widget.ticket.campamento.toUpperCase()),
-          _buildInfoRow(context, 'Contacto:', '${widget.ticket.nombreContacto ?? 'Sin registro'} (${widget.ticket.telefonoContacto ?? 'Sin registro'})'),
+          _buildInfoRow(context, 'Contacto:', '${widget.ticket.nombreContacto} (${widget.ticket.telefonoContacto})'),
           const Divider(height: 24, color: Colors.black12),
 
           _buildInfoRow(context, 'Número de Serie:', widget.ticket.numeroSerie ?? 'No especificado'),
@@ -1009,11 +1006,11 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
             _buildInfoRow(context, 'Orden de Venta:', widget.ticket.numeroOrdenVenta!),
             
             // ⚙️ MATRIZ MULTI-ARCHIVO: Iteramos sobre el List<String>
-            if (widget.ticket.gestionCompras?.urlsOrdenCompra != null && widget.ticket.gestionCompras!.urlsOrdenCompra!.isNotEmpty)
+            if (widget.ticket.gestionCompras?.urlsOrdenCompra != null && widget.ticket.gestionCompras!.urlsOrdenCompra.isNotEmpty)
               Wrap(
                 spacing: 12,
                 runSpacing: 8,
-                children: widget.ticket.gestionCompras!.urlsOrdenCompra!.asMap().entries.map((entry) {
+                children: widget.ticket.gestionCompras!.urlsOrdenCompra.asMap().entries.map((entry) {
                   int idx = entry.key + 1; // Para enumerar los archivos
                   String url = entry.value;
                   return _buildDocumentoLink(
@@ -1058,7 +1055,7 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
               ),
               CopyIconButtonWidget(
                 etiqueta: 'Falla Reportada e Inspección',
-                valor: widget.ticket.fallaReportada ?? 'Sin detalle de falla reportada.',
+                valor: widget.ticket.fallaReportada,
               ),
             ],
           ),
@@ -1072,7 +1069,7 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
               border: Border.all(color: Colors.grey.shade200),
             ),
             child: Text(
-              widget.ticket.fallaReportada ?? 'Sin detalle de falla reportada.', 
+              widget.ticket.fallaReportada, 
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87)
             ),
           ),
@@ -1307,21 +1304,6 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
                       _tecnicoController.text = _tecnicosAsignados.join(', ');
                     });
                     _guardarBorrador();
-                    final authState = context.read<AuthBloc>().state;
-                    String operador = 'SUPERVISOR';
-                    String rol = 'SUPERVISOR';
-                    if (authState is Authenticated) {
-                      operador = authState.usuario.nombre;
-                      rol = authState.usuario.rol.name.toUpperCase();
-                    }
-                    context.read<TicketBloc>().add(
-                      AsignarTecnicosTrabajoEvent(
-                        ticket: widget.ticket,
-                        tecnicos: List<String>.from(_tecnicosAsignados),
-                        nombreUsuario: operador,
-                        rolUsuario: rol,
-                      ),
-                    );
                   },
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -1366,21 +1348,6 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
                       _diagnosticoFallas.remove(falla);
                     });
                     _guardarBorrador();
-                    final authState = context.read<AuthBloc>().state;
-                    String operador = 'SUPERVISOR';
-                    String rol = 'SUPERVISOR';
-                    if (authState is Authenticated) {
-                      operador = authState.usuario.nombre;
-                      rol = authState.usuario.rol.name.toUpperCase();
-                    }
-                    context.read<TicketBloc>().add(
-                      GuardarDiagnosticoFallasEvent(
-                        ticket: widget.ticket,
-                        fallas: List<DiagnosticoFallaEntity>.from(_diagnosticoFallas),
-                        nombreUsuario: operador,
-                        rolUsuario: rol,
-                      ),
-                    );
                   },
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),

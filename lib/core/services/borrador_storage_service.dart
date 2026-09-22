@@ -210,10 +210,14 @@ class BorradorStorageService {
       }
     } catch (_) {}
 
+    final resolvedName = file.name.isNotEmpty
+        ? file.name
+        : (file.path.isNotEmpty ? file.path.split(RegExp(r'[/\\]')).last : 'imagen');
+
     return {
-      'name': file.name,
+      'name': resolvedName,
       'path': file.path,
-      'base64': ?base64Content,
+      'base64': base64Content,
     };
   }
 
@@ -229,7 +233,11 @@ class BorradorStorageService {
       if (base64Str != null && base64Str.isNotEmpty) {
         try {
           final bytes = base64Decode(base64Str);
-          return XFile.fromData(bytes, name: name);
+          return XFile.fromData(
+            bytes,
+            name: name,
+            path: (path != null && path.isNotEmpty) ? path : name,
+          );
         } catch (_) {}
       }
 

@@ -37,6 +37,8 @@ class TecnicoRemoteDataSource {
       rol: tecnico.rol.trim(),
       activo: tecnico.activo,
       fechaRegistro: tecnico.fechaRegistro,
+      esExterno: tecnico.esExterno,
+      usuarioUid: tecnico.usuarioUid,
     );
     await docRef.set(model.toJson(), SetOptions(merge: true));
   }

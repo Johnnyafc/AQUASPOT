@@ -10,6 +10,7 @@ import '../../../../core/enum/ticket_enums.dart';
 import 'evaluacion_tecnica_entity.dart';
 import 'item_despacho_bodega_entity.dart';
 import 'registro_despacho_entity.dart';
+import 'orden_recepcion_repuestos_entity.dart';
 import '../../../fallas/domain/entities/metrica_falla_entity.dart';
 
 import 'evento_auditoria_entity.dart';
@@ -96,6 +97,12 @@ final String marca; // 🚨 El que te habías olvidado
   // 📄 INFORME TÉCNICO ADJUNTO (Contador / Cosechadora)
   final String? urlInformeTecnico;
 
+  // 🚚 RECEPCIÓN DE REPUESTOS EN BODEGA Y VALIDACIÓN DE TALLER
+  final List<OrdenRecepcionRepuestosEntity> ordenesRecepcion;
+  final bool materialesValidadosEnTaller;
+  final String? supervisorValidoMateriales;
+  final DateTime? fechaValidacionMaterialesTaller;
+
 const TicketEntity({
     required this.id,
     required this.estadoActual,
@@ -150,6 +157,10 @@ const TicketEntity({
     this.tecnicosAsignados = const [],
     this.diagnosticoFallas = const [],
     this.urlInformeTecnico,
+    this.ordenesRecepcion = const [],
+    this.materialesValidadosEnTaller = false,
+    this.supervisorValidoMateriales,
+    this.fechaValidacionMaterialesTaller,
   });
 
   // ⚙️ CLONADOR INDUSTRIAL CORREGIDO (Mutación Segura)
@@ -207,6 +218,10 @@ const TicketEntity({
     List<String>? tecnicosAsignados,
     List<DiagnosticoFallaEntity>? diagnosticoFallas,
     String? urlInformeTecnico,
+    List<OrdenRecepcionRepuestosEntity>? ordenesRecepcion,
+    bool? materialesValidadosEnTaller,
+    String? supervisorValidoMateriales,
+    DateTime? fechaValidacionMaterialesTaller,
   }) {
     return TicketEntity(
       id: id ?? this.id,
@@ -262,6 +277,10 @@ const TicketEntity({
       tecnicosAsignados: tecnicosAsignados ?? this.tecnicosAsignados,
       diagnosticoFallas: diagnosticoFallas ?? this.diagnosticoFallas,
       urlInformeTecnico: urlInformeTecnico ?? this.urlInformeTecnico,
+      ordenesRecepcion: ordenesRecepcion ?? this.ordenesRecepcion,
+      materialesValidadosEnTaller: materialesValidadosEnTaller ?? this.materialesValidadosEnTaller,
+      supervisorValidoMateriales: supervisorValidoMateriales ?? this.supervisorValidoMateriales,
+      fechaValidacionMaterialesTaller: fechaValidacionMaterialesTaller ?? this.fechaValidacionMaterialesTaller,
     );
   }
 
@@ -320,19 +339,23 @@ const TicketEntity({
         tecnicosAsignados,
         diagnosticoFallas,
         urlInformeTecnico,
+        ordenesRecepcion,
+        materialesValidadosEnTaller,
+        supervisorValidoMateriales,
+        fechaValidacionMaterialesTaller,
       ];
 
   /// Obtiene el nombre formateado y estandarizado del responsable de facturación (ej: AGRISPOTSA)
   String get responsableFacturacionLegible => formatearResponsableFacturacion(responsableFacturacion);
 
   // ============================================================================
-  // 📦 ENCLAVAMIENTOS Y SENSORES DE BODEGA / DESPACHO / COMPRAS
+  // 📦 ENCLAVAMIENTOS Y SENSORES DE BODEGA / DESPACHO / COMPRAS / RECEPCIÓN
   // ============================================================================
 
   /// Retorna verdadero si Compras ya marcó con check al menos un repuesto
   /// (Gatillo para visualización temprana en la bandeja de Bodega / Despacho)
   bool get tieneAlMenosUnCheckCompras =>
-      itemsDespachoBodega.any((item) => item.validadoPorCompras);
+      itemsDespachoBodega.any((item) => item.validadoPorCompras || item.tieneStockSuficiente);
 
   /// Retorna verdadero si Bodega ya despachó al menos una unidad de algún ítem
   /// (Gatillo para visualización temprana en la bandeja de Proceso de Trabajo / Taller)
@@ -340,10 +363,10 @@ const TicketEntity({
       itemsDespachoBodega.any((item) => item.cantidadDespachada > 0);
 
   /// Válvula de seguridad: Compras solo puede cerrar/transferir definitivamente si
-  /// el 100% de los ítems requeridos tienen su check de validación.
+  /// el 100% de los ítems requeridos tienen su check de validación (o stock local).
   bool get comprasValidacionCompleta =>
       itemsDespachoBodega.isNotEmpty &&
-      itemsDespachoBodega.every((item) => item.validadoPorCompras);
+      itemsDespachoBodega.every((item) => item.validadoPorCompras || item.tieneStockSuficiente);
 
   /// Válvula de seguridad: Bodega solo transfiere formalmente a Proceso de Trabajo si
   /// el 100% de los materiales requeridos han sido despachados en su totalidad.
@@ -355,9 +378,118 @@ const TicketEntity({
   List<ItemDespachoBodegaEntity> get itemsDespachados =>
       itemsDespachoBodega.where((item) => item.cantidadDespachada > 0).toList();
 
-  /// Ítems que todavía tienen cantidades pendientes por despachar
+  /// Ítems que todavía tienen cantidades pendientes por despachar en bodega
   List<ItemDespachoBodegaEntity> get itemsFaltantesDespacho =>
       itemsDespachoBodega.where((item) => item.cantidadFaltante > 0).toList();
+
+  // ============================================================================
+  // 🚚 CADENA DE CUSTODIA Y RECEPCIÓN DE REPUESTOS EN TALLER
+  // ============================================================================
+
+  /// Sumatoria de la cantidad de un ítem que ha sido recibida físicamente en taller por los técnicos
+  double cantidadTotalRecibidaEnTaller(String codigo) {
+    final cod = codigo.trim().toUpperCase();
+    double total = 0.0;
+    for (final orden in ordenesRecepcion) {
+      if (orden.estaCompletada) {
+        total += orden.cantidadRecibidaDeItem(cod);
+      }
+    }
+    return total;
+  }
+
+  /// Cantidad asignada actualmente a órdenes de retiro pendientes de ser recogidas
+  double cantidadEnOrdenesPendientes(String codigo) {
+    final cod = codigo.trim().toUpperCase();
+    double total = 0.0;
+    for (final orden in ordenesRecepcion) {
+      if (orden.estado == EstadoOrdenRecepcion.pendienteRecoger) {
+        final match = orden.items.where((i) => i.codigo.trim().toUpperCase() == cod);
+        for (final item in match) {
+          total += item.cantidadDespachadaBodega;
+        }
+      }
+    }
+    return total;
+  }
+
+  /// Cantidad que Bodega ya preparó/despachó pero que aún no ha sido recibida físicamente en taller
+  double cantidadPendienteRecogerEnBodega(String codigo) {
+    final cod = codigo.trim().toUpperCase();
+    final match = itemsDespachoBodega.where((i) => i.codigo.trim().toUpperCase() == cod);
+    if (match.isEmpty) return 0.0;
+    final item = match.first;
+    final cantDespachada = item.cantidadDespachada;
+    final cantRecibida = cantidadTotalRecibidaEnTaller(cod);
+    final diff = cantDespachada - cantRecibida;
+    return diff > 0 ? diff : 0.0;
+  }
+
+  /// Saldo real en bodega que aún NO ha sido asignado a ninguna orden de retiro activa
+  double cantidadDisponibleParaAsignarRetiro(String codigo) {
+    final saldo = cantidadPendienteRecogerEnBodega(codigo);
+    final enTransito = cantidadEnOrdenesPendientes(codigo);
+    final disponible = saldo - enTransito;
+    return disponible > 0 ? disponible : 0.0;
+  }
+
+  /// Ítems que Bodega ya despachó y que tienen saldo pendiente de ser recogido por un técnico
+  List<ItemDespachoBodegaEntity> get itemsPendientesDeRecogerEnBodega {
+    return itemsDespachoBodega.where((item) {
+      return cantidadDisponibleParaAsignarRetiro(item.codigo) > 0;
+    }).toList();
+  }
+
+  /// Retorna true si hay materiales en bodega alistados que aún pueden asignarse a un técnico para retiro
+  bool get hayMaterialesDespachadosPorAsignar {
+    return itemsDespachoBodega.any((item) {
+      return cantidadDisponibleParaAsignarRetiro(item.codigo) > 0;
+    });
+  }
+
+  /// Retorna verdadero si el 100% de los repuestos solicitados ya fueron recibidos físicamente en el taller
+  bool get todosRepuestosRecibidosEnTaller {
+    if (itemsDespachoBodega.isEmpty) return true;
+    return itemsDespachoBodega.every((item) {
+      return cantidadTotalRecibidaEnTaller(item.codigo) >= item.cantidadSolicitada;
+    });
+  }
+
+  /// Válvula del Supervisor para certificación total (100%):
+  /// Solo se certifica la totalidad si todos los repuestos requeridos están recibidos en el taller
+  bool get puedeSupervisorValidarMateriales {
+    if (itemsDespachoBodega.isEmpty) return true;
+    return todosRepuestosRecibidosEnTaller && itemsPendientesDeRecogerEnBodega.isEmpty;
+  }
+
+  /// Retorna true si ya se recibió físicamente al menos un lote de repuestos en el taller
+  bool get tieneAlMenosUnLoteRecibidoEnTaller {
+    if (noRequiereCompras || itemsDespachoBodega.isEmpty) return true;
+    return ordenesRecepcion.any((o) => o.estaCompletada);
+  }
+
+  /// Retorna true si al menos una orden recibida ya fue validada en consumo por el supervisor
+  bool get tieneConsumoValidadoEnTaller {
+    if (noRequiereCompras || itemsDespachoBodega.isEmpty) return true;
+    return ordenesRecepcion.any((o) => o.estaCompletada && o.validadoSupervisor);
+  }
+
+  /// Retorna true si Compras terminó y Bodega terminó el 100% de los repuestos requeridos
+  bool get comprasYBodegaTotalmenteCompletados {
+    if (noRequiereCompras || itemsDespachoBodega.isEmpty) return true;
+    return bodegaDespachoCompleto;
+  }
+
+  /// Enclavamiento final de Proceso de Trabajo:
+  /// Solo puede enviar evidencia y liberar a Facturación si:
+  /// 1) Inició el trabajo físico
+  /// 2) Si requiere repuestos: que haya llegado al menos un lote a taller y se haya validado consumo
+  bool get puedeLiberarEnTaller {
+    if (!trabajoIniciado) return false;
+    if (noRequiereCompras || itemsDespachoBodega.isEmpty) return true;
+    return tieneAlMenosUnLoteRecibidoEnTaller &&
+        (tieneConsumoValidadoEnTaller || materialesValidadosEnTaller);
+  }
 }
 
 extension TicketMetrics on TicketEntity {

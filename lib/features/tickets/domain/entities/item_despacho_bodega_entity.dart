@@ -41,6 +41,11 @@ class ItemDespachoBodegaEntity extends Equatable {
   bool get despachadoCompletamente => cantidadDespachada >= cantidadSolicitada;
   bool get tieneDespachoParcial => cantidadDespachada > 0;
   bool get tieneStockSuficiente => stockDisponibleAlEvaluar >= cantidadSolicitada;
+  bool get tieneStockDisponible => stockDisponibleAlEvaluar > 0;
+
+  /// Un repuesto está habilitado para despacho si ya cuenta con stock local en bodega
+  /// O si Compras ya validó físicamente su llegada
+  bool get estaHabilitadoParaDespacho => validadoPorCompras || tieneStockDisponible;
 
   /// Horas reales transcurridas desde que se solicitó el repuesto hasta que Compras lo validó
   double? get tiempoAbastecimientoCalculadoHoras {

@@ -15,6 +15,7 @@ import 'features/inventario/presentation/bloc/inventario_bloc.dart';
 import 'features/inventario/presentation/bloc/inventario_event.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/auth/presentation/pages/main_menu_page.dart';
+import 'features/tickets/presentation/pages/recepcion_externa_page.dart';
 import 'core/services/notification_service.dart';
 
 // ============================================================================
@@ -86,7 +87,45 @@ class AquaspotApp extends StatelessWidget {
         },
 
         // ✅ TABLA DE ENRUTAMIENTO INDUSTRIAL
-        initialRoute: '/login',
+        initialRoute: (Uri.base.fragment.contains('recepcion-externa') ||
+                Uri.base.path.contains('recepcion-externa'))
+            ? null
+            : '/login',
+        onGenerateRoute: (settings) {
+          final name = settings.name ?? '';
+          final uri = Uri.tryParse(name);
+          if (uri != null && uri.path == '/recepcion-externa') {
+            final token = uri.queryParameters['token'] ?? '';
+            return MaterialPageRoute(
+              settings: settings,
+              builder: (_) => RecepcionExternaPage(token: token),
+            );
+          }
+
+          // Respaldo Web para URLs con fragmento (#/recepcion-externa?token=...)
+          final baseUri = Uri.base;
+          if (baseUri.fragment.contains('recepcion-externa')) {
+            final frag = baseUri.fragment.startsWith('/')
+                ? baseUri.fragment
+                : '/${baseUri.fragment}';
+            final fragUri = Uri.tryParse(frag);
+            final token = fragUri?.queryParameters['token'] ??
+                baseUri.queryParameters['token'] ??
+                '';
+            return MaterialPageRoute(
+              settings: settings,
+              builder: (_) => RecepcionExternaPage(token: token),
+            );
+          } else if (baseUri.path.contains('recepcion-externa')) {
+            final token = baseUri.queryParameters['token'] ?? '';
+            return MaterialPageRoute(
+              settings: settings,
+              builder: (_) => RecepcionExternaPage(token: token),
+            );
+          }
+
+          return null;
+        },
         routes: {
           '/login': (context) => const LoginPage(), 
           '/': (context) => const MainMenuPage(), 

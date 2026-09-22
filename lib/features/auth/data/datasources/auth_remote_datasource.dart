@@ -35,32 +35,50 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   // =====================================================================
   
   RolUsuario _mapearRol(String rolString) {
-    switch (rolString.toUpperCase().trim()) {
-      case 'REQUERIMIENTO':
+    final clean = rolString
+        .toLowerCase()
+        .trim()
+        .replaceAll('á', 'a')
+        .replaceAll('é', 'e')
+        .replaceAll('í', 'i')
+        .replaceAll('ó', 'o')
+        .replaceAll('ú', 'u');
+
+    switch (clean) {
+      case 'requerimiento':
         return RolUsuario.requerimiento;
-      case 'TECNICO':
+      case 'tecnico':
+      case 'tecnicorecepcionbodega':
+      case 'tecnico_recepcion_bodega':
+      case 'tecnico_recepcion':
+      case 'tecnico_bodega':
         return RolUsuario.tecnico;
-      case 'SUPERVISOR':
+      case 'supervisor':
+      case 'supervision':
         return RolUsuario.supervisor;
-      case 'RECEPCION':
+      case 'recepcion':
+      case 'recepcion_guabo':
+      case 'recepcionguabo':
         return RolUsuario.recepcion;
-      case 'ADMIN':
-         return RolUsuario.admin;
-      case 'COMERCIAL':
-         return RolUsuario.comercial;
-      case 'COSTOS':
-         return RolUsuario.costos;
-      case 'COMPRAS':
-         return RolUsuario.compras;
-      case 'BODEGA':
-      case 'DESPACHO':
-         return RolUsuario.bodega;
-      case 'PROCESOTRABAJO':
-      case 'PROCESO_TRABAJO':
-      case 'TALLER':
-         return RolUsuario.procesoTrabajo;
+      case 'admin':
+      case 'administrador':
+      case 'administracion':
+        return RolUsuario.admin;
+      case 'comercial':
+        return RolUsuario.comercial;
+      case 'costos':
+        return RolUsuario.costos;
+      case 'compras':
+        return RolUsuario.compras;
+      case 'bodega':
+      case 'despacho':
+        return RolUsuario.bodega;
+      case 'procesotrabajo':
+      case 'proceso_trabajo':
+      case 'taller':
+        return RolUsuario.procesoTrabajo;
       default:
-         return RolUsuario.desconocido;
+        return RolUsuario.desconocido;
     }
   }
 
@@ -106,6 +124,19 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         'rol': rol.name,           // Convertimos el Enum a String
         'fechaCreacion': FieldValue.serverTimestamp(), // Telemetría industrial importante
       });
+
+      // 🔗 ENLACE AUTOMÁTICO: Si es un técnico creado por Admin, se registra en catalogo_tecnicos como ENROLADO
+      if (rol == RolUsuario.tecnico) {
+        await firestore.collection('catalogo_tecnicos').doc(uid).set({
+          'id': uid,
+          'nombre': nombre,
+          'rol': 'Técnico Enrolado',
+          'activo': true,
+          'esExterno': false,
+          'usuarioUid': uid,
+          'fechaRegistro': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
     } catch (e) {
       // Si la escritura falla, lanzamos una excepción para que el Repositorio la capture
       throw Exception('Fallo crítico en la escritura de base de datos: $e');

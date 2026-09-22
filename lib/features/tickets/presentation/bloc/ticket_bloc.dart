@@ -12,6 +12,7 @@ import 'package:aquaspot_postventa/features/tickets/domain/entities/evidencia_tr
 import 'package:aquaspot_postventa/features/tickets/domain/entities/gestion_compras_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/proforma_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/item_despacho_bodega_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/orden_recepcion_repuestos_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/repositories/ticket_repository.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/SubirOrdenVentaUseCase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_documento_comercial_usecase.dart';
@@ -103,6 +104,10 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     on<AsignarTecnicosTrabajoEvent>(_onAsignarTecnicosTrabajo);
     on<GuardarDiagnosticoFallasEvent>(_onGuardarDiagnosticoFallas);
     on<SubirInformeTecnicoEvent>(_onSubirInformeTecnico);
+    on<AsignarTecnicoRecepcionBodegaEvent>(_onAsignarTecnicoRecepcionBodega);
+    on<ConfirmarRecepcionRepuestosTecnicoEvent>(_onConfirmarRecepcionRepuestosTecnico);
+    on<ValidarMaterialesRecibidosSupervisorEvent>(_onValidarMaterialesRecibidosSupervisor);
+    on<ValidarConsumoOrdenTallerEvent>(_onValidarConsumoOrdenTaller);
   }
 
  
@@ -160,12 +165,17 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     nombreTecnico: event.nombreTecnico,
   );
 
-  final eventoAuditoria = EventoAuditoriaEntity(
-    accion: 'EVIDENCIA DE TRABAJO REGISTRADA. TÉCNICO: ${event.nombreTecnico.toUpperCase()}. EQUIPO LISTO.',
-    usuarioNombre: event.nombreUsuario, 
-    usuarioRol: event.rolUsuario,
-    timestamp: DateTime.now(),
-  );
+    String resumenFallas = '';
+    if (event.ticket.diagnosticoFallas.isNotEmpty) {
+      resumenFallas = ' FALLAS: [${event.ticket.diagnosticoFallas.map((f) => f.falla).join(", ")}].';
+    }
+
+    final eventoAuditoria = EventoAuditoriaEntity(
+      accion: 'TALLER: EVIDENCIA REGISTRADA. TÉCNICOS: ${event.nombreTecnico.toUpperCase()}.$resumenFallas EQUIPO LISTO.',
+      usuarioNombre: event.nombreUsuario, 
+      usuarioRol: event.rolUsuario,
+      timestamp: DateTime.now(),
+    );
 
   final ahoraEvidencia = DateTime.now();
   final tiemposFinalizados = CalculadorTiemposOperativos.registrarFinTrabajoTaller(
@@ -2590,6 +2600,267 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
             ));
           },
         );
+      },
+    );
+  }
+
+  Future<void> _onAsignarTecnicoRecepcionBodega(
+    AsignarTecnicoRecepcionBodegaEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Asignando orden de recogida a técnico...',
+    ));
+
+    // Construir los ítems a recoger: saldo pendiente de lo despachado en bodega que no ha sido recibido en taller
+    final itemsARecoger = <ItemRecepcionRepuestoEntity>[];
+    for (final item in event.ticket.itemsDespachoBodega) {
+      final cantPendiente = event.ticket.cantidadPendienteRecogerEnBodega(item.codigo);
+      if (cantPendiente > 0) {
+        itemsARecoger.add(ItemRecepcionRepuestoEntity(
+          codigo: item.codigo,
+          descripcion: item.descripcion,
+          unidad: item.unidad,
+          cantidadDespachadaBodega: cantPendiente,
+          cantidadRecibidaTecnico: 0.0,
+          validado: false,
+        ));
+      }
+    }
+
+    if (itemsARecoger.isEmpty) {
+      emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'No hay repuestos pendientes de recoger en Bodega para este ticket.',
+      ));
+      return;
+    }
+
+    final ordenId = event.ordenId ?? 'REC-${DateTime.now().millisecondsSinceEpoch}';
+    final nuevaOrden = OrdenRecepcionRepuestosEntity(
+      id: ordenId,
+      ticketId: event.ticket.id,
+      tecnicoId: event.tecnicoId,
+      tecnicoNombre: event.tecnicoNombre,
+      supervisorAsigna: event.nombreSupervisor,
+      fechaAsignacion: DateTime.now(),
+      estado: EstadoOrdenRecepcion.pendienteRecoger,
+      items: itemsARecoger,
+    );
+
+    final evento = EventoAuditoriaEntity(
+      accion: 'TALLER: ORDEN $ordenId ASIGNADA A [${event.tecnicoNombre.toUpperCase()}] PARA RETIRO EN BODEGA (${itemsARecoger.length} ítems)',
+      usuarioNombre: event.nombreSupervisor,
+      usuarioRol: event.rolSupervisor,
+      timestamp: DateTime.now(),
+    );
+
+    final ticketActualizado = event.ticket.copyWith(
+      ordenesRecepcion: [...event.ticket.ordenesRecepcion, nuevaOrden],
+      historialEventos: [...event.ticket.historialEventos, evento],
+    );
+
+    final result = await actualizarTicket(ticketActualizado);
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Fallo al asignar orden de recogida: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) {
+        final listaActualizada = (state.historial.isNotEmpty ? state.historial : state.tickets)
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: '✅ Orden de recogida asignada a ${event.tecnicoNombre}. Ya disponible en su bandeja.',
+          historial: listaActualizada,
+          tickets: listaActualizada,
+          currentTicket: ticketGuardado,
+        ));
+      },
+    );
+  }
+
+  Future<void> _onConfirmarRecepcionRepuestosTecnico(
+    ConfirmarRecepcionRepuestosTecnicoEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    // 🛡️ Enclavamiento: ninguna cantidad puede ser negativa ni superar lo alistado por bodega
+    for (final item in event.itemsValidados) {
+      if (item.cantidadRecibidaTecnico < 0 ||
+          item.cantidadRecibidaTecnico > item.cantidadDespachadaBodega) {
+        emit(state.copyWith(
+          status: TicketStatus.error,
+          message:
+              'Error de validación: La cantidad recibida de ${item.codigo} (${item.cantidadRecibidaTecnico}) no puede superar el máximo alistado por bodega (${item.cantidadDespachadaBodega} ${item.unidad}).',
+        ));
+        return;
+      }
+    }
+
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Confirmando recepción de repuestos...',
+    ));
+
+    final ordenesActualizadas = event.ticket.ordenesRecepcion.map((orden) {
+      if (orden.id == event.ordenId) {
+        final todosConformes = event.itemsValidados.every((i) => i.esConforme);
+        return orden.copyWith(
+          items: event.itemsValidados,
+          fechaRecepcion: DateTime.now(),
+          estado: todosConformes ? EstadoOrdenRecepcion.recibidoTotal : EstadoOrdenRecepcion.recibidoParcial,
+          observacion: event.observacion,
+        );
+      }
+      return orden;
+    }).toList();
+
+    final conformes = event.itemsValidados.where((i) => i.esConforme).length;
+    final total = event.itemsValidados.length;
+
+    final evento = EventoAuditoriaEntity(
+      accion: 'TALLER: REPUESTOS RECIBIDOS EN BODEGA POR [${event.nombreTecnico.toUpperCase()}] ($conformes/$total conformes). Trasladados a taller.',
+      usuarioNombre: event.nombreTecnico,
+      usuarioRol: event.rolTecnico,
+      timestamp: DateTime.now(),
+    );
+
+    final ticketActualizado = event.ticket.copyWith(
+      ordenesRecepcion: ordenesActualizadas,
+      historialEventos: [...event.ticket.historialEventos, evento],
+    );
+
+    final result = await actualizarTicket(ticketActualizado);
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Fallo al confirmar recepción: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) {
+        final listaActualizada = (state.historial.isNotEmpty ? state.historial : state.tickets)
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: '✅ Repuestos recibidos y trasladados al taller exitosamente.',
+          historial: listaActualizada,
+          tickets: listaActualizada,
+          currentTicket: ticketGuardado,
+        ));
+      },
+    );
+  }
+
+  Future<void> _onValidarMaterialesRecibidosSupervisor(
+    ValidarMaterialesRecibidosSupervisorEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    if (!event.ticket.puedeSupervisorValidarMateriales) {
+      emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Hay repuestos en bodega aún. No puede validar hasta que el 100% de los repuestos requeridos hayan sido recibidos en el taller.',
+      ));
+      return;
+    }
+
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Certificando recepción de materiales en taller...',
+    ));
+
+    final evento = EventoAuditoriaEntity(
+      accion: 'TALLER: CONFORMIDAD DE MATERIALES EN TALLER POR SUPERVISOR [${event.nombreSupervisor.toUpperCase()}]. 100% de repuestos recibidos.',
+      usuarioNombre: event.nombreSupervisor,
+      usuarioRol: event.rolSupervisor,
+      timestamp: DateTime.now(),
+    );
+
+    final ticketActualizado = event.ticket.copyWith(
+      materialesValidadosEnTaller: true,
+      supervisorValidoMateriales: event.nombreSupervisor,
+      fechaValidacionMaterialesTaller: DateTime.now(),
+      historialEventos: [...event.ticket.historialEventos, evento],
+    );
+
+    final result = await actualizarTicket(ticketActualizado);
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Fallo al validar materiales: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) {
+        final listaActualizada = (state.historial.isNotEmpty ? state.historial : state.tickets)
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: '✅ Materiales validados en taller por Supervisor. Requerimiento listo para finalizar y liberar.',
+          historial: listaActualizada,
+          tickets: listaActualizada,
+          currentTicket: ticketGuardado,
+        ));
+      },
+    );
+  }
+
+  Future<void> _onValidarConsumoOrdenTaller(
+    ValidarConsumoOrdenTallerEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Certificando consumo del lote ${event.ordenId} en taller...',
+    ));
+
+    final ordenesActualizadas = event.ticket.ordenesRecepcion.map((o) {
+      if (o.id == event.ordenId) {
+        return o.copyWith(
+          validadoSupervisor: true,
+          fechaValidadoSupervisor: DateTime.now(),
+          supervisorValida: event.nombreSupervisor,
+        );
+      }
+      return o;
+    }).toList();
+
+    final evento = EventoAuditoriaEntity(
+      accion: 'TALLER: CONSUMO DE REPUESTOS CERTIFICADO POR SUPERVISOR [${event.nombreSupervisor.toUpperCase()}]. Lote ${event.ordenId} validado como instalado en máquina.',
+      usuarioNombre: event.nombreSupervisor,
+      usuarioRol: event.rolSupervisor,
+      timestamp: DateTime.now(),
+    );
+
+    final ticketActualizado = event.ticket.copyWith(
+      ordenesRecepcion: ordenesActualizadas,
+      materialesValidadosEnTaller: true,
+      supervisorValidoMateriales: event.nombreSupervisor,
+      fechaValidacionMaterialesTaller: DateTime.now(),
+      historialEventos: [...event.ticket.historialEventos, evento],
+    );
+
+    final result = await actualizarTicket(ticketActualizado);
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Fallo al validar consumo: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) {
+        final listaActualizada = (state.historial.isNotEmpty ? state.historial : state.tickets)
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: '✅ Consumo del lote ${event.ordenId} certificado por Supervisor.',
+          historial: listaActualizada,
+          tickets: listaActualizada,
+          currentTicket: ticketGuardado,
+        ));
       },
     );
   }

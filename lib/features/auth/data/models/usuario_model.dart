@@ -26,21 +26,50 @@ class UsuarioModel extends UsuarioEntity {
 
   // Subrutina para el Enum (Ajusta según tu implementación actual)
   static RolUsuario _parsearRol(String rolStr) {
-    switch (rolStr.toLowerCase().trim()) {
-      case 'requerimiento': return RolUsuario.requerimiento;
-      case 'tecnico': return RolUsuario.tecnico;
-      case 'supervisor': return RolUsuario.supervisor;
-      case 'recepcion': return RolUsuario.recepcion;
-      case 'admin': return RolUsuario.admin;
-      case 'comercial': return RolUsuario.comercial;
-      case 'costos': return RolUsuario.costos;
-      case 'compras': return RolUsuario.compras;
+    final clean = rolStr
+        .toLowerCase()
+        .trim()
+        .replaceAll('á', 'a')
+        .replaceAll('é', 'e')
+        .replaceAll('í', 'i')
+        .replaceAll('ó', 'o')
+        .replaceAll('ú', 'u');
+
+    switch (clean) {
+      case 'requerimiento':
+        return RolUsuario.requerimiento;
+      case 'tecnico':
+      case 'tecnicorecepcionbodega':
+      case 'tecnico_recepcion_bodega':
+      case 'tecnico_recepcion':
+      case 'tecnico_bodega':
+        return RolUsuario.tecnico;
+      case 'supervisor':
+      case 'supervision':
+        return RolUsuario.supervisor;
+      case 'recepcion':
+      case 'recepcion_guabo':
+      case 'recepcionguabo':
+        return RolUsuario.recepcion;
+      case 'admin':
+      case 'administrador':
+      case 'administracion':
+        return RolUsuario.admin;
+      case 'comercial':
+        return RolUsuario.comercial;
+      case 'costos':
+        return RolUsuario.costos;
+      case 'compras':
+        return RolUsuario.compras;
       case 'bodega':
-      case 'despacho': return RolUsuario.bodega;
+      case 'despacho':
+        return RolUsuario.bodega;
       case 'procesotrabajo':
       case 'proceso_trabajo':
-      case 'taller': return RolUsuario.procesoTrabajo;
-      default: return RolUsuario.desconocido;
+      case 'taller':
+        return RolUsuario.procesoTrabajo;
+      default:
+        return RolUsuario.desconocido;
     }
   }
 static SegmentoOperativo _parsearSegmento(String? segmentoStr) {

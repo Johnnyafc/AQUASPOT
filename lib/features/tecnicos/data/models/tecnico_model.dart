@@ -10,6 +10,8 @@ class TecnicoModel extends TecnicoEntity {
     required super.rol,
     super.activo = true,
     required super.fechaRegistro,
+    super.esExterno = false,
+    super.usuarioUid,
   });
 
   factory TecnicoModel.fromJson(Map<String, dynamic> json, {String? docId}) {
@@ -22,12 +24,18 @@ class TecnicoModel extends TecnicoEntity {
       }
     }
 
+    final bool esExt = json['esExterno'] as bool? ??
+        (json['tipo']?.toString().toLowerCase() == 'externo') ??
+        false;
+
     return TecnicoModel(
       id: docId ?? json['id']?.toString() ?? '',
       nombre: json['nombre']?.toString() ?? '',
       rol: json['rol']?.toString() ?? 'Técnico General',
       activo: json['activo'] as bool? ?? true,
       fechaRegistro: fecha,
+      esExterno: esExt,
+      usuarioUid: json['usuarioUid'] as String?,
     );
   }
 
@@ -38,6 +46,8 @@ class TecnicoModel extends TecnicoEntity {
       rol: entity.rol,
       activo: entity.activo,
       fechaRegistro: entity.fechaRegistro,
+      esExterno: entity.esExterno,
+      usuarioUid: entity.usuarioUid,
     );
   }
 
@@ -48,6 +58,8 @@ class TecnicoModel extends TecnicoEntity {
       'rol': rol,
       'activo': activo,
       'fechaRegistro': Timestamp.fromDate(fechaRegistro),
+      'esExterno': esExterno,
+      if (usuarioUid != null) 'usuarioUid': usuarioUid,
     };
   }
 }

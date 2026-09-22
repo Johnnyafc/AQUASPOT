@@ -1,13 +1,15 @@
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
 import 'package:aquaspot_postventa/core/services/borrador_storage_service.dart';
 import 'package:aquaspot_postventa/features/tecnicos/data/models/tecnico_model.dart';
 import 'package:aquaspot_postventa/features/fallas/data/models/metrica_falla_model.dart';
 import 'package:aquaspot_postventa/features/fallas/data/datasources/metrica_falla_remote_datasource.dart';
 import 'package:aquaspot_postventa/features/tickets/data/models/ticket_model.dart';
+import 'package:aquaspot_postventa/core/enum/rol_usuario.dart';
+import 'package:aquaspot_postventa/features/auth/data/models/usuario_model.dart';
 
 void main() {
   group('Pruebas Unitarias: Módulos de Técnicos y Métricas de Fallas', () {
@@ -254,5 +256,98 @@ void main() {
       final luegoDeBorrar = await BorradorStorageService.obtenerBorrador(clave);
       expect(luegoDeBorrar, isNull);
     });
+
+    test('7. BorradorStorageService guarda y recupera borrador de Creación de Ticket', () async {
+      SharedPreferences.setMockInitialValues({});
+      final dummyBytes = Uint8List.fromList([11, 22, 33, 44, 55]);
+      final xfilePrueba = XFile.fromData(
+        dummyBytes,
+        name: 'foto_evidencia.jpg',
+        path: 'foto_evidencia.jpg',
+      );
+
+      final xfilesJson = await BorradorStorageService.xFilesToJson([xfilePrueba]);
+
+      final exito = await BorradorStorageService.guardarBorrador(
+        clave: BorradorStorageService.kClaveDraftCreacionTicket,
+        datos: {
+          'cliente': 'Camaronera San Pedro',
+          'campamento': 'Piscina 4 Sector Norte',
+          'falla': 'Motor no enciende al dar arranque',
+          'serie': 'SN-CARACOL-9988',
+          'horometro': '1540.5',
+          'selectedMarca': 'caracol',
+          'tipoRequerimiento': 'reparacion',
+          'lugarAtencion': 'campo',
+          'evidencias': xfilesJson,
+          'accesorios': {'Manual': true, 'Llaves': true},
+        },
+      );
+      expect(exito, isTrue);
+
+      final recuperado = await BorradorStorageService.obtenerBorrador(
+        BorradorStorageService.kClaveDraftCreacionTicket,
+      );
+      expect(recuperado, isNotNull);
+      expect(recuperado!['cliente'], 'Camaronera San Pedro');
+      expect(recuperado['campamento'], 'Piscina 4 Sector Norte');
+      expect(recuperado['falla'], 'Motor no enciende al dar arranque');
+      expect(recuperado['serie'], 'SN-CARACOL-9988');
+      expect(recuperado['horometro'], '1540.5');
+      expect(recuperado['selectedMarca'], 'caracol');
+      expect(recuperado['tipoRequerimiento'], 'reparacion');
+      expect(recuperado['lugarAtencion'], 'campo');
+
+      final evidenciasRestauradas = BorradorStorageService.jsonToXFiles(recuperado['evidencias'] as List);
+      expect(evidenciasRestauradas.length, 1);
+      expect(evidenciasRestauradas.first.name, 'foto_evidencia.jpg');
+      final bytesRestaurados = await evidenciasRestauradas.first.readAsBytes();
+      expect(bytesRestaurados, [11, 22, 33, 44, 55]);
+
+      // Eliminación al crear exitosamente el ticket
+      await BorradorStorageService.eliminarBorrador(BorradorStorageService.kClaveDraftCreacionTicket);
+      final luegoDeBorrar = await BorradorStorageService.obtenerBorrador(
+        BorradorStorageService.kClaveDraftCreacionTicket,
+      );
+      expect(luegoDeBorrar, isNull);
+    });
+
+    test('8. UsuarioModel y _parsearRol resuelven perfil técnico y variaciones sin fallos de seguridad', () {
+      final variantesTecnico = [
+        'tecnico',
+        'técnico',
+        'TECNICO',
+        'TÉCNICO',
+        ' tecnico ',
+        'tecnicoRecepcionBodega',
+        'tecnico_recepcion_bodega',
+        'tecnico_recepcion',
+        'tecnico_bodega',
+      ];
+
+      for (final variante in variantesTecnico) {
+        final json = {
+          'nombre': 'Carlos Técnico',
+          'rol': variante,
+          'segmento': 'general',
+        };
+        final user = UsuarioModel.fromJson(json, 'uid-tec-123', 'tec@aquaspot.com');
+        expect(user.rol, RolUsuario.tecnico, reason: 'Fallo al mapear variante: $variante');
+      }
+
+      // Otras tolerancias a tildes y nombres de rol comunes
+      final jsonSupervisor = {'rol': 'supervisión'};
+      expect(UsuarioModel.fromJson(jsonSupervisor, '1', 'a@a.com').rol, RolUsuario.supervisor);
+
+      final jsonRecepcion = {'rol': 'recepción'};
+      expect(UsuarioModel.fromJson(jsonRecepcion, '2', 'b@b.com').rol, RolUsuario.recepcion);
+
+      final jsonAdmin = {'rol': 'administrador'};
+      expect(UsuarioModel.fromJson(jsonAdmin, '3', 'c@c.com').rol, RolUsuario.admin);
+
+      final jsonDesconocido = {'rol': 'rol_invalido_xyz'};
+      expect(UsuarioModel.fromJson(jsonDesconocido, '4', 'd@d.com').rol, RolUsuario.desconocido);
+    });
   });
 }
+

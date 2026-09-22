@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:aquaspot_postventa/core/enum/marca_equipo.dart';
 import 'package:aquaspot_postventa/core/services/borrador_storage_service.dart';
 import 'package:flutter/material.dart';
@@ -50,6 +51,8 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
   final List<XFile> _archivosEvidencia = [];
   final List<XFile> _archivosEvidenciaGarantia = [];
 
+  Timer? _debounceTimer;
+
   @override
   void initState() {
     super.initState();
@@ -58,34 +61,47 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
     _cargarBorradorLocal();
   }
 
+  void _onTextoModificado() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 600), () {
+      _guardarBorrador();
+    });
+  }
+
   void _conectarAutoGuardadoBorrador() {
-    _clienteController.addListener(_guardarBorrador);
-    _customEquipoController.addListener(_guardarBorrador);
-    _campamentoController.addListener(_guardarBorrador);
-    _nombreContactoController.addListener(_guardarBorrador);
-    _emailController.addListener(_guardarBorrador);
-    _telefonoController.addListener(_guardarBorrador);
-    _fallaController.addListener(_guardarBorrador);
-    _serieController.addListener(_guardarBorrador);
-    _notasController.addListener(_guardarBorrador);
-    _horometroController.addListener(_guardarBorrador);
+    _clienteController.addListener(_onTextoModificado);
+    _customEquipoController.addListener(_onTextoModificado);
+    _campamentoController.addListener(_onTextoModificado);
+    _nombreContactoController.addListener(_onTextoModificado);
+    _emailController.addListener(_onTextoModificado);
+    _telefonoController.addListener(_onTextoModificado);
+    _fallaController.addListener(_onTextoModificado);
+    _serieController.addListener(_onTextoModificado);
+    _notasController.addListener(_onTextoModificado);
+    _horometroController.addListener(_onTextoModificado);
   }
 
   void _desconectarAutoGuardadoBorrador() {
-    _clienteController.removeListener(_guardarBorrador);
-    _customEquipoController.removeListener(_guardarBorrador);
-    _campamentoController.removeListener(_guardarBorrador);
-    _nombreContactoController.removeListener(_guardarBorrador);
-    _emailController.removeListener(_guardarBorrador);
-    _telefonoController.removeListener(_guardarBorrador);
-    _fallaController.removeListener(_guardarBorrador);
-    _serieController.removeListener(_guardarBorrador);
-    _notasController.removeListener(_guardarBorrador);
-    _horometroController.removeListener(_guardarBorrador);
+    _clienteController.removeListener(_onTextoModificado);
+    _customEquipoController.removeListener(_onTextoModificado);
+    _campamentoController.removeListener(_onTextoModificado);
+    _nombreContactoController.removeListener(_onTextoModificado);
+    _emailController.removeListener(_onTextoModificado);
+    _telefonoController.removeListener(_onTextoModificado);
+    _fallaController.removeListener(_onTextoModificado);
+    _serieController.removeListener(_onTextoModificado);
+    _notasController.removeListener(_onTextoModificado);
+    _horometroController.removeListener(_onTextoModificado);
   }
 
-  void _guardarBorrador() {
-    BorradorStorageService.guardarBorrador(
+  Future<void> _guardarBorrador() async {
+    if (!mounted) return;
+    final currentState = context.read<TicketBloc>().state;
+
+    final evidenciasJson = await BorradorStorageService.xFilesToJson(_archivosEvidencia);
+    final evidenciasGarantiaJson = await BorradorStorageService.xFilesToJson(_archivosEvidenciaGarantia);
+
+    await BorradorStorageService.guardarBorrador(
       clave: BorradorStorageService.kClaveDraftCreacionTicket,
       datos: {
         'cliente': _clienteController.text,
@@ -104,6 +120,13 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
         'selectedMarca': _selectedMarca?.name,
         'prioridad': _prioridad?.name,
         'accesorios': _accesoriosSeleccionados,
+        // Persistencia del flujo seleccionado (Reparación / Garantía, Taller / Campo, etc.)
+        'tipoRequerimiento': currentState.tipoSeleccionado.name,
+        'lugarAtencion': currentState.lugarAtencion.name,
+        'tipoGarantia': currentState.tipoGarantia.name,
+        // Evidencias fotográficas completas con Base64
+        'evidencias': evidenciasJson,
+        'evidenciasGarantia': evidenciasGarantiaJson,
         'evidenciasPaths': BorradorStorageService.xFilesToPaths(_archivosEvidencia),
         'evidenciasGarantiaPaths': BorradorStorageService.xFilesToPaths(_archivosEvidenciaGarantia),
       },
@@ -115,6 +138,41 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
       BorradorStorageService.kClaveDraftCreacionTicket,
     );
     if (draft != null && mounted) {
+      // 1. Restaurar flujo en TicketBloc (Reparación/Garantía, Taller/Campo, Tipo Garantía)
+      if (draft['tipoRequerimiento'] != null) {
+        final tipoStr = draft['tipoRequerimiento'] as String;
+        final tipo = TipoRequerimiento.values.cast<TipoRequerimiento?>().firstWhere(
+          (e) => e?.name == tipoStr,
+          orElse: () => null,
+        );
+        if (tipo != null && tipo != TipoRequerimiento.ninguno) {
+          context.read<TicketBloc>().add(SeleccionarTipoRequerimientoEvent(tipo));
+
+          if (draft['lugarAtencion'] != null) {
+            final lugarStr = draft['lugarAtencion'] as String;
+            final lugar = LugarAtencion.values.cast<LugarAtencion?>().firstWhere(
+              (e) => e?.name == lugarStr,
+              orElse: () => null,
+            );
+            if (lugar != null && lugar != LugarAtencion.noAplica) {
+              context.read<TicketBloc>().add(SeleccionarLugarAtencionEvent(lugar));
+            }
+          }
+
+          if (draft['tipoGarantia'] != null) {
+            final garStr = draft['tipoGarantia'] as String;
+            final gar = TipoGarantia.values.cast<TipoGarantia?>().firstWhere(
+              (e) => e?.name == garStr,
+              orElse: () => null,
+            );
+            if (gar != null && gar != TipoGarantia.pendiente) {
+              context.read<TicketBloc>().add(SeleccionarTipoGarantiaEvent(gar));
+            }
+          }
+        }
+      }
+
+      // 2. Restaurar campos de texto y controladores
       setState(() {
         if (draft['cliente'] != null && (draft['cliente'] as String).isNotEmpty) {
           _clienteController.text = draft['cliente'];
@@ -152,35 +210,44 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
             _accesoriosSeleccionados[k] = v == true;
           });
         }
-        if (draft['evidenciasPaths'] != null && draft['evidenciasPaths'] is List) {
+
+        // 3. Restaurar fotos
+        if (draft['evidencias'] != null && draft['evidencias'] is List) {
+          final restauradas = BorradorStorageService.jsonToXFiles(draft['evidencias'] as List);
+          _archivosEvidencia.clear();
+          _archivosEvidencia.addAll(restauradas);
+        } else if (draft['evidenciasPaths'] != null && draft['evidenciasPaths'] is List) {
           final restauradas = BorradorStorageService.pathsToXFiles(draft['evidenciasPaths'] as List);
           _archivosEvidencia.clear();
           _archivosEvidencia.addAll(restauradas);
         }
-        if (draft['evidenciasGarantiaPaths'] != null && draft['evidenciasGarantiaPaths'] is List) {
+
+        if (draft['evidenciasGarantia'] != null && draft['evidenciasGarantia'] is List) {
+          final restauradas = BorradorStorageService.jsonToXFiles(draft['evidenciasGarantia'] as List);
+          _archivosEvidenciaGarantia.clear();
+          _archivosEvidenciaGarantia.addAll(restauradas);
+        } else if (draft['evidenciasGarantiaPaths'] != null && draft['evidenciasGarantiaPaths'] is List) {
           final restauradas = BorradorStorageService.pathsToXFiles(draft['evidenciasGarantiaPaths'] as List);
           _archivosEvidenciaGarantia.clear();
           _archivosEvidenciaGarantia.addAll(restauradas);
         }
       });
 
+      // 4. Notificación discreta y no invasiva (flotante, 2 segundos)
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.restore, color: Colors.white),
-              SizedBox(width: 8),
-              Expanded(child: Text('Borrador de ticket recuperado automáticamente.')),
-            ],
-          ),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          duration: const Duration(seconds: 2),
           backgroundColor: const Color(0xFF005A9C),
-          duration: const Duration(seconds: 4),
-          action: SnackBarAction(
-            label: 'Descartar',
-            textColor: Colors.amber,
-            onPressed: () {
-              _limpiarFormulario();
-            },
+          content: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.save_as_outlined, color: Colors.white, size: 18),
+              SizedBox(width: 8),
+              Text('Borrador restaurado', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+            ],
           ),
         ),
       );
@@ -189,8 +256,8 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _desconectarAutoGuardadoBorrador();
-    // Innegociable: Destrucción de todos los punteros en memoria
     _clienteController.dispose();
     _customEquipoController.dispose();
     _campamentoController.dispose();
@@ -200,11 +267,12 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
     _fallaController.dispose();
     _serieController.dispose();
     _notasController.dispose();
-    _horometroController.dispose(); // 🧹 Limpieza del nuevo sensor
+    _horometroController.dispose();
     super.dispose();
   }
 
   void _limpiarFormulario() {
+    _debounceTimer?.cancel();
     FocusScope.of(context).unfocus();
     
     _clienteController.clear();
@@ -216,7 +284,7 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
     _fallaController.clear();
     _serieController.clear();
     _notasController.clear();
-    _horometroController.clear(); // 🧹 Purga de la lectura anterior
+    _horometroController.clear();
     
     setState(() {
       _selectedSede = null;
@@ -229,49 +297,99 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
       _archivosEvidenciaGarantia.clear();
     });
     
-    context.read<TicketBloc>().add(const SeleccionarTipoRequerimientoEvent(TipoRequerimiento.ninguno));
+    context.read<TicketBloc>().add(ResetearRequerimientoEvent());
     _formKey.currentState?.reset();
     BorradorStorageService.eliminarBorrador(BorradorStorageService.kClaveDraftCreacionTicket);
   }
 
+  Future<void> _confirmarDescartarBorrador() async {
+    final bool? confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Descartar Borrador'),
+          ],
+        ),
+        content: const Text(
+          '¿Desea eliminar el borrador guardado localmente? Se restablecerán todos los campos, fotos y selecciones.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Descartar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true && mounted) {
+      _limpiarFormulario();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.blueGrey.shade800,
+            content: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.delete_outline, color: Colors.white, size: 18),
+                SizedBox(width: 8),
+                Text('Borrador descartado', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   // 📷 SUBRUTINA DE ACTUADOR MULTIMEDIA
-Future<void> _abrirSelectorMultimedia() async {
+  Future<void> _abrirSelectorMultimedia() async {
     try {
-      // 1. Instanciamos el módulo de captura
       final ImagePicker picker = ImagePicker();
-      
-      // 2. Detonamos la interfaz de selección múltiple. 
-      // ⚙️ BEST PRACTICE: Compresión de payload al 70% para no saturar el canal de telemetría IoT
       final List<XFile> fotos = await picker.pickMultiImage(
         imageQuality: 70,
       );
 
-      // 3. Verificación de compuerta: Si el operario cancela, no hacemos nada
       if (fotos.isNotEmpty) {
-        // 4. Escribimos en el búfer de memoria volátil y refrescamos el HMI
         setState(() {
           _archivosEvidenciaGarantia.addAll(fotos);
         });
         _guardarBorrador();
 
-        // 5. Feedback visual confirming the hardware state change
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✅ ${fotos.length} archivos de telemetría adjuntados al búfer de garantía.'),
-              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 2),
+              content: Text('✅ ${fotos.length} foto(s) de garantía adjuntada(s).'),
+              backgroundColor: Colors.green.shade700,
             ),
           );
         }
-      } else {
-        print("⚠️ OPERACIÓN ABORTADA: El usuario cerró el sensor óptico sin capturar datos.");
       }
     } catch (e) {
-      // 🛑 Manejo de fallos en el bus del sistema operativo (permisos denegados, etc.)
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('🛑 Error en el módulo de cámara: $e'),
+            behavior: SnackBarBehavior.floating,
+            content: Text('🛑 Error en el selector de fotos: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -279,16 +397,9 @@ Future<void> _abrirSelectorMultimedia() async {
     }
   }
 
-  // ⚙️ Convertimos la función a asíncrona
   void _submitForm() async {
-    // =========================================================
-    // 🧠 0. LECTURA DE SENSORES DE ESTADO
-    // =========================================================
     final currentState = context.read<TicketBloc>().state;
 
-    // =========================================================
-    // 🛑 1. VALIDACIÓN ESTRICTA (Hard Interlocks)
-    // =========================================================
     if (!_formKey.currentState!.validate()) return;
 
     if (_selectedClienteId == null || _selectedClienteId!.isEmpty) {
@@ -326,9 +437,6 @@ Future<void> _abrirSelectorMultimedia() async {
       return;
     }
 
-    // =========================================================
-    // 🧠 2. ALGORITMO DE COMPLETITUD Y COSTOS (TRIAGE)
-    // =========================================================
     final bool esOperacionEnCampo = currentState.lugarAtencion == LugarAtencion.campo;
     final bool tieneSerie = _serieController.text.trim().isNotEmpty;
     final bool tieneEvidencia = _archivosEvidencia.isNotEmpty;
@@ -337,7 +445,6 @@ Future<void> _abrirSelectorMultimedia() async {
         ? tieneSerie 
         : (tieneSerie && tieneEvidencia);
         
-    // ⚙️ ENRUTADOR DE FACTURACIÓN AUTOMÁTICA
     ResponsableFacturacion responsableAsignado = ResponsableFacturacion.cliente;
 
     if (currentState.tipoSeleccionado == TipoRequerimiento.reclamoGarantia) {
@@ -348,9 +455,6 @@ Future<void> _abrirSelectorMultimedia() async {
       }
     }
 
-    // =========================================================
-    // 🛑 3. ENCLAVAMIENTO DE CONFIRMACIÓN MODULAR
-    // =========================================================
     final bool? operadorConfirma = await showDialog<bool>(
       context: context,
       barrierDismissible: false, 
@@ -358,11 +462,8 @@ Future<void> _abrirSelectorMultimedia() async {
     );
 
     if (operadorConfirma != true) return;
-    if (!context.mounted) return;
+    if (!mounted) return;
 
-    // =========================================================
-    // ⚡ 4. EXTRACCIÓN DE VARIABLES DE ENTORNO Y TRANSMISIÓN
-    // =========================================================
     final authState = context.read<AuthBloc>().state;
     String nombreOperario = 'SISTEMA';
     String rolOperario = 'DESCONOCIDO';
@@ -371,18 +472,11 @@ Future<void> _abrirSelectorMultimedia() async {
       nombreOperario = authState.usuario.nombre; 
       rolOperario = authState.usuario.rol.name.toUpperCase();
     }
-    
-    print('El valor es ${responsableAsignado.name}');
-    
-    // ⚠️ ATENCIÓN INGENIERO: El horómetro está capturando datos. 
-    // Asegúrese de actualizar su evento `CrearTicketEvent` en el BLoC para recibir `_horometroController.text`
-    // si necesita guardarlo en la base de datos de Firebase.
-    
-final double? lecturaHorometro = _horometroController.text.trim().isNotEmpty
+
+    final double? lecturaHorometro = _horometroController.text.trim().isNotEmpty
         ? double.tryParse(_horometroController.text.trim())
         : null;
 
-    // 🚀 DESPACHO DE LA TRAMA DE DATOS AL PLC (BLoC)
     context.read<TicketBloc>().add(CrearTicketEvent(
       sede: _selectedSede ?? Sede.NINGUNO, 
       clienteId: _selectedClienteId!, 
@@ -405,10 +499,6 @@ final double? lecturaHorometro = _horometroController.text.trim().isNotEmpty
       esRegistroCompleto: esRegistroCompleto, 
       tipoGarantia: currentState.tipoGarantia.name,
       resposableFacturacion: responsableAsignado.name,
-      
-      // ==========================================
-      // 🔌 PINES DE TELEMETRÍA Y GARANTÍA CONECTADOS
-      // ==========================================
       horometro: lecturaHorometro,
       evidenciasGarantia: _archivosEvidenciaGarantia.isNotEmpty 
           ? List<XFile>.from(_archivosEvidenciaGarantia) 
@@ -421,16 +511,35 @@ final double? lecturaHorometro = _horometroController.text.trim().isNotEmpty
     return Scaffold(
       backgroundColor: const Color(0xFFF0F2F5),
       appBar: AppBar(
-        title: const Text('Nuevo Requerimiento', style: TextStyle(fontWeight: FontWeight.bold)),
-        elevation: 0, backgroundColor: Colors.white, foregroundColor: Colors.black,
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Nuevo Requerimiento', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text('Autoguardado local activo 💾', style: TextStyle(fontSize: 11, color: Colors.black54)),
+          ],
+        ),
+        elevation: 0, 
+        backgroundColor: Colors.white, 
+        foregroundColor: Colors.black,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep_outlined, color: Colors.redAccent),
+            tooltip: 'Descartar Borrador',
+            onPressed: _confirmarDescartarBorrador,
+          ),
+        ],
       ),
       body: BlocConsumer<TicketBloc, TicketState>(
-        listenWhen: (previous, current) => previous.status != current.status,
+        listenWhen: (previous, current) =>
+            previous.status != current.status ||
+            previous.tipoSeleccionado != current.tipoSeleccionado ||
+            previous.lugarAtencion != current.lugarAtencion ||
+            previous.tipoGarantia != current.tipoGarantia,
         listener: (context, state) async {
           if (state.status == TicketStatus.error) {
-             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.red));
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.red));
           } else if (state.status == TicketStatus.operationSuccess) { 
-            BorradorStorageService.eliminarBorrador(BorradorStorageService.kClaveDraftCreacionTicket);
+            unawaited(BorradorStorageService.eliminarBorrador(BorradorStorageService.kClaveDraftCreacionTicket));
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Registro Exitoso'), backgroundColor: Colors.green));
             
             final ticketReciente = state.currentTicket;
@@ -446,6 +555,8 @@ final double? lecturaHorometro = _horometroController.text.trim().isNotEmpty
 
             if (!context.mounted) return; 
             Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+          } else if (state.status != TicketStatus.loading) {
+            _guardarBorrador();
           }
         },
         builder: (context, state) {
@@ -473,12 +584,8 @@ final double? lecturaHorometro = _horometroController.text.trim().isNotEmpty
                         customEquipoController: _customEquipoController,
                         serieController: _serieController,
                         notasRecepcionController: _notasController,
-                        
-                        // 🔌 CABLEADO DE NUEVOS PINES (Interlock Agrícola completado)
                         horometroController: _horometroController,
                         onAddMedia: _abrirSelectorMultimedia,
-                        
-                        // ⚡ TERMINALES DE BÚFER AISLADO REQUERIDOS POR EL FORMULARIO
                         archivosGarantia: _archivosEvidenciaGarantia,
                         onRemoveArchivoGarantia: (index) {
                           setState(() {
@@ -486,7 +593,6 @@ final double? lecturaHorometro = _horometroController.text.trim().isNotEmpty
                           });
                           _guardarBorrador();
                         },
-                        
                         selectedSede: _selectedSede,
                         selectedEquipo: _selectedEquipo,
                         selectedClienteId: _selectedClienteId,

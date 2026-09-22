@@ -160,7 +160,9 @@ body: BlocConsumer<AuthBloc, AuthState>(
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                         prefixIcon: const Icon(Icons.manage_accounts),
                       ),
-                      items: RolUsuario.values.map((r) {
+                      items: RolUsuario.values
+                          .where((r) => r != RolUsuario.desconocido)
+                          .map((r) {
                         return DropdownMenuItem(value: r, child: Text(r.name.toUpperCase()));
                       }).toList(),
                       onChanged: (val) => setState(() => _selectedRol = val),

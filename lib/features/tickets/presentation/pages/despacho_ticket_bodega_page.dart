@@ -34,11 +34,16 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
     _tabController = TabController(length: 2, vsync: this);
     _items = widget.ticket.itemsDespachoBodega.map((i) => i.copyWith()).toList();
 
-    // 🛑 ENCLAVAMIENTO ESTRICTO: Solo inicializar y preseleccionar ítems VALIDADOS por Compras
+    // 🛑 ENCLAVAMIENTO: Solo inicializar y preseleccionar ítems HABILITADOS para despacho (con stock local o validados por Compras)
     for (final item in _items) {
-      if (item.validadoPorCompras && item.cantidadFaltante > 0) {
-        _cantidadesADespachar[item.codigo] = item.cantidadFaltante;
-        _itemsSeleccionados.add(item.codigo);
+      if (item.estaHabilitadoParaDespacho && item.cantidadFaltante > 0) {
+        final double maxDespachable = item.validadoPorCompras
+            ? item.cantidadFaltante
+            : (item.stockDisponibleAlEvaluar - item.cantidadDespachada).clamp(0.0, item.cantidadFaltante);
+        if (maxDespachable > 0) {
+          _cantidadesADespachar[item.codigo] = maxDespachable;
+          _itemsSeleccionados.add(item.codigo);
+        }
       }
     }
   }
@@ -50,10 +55,10 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
   }
 
   List<ItemDespachoBodegaEntity> get _itemsHabilitados =>
-      _items.where((i) => i.validadoPorCompras).toList();
+      _items.where((i) => i.estaHabilitadoParaDespacho).toList();
 
   List<ItemDespachoBodegaEntity> get _itemsPendientesCompras =>
-      _items.where((i) => !i.validadoPorCompras).toList();
+      _items.where((i) => !i.estaHabilitadoParaDespacho).toList();
 
   void _mostrarDialogoExportarExcel() {
     showModalBottomSheet(
@@ -189,8 +194,8 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
 
     for (final item in _items) {
       // 🛑 ENCLAVAMIENTO CRÍTICO:
-      // Jamás se despacha un ítem que no haya sido validado previamente por Compras
-      if (!item.validadoPorCompras) {
+      // Solo se despacha un ítem que esté habilitado (con stock suficiente o validado por Compras)
+      if (!item.estaHabilitadoParaDespacho) {
         itemsActualizados.add(item);
         continue;
       }
@@ -413,7 +418,7 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
               ),
               const SizedBox(height: 8),
               Text(
-                'Para que un repuesto aparezca aquí, Compras debe marcarlo con check en "Validación Bodega" indicando que ya llegó o fue autorizado.',
+                'Los repuestos aparecen aquí cuando cuentan con stock suficiente en bodega o han sido validados por Compras.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
               ),
@@ -591,10 +596,19 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                         IconButton(
                           icon: const Icon(Icons.add_circle_outline, size: 20),
                           color: const Color(0xFF005A9C),
-                          onPressed: isSelected && aDespachar < item.cantidadFaltante
+                          onPressed: (isSelected &&
+                                  aDespachar <
+                                      (item.validadoPorCompras
+                                          ? item.cantidadFaltante
+                                          : (item.stockDisponibleAlEvaluar - item.cantidadDespachada)
+                                              .clamp(0.0, item.cantidadFaltante)))
                               ? () {
+                                  final double maxDesp = item.validadoPorCompras
+                                      ? item.cantidadFaltante
+                                      : (item.stockDisponibleAlEvaluar - item.cantidadDespachada)
+                                          .clamp(0.0, item.cantidadFaltante);
                                   setState(() {
-                                    final nv = (aDespachar + 1).clamp(0.0, item.cantidadFaltante);
+                                    final nv = (aDespachar + 1).clamp(0.0, maxDesp);
                                     _cantidadesADespachar[item.codigo] = nv;
                                   });
                                 }

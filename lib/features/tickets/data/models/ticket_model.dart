@@ -1,6 +1,7 @@
 import 'tiempos_operativos_model.dart';
 import 'item_despacho_bodega_model.dart';
 import 'registro_despacho_model.dart';
+import 'orden_recepcion_repuestos_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:aquaspot_postventa/features/tickets/data/models/GestionComprasModel.dart';
 import 'package:aquaspot_postventa/features/tickets/data/models/evidencia_trabajo_model.dart';
@@ -67,6 +68,10 @@ class TicketModel extends TicketEntity {
     super.tecnicosAsignados = const [],
     super.diagnosticoFallas = const [],
     super.urlInformeTecnico,
+    super.ordenesRecepcion = const [],
+    super.materialesValidadosEnTaller = false,
+    super.supervisorValidoMateriales,
+    super.fechaValidacionMaterialesTaller,
   });
 
   factory TicketModel.fromJson(Map<String, dynamic> json) {
@@ -179,6 +184,18 @@ class TicketModel extends TicketEntity {
               .toList()
           : const [],
       urlInformeTecnico: json['urlInformeTecnico'] as String?,
+      ordenesRecepcion: json['ordenesRecepcion'] != null
+          ? (json['ordenesRecepcion'] as List)
+              .map((e) => OrdenRecepcionRepuestosModel.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : const [],
+      materialesValidadosEnTaller: json['materialesValidadosEnTaller'] as bool? ?? false,
+      supervisorValidoMateriales: json['supervisorValidoMateriales'] as String?,
+      fechaValidacionMaterialesTaller: json['fechaValidacionMaterialesTaller'] != null
+          ? (json['fechaValidacionMaterialesTaller'] is Timestamp
+              ? (json['fechaValidacionMaterialesTaller'] as Timestamp).toDate()
+              : DateTime.tryParse(json['fechaValidacionMaterialesTaller'].toString()))
+          : null,
     );
   }
 
@@ -251,6 +268,10 @@ class TicketModel extends TicketEntity {
       tecnicosAsignados: entity.tecnicosAsignados,
       diagnosticoFallas: entity.diagnosticoFallas,
       urlInformeTecnico: entity.urlInformeTecnico,
+      ordenesRecepcion: entity.ordenesRecepcion,
+      materialesValidadosEnTaller: entity.materialesValidadosEnTaller,
+      supervisorValidoMateriales: entity.supervisorValidoMateriales,
+      fechaValidacionMaterialesTaller: entity.fechaValidacionMaterialesTaller,
     );
 
   }
@@ -336,6 +357,15 @@ class TicketModel extends TicketEntity {
         return DiagnosticoFallaModel.fromEntity(e).toJson();
       }).toList(),
       'urlInformeTecnico': urlInformeTecnico,
+      'ordenesRecepcion': ordenesRecepcion.map((e) {
+        if (e is OrdenRecepcionRepuestosModel) return e.toJson();
+        return OrdenRecepcionRepuestosModel.fromEntity(e).toJson();
+      }).toList(),
+      'materialesValidadosEnTaller': materialesValidadosEnTaller,
+      'supervisorValidoMateriales': supervisorValidoMateriales,
+      'fechaValidacionMaterialesTaller': fechaValidacionMaterialesTaller != null
+          ? Timestamp.fromDate(fechaValidacionMaterialesTaller!)
+          : null,
     };
   }
 }

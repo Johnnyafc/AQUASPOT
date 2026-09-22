@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/entities/item_despacho_bodega_entity.dart';
 import '../../domain/entities/registro_despacho_entity.dart';
+import '../../domain/entities/orden_recepcion_repuestos_entity.dart';
 import '../../../../core/enum/ticket_enums.dart'; 
 import '../../../../core/enum/segmento_operativo.dart';
 import 'package:file_picker/file_picker.dart';
@@ -730,4 +731,78 @@ class SubirInformeTecnicoEvent extends TicketEvent {
 
   @override
   List<Object?> get props => [ticket, archivo, nombreUsuario, rolUsuario];
+}
+
+class AsignarTecnicoRecepcionBodegaEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final String tecnicoId;
+  final String tecnicoNombre;
+  final String nombreSupervisor;
+  final String rolSupervisor;
+  final String? ordenId;
+
+  const AsignarTecnicoRecepcionBodegaEvent({
+    required this.ticket,
+    required this.tecnicoId,
+    required this.tecnicoNombre,
+    required this.nombreSupervisor,
+    required this.rolSupervisor,
+    this.ordenId,
+  });
+
+  @override
+  List<Object?> get props => [ticket, tecnicoId, tecnicoNombre, nombreSupervisor, rolSupervisor, ordenId];
+}
+
+class ConfirmarRecepcionRepuestosTecnicoEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final String ordenId;
+  final List<ItemRecepcionRepuestoEntity> itemsValidados;
+  final String nombreTecnico;
+  final String rolTecnico;
+  final String? observacion;
+
+  const ConfirmarRecepcionRepuestosTecnicoEvent({
+    required this.ticket,
+    required this.ordenId,
+    required this.itemsValidados,
+    required this.nombreTecnico,
+    required this.rolTecnico,
+    this.observacion,
+  });
+
+  @override
+  List<Object?> get props => [ticket, ordenId, itemsValidados, nombreTecnico, rolTecnico, observacion];
+}
+
+class ValidarMaterialesRecibidosSupervisorEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final String nombreSupervisor;
+  final String rolSupervisor;
+
+  const ValidarMaterialesRecibidosSupervisorEvent({
+    required this.ticket,
+    required this.nombreSupervisor,
+    required this.rolSupervisor,
+  });
+
+  @override
+  List<Object?> get props => [ticket, nombreSupervisor, rolSupervisor];
+}
+
+class ValidarConsumoOrdenTallerEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final String ordenId;
+  final String nombreSupervisor;
+  final String rolSupervisor;
+
+  const ValidarConsumoOrdenTallerEvent({
+    required this.ticket,
+    required this.ordenId,
+    required this.nombreSupervisor,
+    required this.rolSupervisor,
+  });
+
+  @override
+  List<Object?> get props => [ticket, ordenId, nombreSupervisor, rolSupervisor];
 }
