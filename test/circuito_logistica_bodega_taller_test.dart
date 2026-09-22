@@ -1,11 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/item_despacho_bodega_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/orden_recepcion_repuestos_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/registro_despacho_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/data/models/registro_despacho_model.dart';
 import 'package:aquaspot_postventa/features/tickets/data/models/ticket_model.dart';
 import 'package:aquaspot_postventa/features/tickets/data/models/orden_recepcion_repuestos_model.dart';
 import 'package:aquaspot_postventa/features/tecnicos/data/models/tecnico_model.dart';
 import 'package:aquaspot_postventa/features/tickets/data/models/token_recepcion_externa_model.dart';
 import 'package:aquaspot_postventa/core/services/acceso_temporal_bodega_service.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/services/generador_excel_despacho_bodega.dart';
 
 void main() {
   group('Circuito Logística Integral Bodega -> Técnico -> Supervisor -> Taller', () {
@@ -509,6 +512,318 @@ void main() {
         validado: false,
       );
       expect(itemNegativo.esValida, isFalse);
+    });
+  });
+
+  group('Flujo de Despacho Bodega: Generación de Excels, Múltiples Evidencias y Bloqueo', () {
+    test('1. RegistroDespachoModel y Entity: soporte de fotosEvidenciasUrls y retrocompatibilidad', () {
+      // JSON legado sin fotos
+      final jsonLegado = {
+        'id': 'DESP-1001',
+        'fecha': '2026-09-22T10:00:00.000',
+        'usuarioNombre': 'Bodeguero Central',
+        'usuarioId': 'USR-1',
+        'items': [
+          {
+            'codigo': 'HID00355',
+            'descripcion': 'Eje Cónico',
+            'unidad': 'UNIDAD',
+            'cantidad': 1.0,
+          },
+        ],
+      };
+
+      final modelLegado = RegistroDespachoModel.fromJson(jsonLegado);
+      expect(modelLegado.fotosEvidenciasUrls, isEmpty);
+      expect(modelLegado.tieneEvidencia, isFalse);
+
+      // Despacho con múltiples fotos de soporte (repuestos + documento ERP)
+      final despachoConFotos = modelLegado.copyWith(
+        fotosEvidenciasUrls: [
+          'https://storage.googleapis.com/evidencia_repuestos_1.jpg',
+          'https://storage.googleapis.com/evidencia_documento_erp_2.jpg',
+        ],
+      );
+
+      expect(despachoConFotos.fotosEvidenciasUrls.length, equals(2));
+      expect(despachoConFotos.tieneEvidencia, isTrue);
+
+      final modelConFotos = RegistroDespachoModel.fromEntity(despachoConFotos);
+      final jsonNuevo = modelConFotos.toJson();
+      expect(jsonNuevo['fotosEvidenciasUrls'], isA<List>());
+      expect((jsonNuevo['fotosEvidenciasUrls'] as List).length, equals(2));
+
+      final deserializado = RegistroDespachoModel.fromJson(jsonNuevo);
+      expect(deserializado.fotosEvidenciasUrls.length, equals(2));
+      expect(deserializado.tieneEvidencia, isTrue);
+    });
+
+    test('2. Enclavamiento de Seguridad: tieneDespachoPendienteDeEvidencia bloquea bodega', () {
+      final ticketBase = TicketModel.fromJson({
+        'id': 'REQ-00049',
+        'estadoActual': 'compras',
+        'sede': 'DURAN',
+        'clienteId': 'CLI-AQ',
+        'campamento': 'Camaronera Norte',
+        'nombreContacto': 'Carlos Bodega',
+        'emailContacto': 'carlos@aquaspot.com',
+        'telefonoContacto': '0987654321',
+        'equipo': 'Caracol',
+        'fallaReportada': 'Cambio sellos',
+      });
+
+      // Ticket sin despachos aún: no tiene evidencia pendiente
+      expect(ticketBase.tieneDespachoPendienteDeEvidencia, isFalse);
+      expect(ticketBase.despachoPendienteDeEvidencia, isNull);
+
+      // Se realiza un despacho sin fotos aún (pendiente de subir soporte)
+      final despachoSinFotos = RegistroDespachoEntity(
+        id: 'DESP-1002',
+        fecha: DateTime.now(),
+        usuarioNombre: 'Bodeguero Central',
+        usuarioId: 'USR-BOD',
+        items: const [
+          DetalleItemDespachadoEntity(
+            codigo: 'PRT00048',
+            descripcion: 'Empaque O-Ring',
+            unidad: 'UNIDAD',
+            cantidad: 2,
+          ),
+        ],
+        fotosEvidenciasUrls: const [],
+      );
+
+      final ticketBloqueado = ticketBase.copyWith(
+        historialDespachos: [despachoSinFotos],
+      );
+
+      // Bloqueo activado: detecta despacho pendiente de evidencia
+      expect(ticketBloqueado.tieneDespachoPendienteDeEvidencia, isTrue);
+      expect(ticketBloqueado.despachoPendienteDeEvidencia?.id, equals('DESP-1002'));
+
+      // Se regulariza el despacho subiendo las evidencias fotográficas
+      final despachoRegularizado = despachoSinFotos.copyWith(
+        fotosEvidenciasUrls: ['https://storage.googleapis.com/evidencia_despacho_1002.jpg'],
+      );
+
+      final ticketDesbloqueado = ticketBase.copyWith(
+        historialDespachos: [despachoRegularizado],
+      );
+
+      // Bloqueo desactivado: ya cuenta con fotos de soporte
+      expect(ticketDesbloqueado.tieneDespachoPendienteDeEvidencia, isFalse);
+      expect(ticketDesbloqueado.despachoPendienteDeEvidencia, isNull);
+    });
+
+    test('3. GeneradorExcelDespachoBodega: generarExcelBajaERP genera archivo tabular válido', () {
+      final ticket = TicketModel.fromJson({
+        'id': 'REQ-00049',
+        'estadoActual': 'compras',
+        'sede': 'DURAN',
+        'clienteId': 'CLI-AQ',
+        'campamento': 'Camaronera Norte',
+        'nombreContacto': 'Carlos Bodega',
+        'emailContacto': 'carlos@aquaspot.com',
+        'telefonoContacto': '0987654321',
+        'equipo': 'Caracol',
+        'fallaReportada': 'Mantenimiento',
+      });
+
+      final bytes = GeneradorExcelDespachoBodega.generarExcelBajaERP(
+        ticket: ticket,
+        itemsDespachados: const [
+          DetalleItemDespachadoEntity(
+            codigo: 'HID00355',
+            descripcion: 'Eje Conico Charlynn',
+            unidad: 'UNIDAD',
+            cantidad: 2,
+          ),
+        ],
+      );
+
+      expect(bytes, isNotEmpty);
+      expect(bytes.length, greaterThan(100));
+    });
+
+    test('4. GeneradorExcelDespachoBodega: generarExcelSolicitudMateriales genera formato formal con firmas', () {
+      final ticket = TicketModel.fromJson({
+        'id': 'REQ-00049',
+        'estadoActual': 'compras',
+        'codigoProyecto': 'PROJ-AQ-01',
+        'numeroSerie': 'AQ-SN-999',
+        'sede': 'DURAN',
+        'clienteId': 'CLI-AQ',
+        'campamento': 'Camaronera Norte',
+        'nombreContacto': 'Carlos Bodega',
+        'emailContacto': 'carlos@aquaspot.com',
+        'telefonoContacto': '0987654321',
+        'equipo': 'Caracol',
+        'fallaReportada': 'Mantenimiento',
+      });
+
+      final bytes = GeneradorExcelDespachoBodega.generarExcelSolicitudMateriales(
+        ticket: ticket,
+        items: const [
+          ItemDespachoBodegaEntity(
+            codigo: 'HID00355',
+            descripcion: 'Eje Conico Charlynn',
+            unidad: 'UNIDAD',
+            cantidadSolicitada: 3,
+            cantidadDespachada: 0,
+            stockDisponibleAlEvaluar: 3,
+            validadoPorCompras: true,
+          ),
+          ItemDespachoBodegaEntity(
+            codigo: 'INS000170',
+            descripcion: 'Aceite Hidráulico AW68',
+            unidad: 'CANECA',
+            cantidadSolicitada: 2,
+            cantidadDespachada: 0,
+            stockDisponibleAlEvaluar: 0,
+            validadoPorCompras: false,
+          ),
+        ],
+        cantidadesDespachadasLote: {'HID00355': 2.0},
+        nombreBodeguero: 'Juan Bodeguero',
+        nombreTecnico: 'Pedro Mecánico',
+      );
+
+      expect(bytes, isNotEmpty);
+      expect(bytes.length, greaterThan(100));
+    });
+
+    test('5. Código Consecutivo de Despacho por Ticket', () {
+      final ticketBase = TicketModel.fromJson({
+        'id': 'REQ-00051',
+        'estadoActual': 'bodega',
+        'sede': 'DURAN',
+        'clienteId': 'CLI-01',
+        'campamento': 'Lebama',
+        'nombreContacto': 'Ing. Juan',
+        'emailContacto': 'juan@empresa.com',
+        'telefonoContacto': '0987654321',
+        'equipo': 'Caracol',
+        'fallaReportada': 'Revisión',
+      });
+
+      // Sin despachos previos -> correlativo 1
+      final int correlativo1 = ticketBase.historialDespachos.length + 1;
+      final codigo1 = '${ticketBase.id}-DESP-${correlativo1.toString().padLeft(2, '0')}';
+      expect(codigo1, equals('REQ-00051-DESP-01'));
+
+      // Con 1 despacho previo -> correlativo 2
+      final ticketConUnDespacho = ticketBase.copyWith(
+        historialDespachos: [
+          RegistroDespachoEntity(
+            id: codigo1,
+            fecha: DateTime.now(),
+            usuarioNombre: 'Bodega',
+            usuarioId: 'USR-01',
+            items: const [],
+            fotosEvidenciasUrls: const ['https://storage.url/foto1.jpg'],
+          ),
+        ],
+      );
+
+      final int correlativo2 = ticketConUnDespacho.historialDespachos.length + 1;
+      final codigo2 = '${ticketConUnDespacho.id}-DESP-${correlativo2.toString().padLeft(2, '0')}';
+      expect(codigo2, equals('REQ-00051-DESP-02'));
+    });
+
+    test('6. Ítems con stock local en bodega se habilitan inmediatamente para despacho', () {
+      // Repuesto que cuenta con stock en bodega
+      const itemConStock = ItemDespachoBodegaEntity(
+        codigo: 'HID00355',
+        descripcion: 'EJE CONICO',
+        unidad: 'UNIDAD',
+        cantidadSolicitada: 1,
+        stockDisponibleAlEvaluar: 2, // Stock: 2 en bodega
+        validadoPorCompras: false,
+      );
+
+      // Repuesto sin stock en bodega
+      const itemSinStock = ItemDespachoBodegaEntity(
+        codigo: 'INS000019',
+        descripcion: 'BROCHA 1"',
+        unidad: 'UNIDAD',
+        cantidadSolicitada: 1,
+        stockDisponibleAlEvaluar: 0, // Falta: 1.0
+        validadoPorCompras: false,
+      );
+
+      expect(itemConStock.estaHabilitadoParaDespacho, isTrue);
+      expect(itemSinStock.estaHabilitadoParaDespacho, isFalse);
+
+      // Si Compras valida la brocha que llegó físicamente:
+      final itemBrochaValidada = itemSinStock.copyWith(validadoPorCompras: true);
+      expect(itemBrochaValidada.estaHabilitadoParaDespacho, isTrue);
+    });
+
+    test('7. Enclavamiento de despacho completo sin evidencia: permanece en Bodega y bloqueado hasta regularizar', () {
+      final ticketDespachadoTotalmente = TicketModel.fromJson({
+        'id': 'REQ-00051',
+        'estadoActual': 'bodega',
+        'sede': 'DURAN',
+        'clienteId': 'CLI-01',
+        'campamento': 'Camp 1',
+        'nombreContacto': 'Juan Perez',
+        'emailContacto': 'juan@mail.com',
+        'telefonoContacto': '0999999999',
+        'equipo': 'Caracol',
+        'fallaReportada': 'Ruido',
+        'codigoProyecto': 'PRY-2026-001',
+      }).copyWith(
+        itemsDespachoBodega: const [
+          ItemDespachoBodegaEntity(
+            codigo: 'INS000019',
+            descripcion: 'BROCHA 1"',
+            unidad: 'UNIDAD',
+            cantidadSolicitada: 1,
+            stockDisponibleAlEvaluar: 1,
+            cantidadDespachada: 1, // Despachado 1 de 1
+            validadoPorCompras: true,
+          ),
+        ],
+        historialDespachos: [
+          RegistroDespachoEntity(
+            id: 'REQ-00051-DESP-01',
+            fecha: DateTime.now(),
+            usuarioNombre: 'Bodega',
+            usuarioId: 'USR-01',
+            items: const [
+              DetalleItemDespachadoEntity(
+                codigo: 'INS000019',
+                descripcion: 'BROCHA 1"',
+                unidad: 'UNIDAD',
+                cantidad: 1,
+              ),
+            ],
+            fotosEvidenciasUrls: const [], // Sin fotos -> Requiere evidencia
+          ),
+        ],
+      );
+
+      expect(ticketDespachadoTotalmente.bodegaDespachoCompleto, isTrue);
+      expect(ticketDespachadoTotalmente.tieneDespachoPendienteDeEvidencia, isTrue);
+
+      // Simulación del filtro de Bandeja Despacho Bodega:
+      final saleDeBodega = ticketDespachadoTotalmente.bodegaDespachoCompleto &&
+          !ticketDespachadoTotalmente.tieneDespachoPendienteDeEvidencia;
+      expect(saleDeBodega, isFalse, reason: 'No debe salir de Bodega si debe evidencias');
+
+      // Regularización: se suben las fotos
+      final ticketRegularizado = ticketDespachadoTotalmente.copyWith(
+        historialDespachos: [
+          ticketDespachadoTotalmente.historialDespachos.first.copyWith(
+            fotosEvidenciasUrls: const ['https://firebasestorage.googleapis.com/.../foto.jpg'],
+          ),
+        ],
+      );
+
+      expect(ticketRegularizado.tieneDespachoPendienteDeEvidencia, isFalse);
+      final saleDeBodegaRegularizado = ticketRegularizado.bodegaDespachoCompleto &&
+          !ticketRegularizado.tieneDespachoPendienteDeEvidencia;
+      expect(saleDeBodegaRegularizado, isTrue, reason: 'Al regularizar sale de Bodega hacia Taller');
     });
   });
 }

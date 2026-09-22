@@ -414,6 +414,7 @@ class ProcesarGestionComprasEvent extends TicketEvent {
   final String observacion;
   final String nombreUsuario;
   final String rolUsuario;
+  final List<ItemDespachoBodegaEntity>? itemsActualizados;
 
   const ProcesarGestionComprasEvent({
     required this.ticket,
@@ -421,15 +422,17 @@ class ProcesarGestionComprasEvent extends TicketEvent {
     required this.observacion,
     required this.nombreUsuario,
     required this.rolUsuario,
+    this.itemsActualizados,
   });
 
   @override
-  List<Object> get props => [
+  List<Object?> get props => [
         ticket, 
         archivosOrdenCompra, 
         observacion, 
         nombreUsuario, 
-        rolUsuario
+        rolUsuario,
+        itemsActualizados,
       ];
 }
 // Añada esta clase a su archivo de eventos
@@ -677,6 +680,31 @@ class RegistrarDespachoBodegaEvent extends TicketEvent {
 
   @override
   List<Object?> get props => [ticket, itemsActualizados, nuevoRegistro, nombreUsuario, rolUsuario];
+}
+
+class ActualizarEvidenciasDespachoEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final String despachoId;
+  final List<XFile> fotosEvidencias;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const ActualizarEvidenciasDespachoEvent({
+    required this.ticket,
+    required this.despachoId,
+    required this.fotosEvidencias,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [
+        ticket,
+        despachoId,
+        fotosEvidencias,
+        nombreUsuario,
+        rolUsuario,
+      ];
 }
 
 // ==========================================

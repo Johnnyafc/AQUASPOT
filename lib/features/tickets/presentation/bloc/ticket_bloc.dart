@@ -101,6 +101,7 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     on<DeclararNoRequiereComprasEvent>(_onDeclararNoRequiereCompras);
     on<GuardarValidacionBodegaComprasEvent>(_onGuardarValidacionBodegaCompras);
     on<RegistrarDespachoBodegaEvent>(_onRegistrarDespachoBodega);
+    on<ActualizarEvidenciasDespachoEvent>(_onActualizarEvidenciasDespacho);
     on<AsignarTecnicosTrabajoEvent>(_onAsignarTecnicosTrabajo);
     on<GuardarDiagnosticoFallasEvent>(_onGuardarDiagnosticoFallas);
     on<SubirInformeTecnicoEvent>(_onSubirInformeTecnico);
@@ -198,10 +199,12 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     (failure) => emit(state.copyWith(status: TicketStatus.error, message: 'Error al actualizar Firestore')),
     (ticketGuardado) {
       final listaActualizada = state.historial.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+      final listaTickets = state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
       emit(state.copyWith(
         status: TicketStatus.operationSuccess,
         message: 'Evidencia procesada correctamente.',
         historial: listaActualizada,
+        tickets: listaTickets,
         currentTicket: ticketGuardado,
       ));
     }
@@ -1150,7 +1153,7 @@ Future<void> _onProcesarGestionCompras(
     // ==========================================
     // Permanece en Compras para el paso obligatorio de Validación Bodega (Compras).
     // Para Caracol, inicializamos validadoPorCompras: true para los ítems que ya cuentan con stock en bodega.
-    List<ItemDespachoBodegaEntity> itemsActualizados = event.ticket.itemsDespachoBodega;
+    List<ItemDespachoBodegaEntity> itemsActualizados = event.itemsActualizados ?? event.ticket.itemsDespachoBodega;
     if (itemsActualizados.isEmpty && (event.ticket.evaluacionTecnica?.repuestosTaller.isNotEmpty ?? false)) {
       itemsActualizados = event.ticket.evaluacionTecnica!.repuestosTaller.map((r) {
         return ItemDespachoBodegaEntity(
@@ -1166,7 +1169,7 @@ Future<void> _onProcesarGestionCompras(
               : DateTime.now(),
         );
       }).toList();
-    } else if (itemsActualizados.isNotEmpty) {
+    } else if (itemsActualizados.isNotEmpty && event.itemsActualizados == null) {
       itemsActualizados = itemsActualizados.map((item) {
         final tieneStock = item.stockDisponibleAlEvaluar >= item.cantidadSolicitada;
         return item.copyWith(
@@ -1197,6 +1200,9 @@ Future<void> _onProcesarGestionCompras(
         final listaActualizada = state.historial.map((t) => 
           t.id == ticketGuardado.id ? ticketGuardado : t
         ).toList();
+        final listaTickets = state.tickets.map((t) => 
+          t.id == ticketGuardado.id ? ticketGuardado : t
+        ).toList();
 
         // Retroalimentación visual dinámica en la HMI
         emit(state.copyWith(
@@ -1205,6 +1211,7 @@ Future<void> _onProcesarGestionCompras(
               ? 'Liberación local registrada. Pase a Validación Bodega.'
               : 'Órdenes externas consolidadas. Pase a Validación Bodega.',
           historial: listaActualizada,
+          tickets: listaTickets,
           currentTicket: ticketGuardado,
         ));
       }
@@ -2382,11 +2389,15 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
         final listaActualizada = state.historial
             .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
             .toList();
+        final listaTickets = state.tickets
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
 
         emit(state.copyWith(
           status: TicketStatus.operationSuccess,
           message: mensajeExito,
           historial: listaActualizada,
+          tickets: listaTickets,
           currentTicket: ticketGuardado,
         ));
       },
@@ -2408,12 +2419,15 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
     );
 
     final esDespachoCompleto = ticketConItems.bodegaDespachoCompleto;
+    final bool transferirATaller = esDespachoCompleto && !ticketConItems.tieneDespachoPendienteDeEvidencia;
 
     final nuevosEventos = [
       ...event.ticket.historialEventos,
       EventoAuditoriaEntity(
         accion: esDespachoCompleto
-            ? 'BODEGA: DESPACHO TOTAL Y TRANSFERENCIA A PROCESO DE TRABAJO (${event.nuevoRegistro.items.length} ítems entregados)'
+            ? (transferirATaller 
+                ? 'BODEGA: DESPACHO TOTAL Y TRANSFERENCIA A PROCESO DE TRABAJO (${event.nuevoRegistro.items.length} ítems entregados)'
+                : 'BODEGA: DESPACHO TOTAL REGISTRADO - PENDIENTE DE EVIDENCIAS FOTOGRÁFICAS (${event.nuevoRegistro.items.length} ítems entregados)')
             : 'BODEGA: DESPACHO PARCIAL (${event.nuevoRegistro.items.length} ítems entregados)',
         usuarioNombre: event.nombreUsuario,
         usuarioRol: event.rolUsuario,
@@ -2430,7 +2444,7 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
     );
 
     final ticketActualizado = ticketConItems.copyWith(
-      estadoActual: esDespachoCompleto ? EstadoTicket.procesoTrabajo : ticketConItems.estadoActual,
+      estadoActual: transferirATaller ? EstadoTicket.procesoTrabajo : ticketConItems.estadoActual,
       tiemposOperativos: tiemposBodega,
       historialEventos: nuevosEventos,
     );
@@ -2445,6 +2459,9 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
         final listaActualizada = state.historial
             .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
             .toList();
+        final listaTickets = state.tickets
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
 
         emit(state.copyWith(
           status: TicketStatus.operationSuccess,
@@ -2452,6 +2469,89 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
               ? '✅ Despacho total completado: Ticket transferido a Proceso de Trabajo.'
               : '✅ Despacho parcial registrado exitosamente. Notificado a Taller.',
           historial: listaActualizada,
+          tickets: listaTickets,
+          currentTicket: ticketGuardado,
+        ));
+      },
+    );
+  }
+
+  Future<void> _onActualizarEvidenciasDespacho(
+    ActualizarEvidenciasDespachoEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Subiendo fotos de evidencia del despacho...',
+    ));
+
+    final List<String> urlsEvidencias = [];
+    for (final foto in event.fotosEvidencias) {
+      final uploadResult = await subirEvidenciaUseCase(foto, event.ticket.id);
+      uploadResult.fold(
+        (failure) => null,
+        (url) => urlsEvidencias.add(url),
+      );
+    }
+
+    if (urlsEvidencias.isEmpty) {
+      emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'No se pudo subir ninguna foto de evidencia. Verifique su conexión.',
+      ));
+      return;
+    }
+
+    final nuevoHistorial = event.ticket.historialDespachos.map((d) {
+      if (d.id == event.despachoId) {
+        return d.copyWith(
+          fotosEvidenciasUrls: [...d.fotosEvidenciasUrls, ...urlsEvidencias],
+        );
+      }
+      return d;
+    }).toList();
+
+    final nuevosEventos = [
+      ...event.ticket.historialEventos,
+      EventoAuditoriaEntity(
+        accion: 'BODEGA: REGISTRO DE ${urlsEvidencias.length} EVIDENCIAS PARA DESPACHO ${event.despachoId}',
+        usuarioNombre: event.nombreUsuario,
+        usuarioRol: event.rolUsuario,
+        timestamp: DateTime.now(),
+      ),
+    ];
+
+    final ticketConNuevoHistorial = event.ticket.copyWith(
+      historialDespachos: nuevoHistorial,
+    );
+
+    final esDespachoCompletoYEvidenciasOk = ticketConNuevoHistorial.bodegaDespachoCompleto &&
+        !ticketConNuevoHistorial.tieneDespachoPendienteDeEvidencia;
+
+    final ticketActualizado = ticketConNuevoHistorial.copyWith(
+      estadoActual: esDespachoCompletoYEvidenciasOk ? EstadoTicket.procesoTrabajo : event.ticket.estadoActual,
+      historialEventos: nuevosEventos,
+    );
+
+    final result = await actualizarTicket(ticketActualizado);
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Fallo al guardar evidencias: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) {
+        final listaActualizada = state.historial
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+        final listaTickets = state.tickets
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: '✅ Evidencias del despacho guardadas correctamente.',
+          historial: listaActualizada,
+          tickets: listaTickets,
           currentTicket: ticketGuardado,
         ));
       },

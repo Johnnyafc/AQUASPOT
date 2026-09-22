@@ -447,6 +447,15 @@ const TicketEntity({
     });
   }
 
+  /// 🛑 ENCLAVAMIENTO DE SEGURIDAD EN BODEGA:
+  /// Retorna true si existe algún despacho en el historial que NO cuenta con fotos de evidencia de respaldo
+  bool get tieneDespachoPendienteDeEvidencia =>
+      historialDespachos.any((d) => d.fotosEvidenciasUrls.isEmpty);
+
+  /// Retorna el despacho pendiente de regularizar fotos de evidencia (si existe)
+  RegistroDespachoEntity? get despachoPendienteDeEvidencia =>
+      historialDespachos.where((d) => d.fotosEvidenciasUrls.isEmpty).lastOrNull;
+
   /// Retorna verdadero si el 100% de los repuestos solicitados ya fueron recibidos físicamente en el taller
   bool get todosRepuestosRecibidosEnTaller {
     if (itemsDespachoBodega.isEmpty) return true;

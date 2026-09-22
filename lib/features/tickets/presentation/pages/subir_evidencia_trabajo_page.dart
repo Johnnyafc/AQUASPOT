@@ -882,30 +882,36 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
               const SizedBox(height: 12),
               
               // Selector de Fotos
-              ListTile(
-                tileColor: Colors.white,
+              Material(
+                color: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.blueGrey.shade200)),
-                leading: const Icon(Icons.add_a_photo, color: Colors.blueGrey),
-                title: const Text('Adjuntar Fotografías'),
-                subtitle: Text('${_fotosSeleccionadas.length} fotos seleccionadas'),
-                trailing: ElevatedButton(
-                  onPressed: () => _seleccionarArchivos(FileType.image),
-                  child: const Text('EXAMINAR'),
+                clipBehavior: Clip.antiAlias,
+                child: ListTile(
+                  leading: const Icon(Icons.add_a_photo, color: Colors.blueGrey),
+                  title: const Text('Adjuntar Fotografías'),
+                  subtitle: Text('${_fotosSeleccionadas.length} fotos seleccionadas'),
+                  trailing: ElevatedButton(
+                    onPressed: () => _seleccionarArchivos(FileType.image),
+                    child: const Text('EXAMINAR'),
+                  ),
                 ),
               ),
               _buildGaleriaFotos(),
               const SizedBox(height: 12),
               
               // Selector de Videos
-              ListTile(
-                tileColor: Colors.white,
+              Material(
+                color: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.blueGrey.shade200)),
-                leading: const Icon(Icons.video_call, color: Colors.blueGrey),
-                title: const Text('Adjuntar Videos'),
-                subtitle: Text('${_videosSeleccionados.length} videos seleccionados'),
-                trailing: ElevatedButton(
-                  onPressed: () => _seleccionarArchivos(FileType.video),
-                  child: const Text('EXAMINAR'),
+                clipBehavior: Clip.antiAlias,
+                child: ListTile(
+                  leading: const Icon(Icons.video_call, color: Colors.blueGrey),
+                  title: const Text('Adjuntar Videos'),
+                  subtitle: Text('${_videosSeleccionados.length} videos seleccionados'),
+                  trailing: ElevatedButton(
+                    onPressed: () => _seleccionarArchivos(FileType.video),
+                    child: const Text('EXAMINAR'),
+                  ),
                 ),
               ),
               _buildGaleriaVideos(),

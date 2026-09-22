@@ -7,6 +7,8 @@ import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_event.dart';
+import '../../domain/entities/item_despacho_bodega_entity.dart';
+import '../../../inventario/domain/entities/item_inventario_entity.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_picker/file_picker.dart';
@@ -15,7 +17,6 @@ import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_state.dart';
 import '../../domain/entities/ticket_entity.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'dart:convert';
 import '../../../../core/utils/web_previsualizador.dart';
 import '../widgets/tarjeta_no_requiere_compras_widget.dart';
 
@@ -138,6 +139,37 @@ class _GestionComprasPageState extends State<GestionComprasPage> {
       operador = authState.usuario.nombre;
       rol = authState.usuario.rol.name.toUpperCase();
     } 
+
+    // 🔍 Sincronización en vivo con el catálogo de inventario en bodega
+    final invState = context.read<InventarioBloc>().state;
+    final Map<String, ItemInventarioEntity> mapaStock =
+        invState is InventarioLoaded ? invState.mapaPorCodigo : {};
+
+    final baseItems = widget.ticket.itemsDespachoBodega.isNotEmpty
+        ? widget.ticket.itemsDespachoBodega
+        : (widget.ticket.evaluacionTecnica?.repuestosTaller ?? []).map((r) => ItemDespachoBodegaEntity(
+            codigo: r.codigo,
+            descripcion: r.descripcion,
+            unidad: r.unidad,
+            cantidadSolicitada: r.cantidad,
+            stockDisponibleAlEvaluar: 0.0,
+            validadoPorCompras: false,
+            cantidadDespachada: 0.0,
+            fechaSolicitud: widget.ticket.historialEventos.isNotEmpty
+                ? widget.ticket.historialEventos.first.timestamp
+                : DateTime.now(),
+          )).toList();
+
+    final itemsActualizados = baseItems.map((i) {
+      final codKey = i.codigo.trim().toUpperCase();
+      final stockItem = mapaStock[codKey];
+      final double stockReal = stockItem?.stockDisponible ?? i.stockDisponibleAlEvaluar;
+      final bool tieneStock = stockReal >= i.cantidadSolicitada;
+      return i.copyWith(
+        stockDisponibleAlEvaluar: stockReal > i.stockDisponibleAlEvaluar ? stockReal : i.stockDisponibleAlEvaluar,
+        validadoPorCompras: i.validadoPorCompras || tieneStock || widget.ticket.noRequiereCompras,
+      );
+    }).toList();
     
     context.read<TicketBloc>().add(
       ProcesarGestionComprasEvent(
@@ -147,6 +179,7 @@ class _GestionComprasPageState extends State<GestionComprasPage> {
         observacion: _observacionController.text,
         nombreUsuario: operador,
         rolUsuario: rol,
+        itemsActualizados: itemsActualizados,
       ),
     );
     
@@ -281,7 +314,7 @@ class _GestionComprasPageState extends State<GestionComprasPage> {
                           context: context,
                           titulo: 'Orden de Venta (OV) Comercial Adjunta',
                           subtitulo: 'Requerimiento comercial base para compras.',
-                          urlPDF: widget.ticket.codigoOrdenVenta!.first,
+                          urlPDF: widget.ticket.codigoOrdenVenta.first,
                         )
                       else
                         const Text('⚠️ No se detectó documento de Orden de Venta comercial adjunto.', style: TextStyle(color: Colors.red, fontSize: 12)),

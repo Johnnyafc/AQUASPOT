@@ -24,6 +24,7 @@ class RegistroDespachoEntity extends Equatable {
   final String usuarioId;
   final List<DetalleItemDespachadoEntity> items;
   final String? notas;
+  final List<String> fotosEvidenciasUrls;
 
   const RegistroDespachoEntity({
     required this.id,
@@ -32,8 +33,39 @@ class RegistroDespachoEntity extends Equatable {
     required this.usuarioId,
     required this.items,
     this.notas,
+    this.fotosEvidenciasUrls = const [],
   });
 
+  bool get tieneEvidencia => fotosEvidenciasUrls.isNotEmpty;
+
+  RegistroDespachoEntity copyWith({
+    String? id,
+    DateTime? fecha,
+    String? usuarioNombre,
+    String? usuarioId,
+    List<DetalleItemDespachadoEntity>? items,
+    String? notas,
+    List<String>? fotosEvidenciasUrls,
+  }) {
+    return RegistroDespachoEntity(
+      id: id ?? this.id,
+      fecha: fecha ?? this.fecha,
+      usuarioNombre: usuarioNombre ?? this.usuarioNombre,
+      usuarioId: usuarioId ?? this.usuarioId,
+      items: items ?? this.items,
+      notas: notas ?? this.notas,
+      fotosEvidenciasUrls: fotosEvidenciasUrls ?? this.fotosEvidenciasUrls,
+    );
+  }
+
   @override
-  List<Object?> get props => [id, fecha, usuarioNombre, usuarioId, items, notas];
+  List<Object?> get props => [
+        id,
+        fecha,
+        usuarioNombre,
+        usuarioId,
+        items,
+        notas,
+        fotosEvidenciasUrls,
+      ];
 }

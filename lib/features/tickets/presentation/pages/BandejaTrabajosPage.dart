@@ -85,7 +85,7 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
               );
             }
 
-            final listaAProcesar = state.tickets.isNotEmpty ? state.tickets : state.historial;
+            final listaAProcesar = state.historial.isNotEmpty ? state.historial : state.tickets;
 
             final ticketsTrabajo = listaAProcesar.where((t) {
               if (t.estadoActual == EstadoTicket.validacionFacturacion ||

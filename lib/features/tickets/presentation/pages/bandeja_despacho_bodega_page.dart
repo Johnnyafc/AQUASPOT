@@ -31,13 +31,12 @@ class BandejaDespachoBodegaPage extends StatelessWidget {
           // o cuando Compras haya validado al menos un ítem o esté formalmente en Bodega,
           // y que aún no estén despachados al 100%
           final ticketsDespacho = state.historial.where((t) {
-            // Solo tickets que tengan repuestos para despacho en bodega
-            if (t.itemsDespachoBodega.isEmpty) return false;
+            // Repuestos registrados para despacho en bodega
+            final bool tieneRepuestos = t.itemsDespachoBodega.isNotEmpty ||
+                (t.evaluacionTecnica?.repuestosTaller.isNotEmpty ?? false);
+            if (!tieneRepuestos) return false;
 
             // Si ya pasó a etapas posteriores al taller
-            if (t.estadoActual == EstadoTicket.procesoTrabajo && t.bodegaDespachoCompleto) {
-              return false;
-            }
             if (t.estadoActual == EstadoTicket.validacionFacturacion ||
                 t.estadoActual == EstadoTicket.entrega ||
                 t.estadoActual == EstadoTicket.finalizado ||
@@ -45,12 +44,16 @@ class BandejaDespachoBodegaPage extends StatelessWidget {
               return false;
             }
 
+            // Si ya completó el 100% de despacho Y no tiene evidencias pendientes, ya concluyó su ciclo en bodega
+            if (t.bodegaDespachoCompleto && !t.tieneDespachoPendienteDeEvidencia) {
+              return false;
+            }
+
             final tieneProyecto = t.codigoProyecto != null && t.codigoProyecto!.trim().isNotEmpty;
             final enEstadoBodega = t.estadoActual == EstadoTicket.bodega;
             final visiblePorCompras = t.tieneAlMenosUnCheckCompras;
-            final despachoIncompleto = !t.bodegaDespachoCompleto;
 
-            return (tieneProyecto || enEstadoBodega || visiblePorCompras) && despachoIncompleto;
+            return tieneProyecto || enEstadoBodega || visiblePorCompras;
           }).toList();
 
           if (ticketsDespacho.isEmpty) {
@@ -155,26 +158,34 @@ class BandejaDespachoBodegaPage extends StatelessWidget {
                                 vertical: 3,
                               ),
                               decoration: BoxDecoration(
-                                color: tieneParcial
-                                    ? Colors.orange.shade50
-                                    : const Color(0xFFE8F5E9),
+                                color: ticket.tieneDespachoPendienteDeEvidencia
+                                    ? Colors.amber.shade100
+                                    : tieneParcial
+                                        ? Colors.orange.shade50
+                                        : const Color(0xFFE8F5E9),
                                 borderRadius: BorderRadius.circular(6),
                                 border: Border.all(
-                                  color: tieneParcial
-                                      ? Colors.orange
-                                      : const Color(0xFF2E7D32),
+                                  color: ticket.tieneDespachoPendienteDeEvidencia
+                                      ? Colors.amber.shade800
+                                      : tieneParcial
+                                          ? Colors.orange
+                                          : const Color(0xFF2E7D32),
                                 ),
                               ),
                               child: Text(
-                                tieneParcial
-                                    ? 'Despacho Parcial'
-                                    : '$validadosCompras Ítems Listos',
+                                ticket.tieneDespachoPendienteDeEvidencia
+                                    ? '⚠️ Bloqueado: Falta Evidencia'
+                                    : tieneParcial
+                                        ? 'Despacho Parcial'
+                                        : '$validadosCompras Ítems Listos',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
-                                  color: tieneParcial
-                                      ? Colors.orange.shade900
-                                      : const Color(0xFF2E7D32),
+                                  color: ticket.tieneDespachoPendienteDeEvidencia
+                                      ? Colors.amber.shade900
+                                      : tieneParcial
+                                          ? Colors.orange.shade900
+                                          : const Color(0xFF2E7D32),
                                 ),
                               ),
                             ),

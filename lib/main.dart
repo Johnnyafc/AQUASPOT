@@ -71,20 +71,7 @@ class AquaspotApp extends StatelessWidget {
           useMaterial3: true,
         ),
 
-        // 📋 SELECCIÓN DE TEXTO: Habilita copiar/pegar con mouse en TODO texto
-        // de la app (tickets, clientes, etc.) sin tocar cada widget uno por uno.
-        // Nota: SelectionArea necesita un Overlay como ancestro. El builder de
-        // MaterialApp se ejecuta POR FUERA del Navigator (donde vive su propio
-        // Overlay), así que le damos uno propio aquí para que funcione.
-        builder: (context, child) {
-          return Overlay(
-            initialEntries: [
-              OverlayEntry(
-                builder: (context) => SelectionArea(child: child!),
-              ),
-            ],
-          );
-        },
+        builder: (context, child) => child ?? const SizedBox.shrink(),
 
         // ✅ TABLA DE ENRUTAMIENTO INDUSTRIAL
         initialRoute: (Uri.base.fragment.contains('recepcion-externa') ||

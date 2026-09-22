@@ -45,6 +45,7 @@ class RegistroDespachoModel extends RegistroDespachoEntity {
     required super.usuarioId,
     required super.items,
     super.notas,
+    super.fotosEvidenciasUrls,
   });
 
   factory RegistroDespachoModel.fromJson(Map<String, dynamic> json) {
@@ -62,6 +63,9 @@ class RegistroDespachoModel extends RegistroDespachoEntity {
         .map((e) => DetalleItemDespachadoModel.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
 
+    final rawFotos = json['fotosEvidenciasUrls'] as List<dynamic>? ?? [];
+    final fotosEvidenciasUrls = rawFotos.map((e) => e.toString()).toList();
+
     return RegistroDespachoModel(
       id: json['id']?.toString() ?? '',
       fecha: fecha,
@@ -69,6 +73,7 @@ class RegistroDespachoModel extends RegistroDespachoEntity {
       usuarioId: json['usuarioId']?.toString() ?? '',
       items: items,
       notas: json['notas']?.toString(),
+      fotosEvidenciasUrls: fotosEvidenciasUrls,
     );
   }
 
@@ -82,6 +87,7 @@ class RegistroDespachoModel extends RegistroDespachoEntity {
           .map((e) => DetalleItemDespachadoModel.fromEntity(e))
           .toList(),
       notas: entity.notas,
+      fotosEvidenciasUrls: entity.fotosEvidenciasUrls,
     );
   }
 
@@ -96,6 +102,7 @@ class RegistroDespachoModel extends RegistroDespachoEntity {
         return DetalleItemDespachadoModel.fromEntity(e).toJson();
       }).toList(),
       'notas': notas,
+      'fotosEvidenciasUrls': fotosEvidenciasUrls,
     };
   }
 }
