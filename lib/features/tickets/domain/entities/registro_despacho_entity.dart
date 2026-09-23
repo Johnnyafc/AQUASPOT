@@ -25,6 +25,13 @@ class RegistroDespachoEntity extends Equatable {
   final List<DetalleItemDespachadoEntity> items;
   final String? notas;
   final List<String> fotosEvidenciasUrls;
+  // NUEVO: candado de idempotencia para el descuento automatico de stock.
+  // Se pone en true la primera (y unica) vez que este despacho puntual
+  // resta stock en inventario_bodega, dentro de una transaccion de
+  // Firestore. Si llegan mas evidencias despues para el mismo despacho
+  // (subida en varias tandas), este flag evita que se descuente dos veces.
+  // Default false para no romper despachos ya guardados antes de este campo.
+  final bool stockDescontado;
 
   const RegistroDespachoEntity({
     required this.id,
@@ -34,6 +41,7 @@ class RegistroDespachoEntity extends Equatable {
     required this.items,
     this.notas,
     this.fotosEvidenciasUrls = const [],
+    this.stockDescontado = false,
   });
 
   bool get tieneEvidencia => fotosEvidenciasUrls.isNotEmpty;
@@ -46,6 +54,7 @@ class RegistroDespachoEntity extends Equatable {
     List<DetalleItemDespachadoEntity>? items,
     String? notas,
     List<String>? fotosEvidenciasUrls,
+    bool? stockDescontado,
   }) {
     return RegistroDespachoEntity(
       id: id ?? this.id,
@@ -55,6 +64,7 @@ class RegistroDespachoEntity extends Equatable {
       items: items ?? this.items,
       notas: notas ?? this.notas,
       fotosEvidenciasUrls: fotosEvidenciasUrls ?? this.fotosEvidenciasUrls,
+      stockDescontado: stockDescontado ?? this.stockDescontado,
     );
   }
 
@@ -67,5 +77,6 @@ class RegistroDespachoEntity extends Equatable {
         items,
         notas,
         fotosEvidenciasUrls,
+        stockDescontado,
       ];
 }

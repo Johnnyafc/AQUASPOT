@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart'; // ⚙️ LIBRERÍA DE VIDEO
 import '../../../../core/enum/ticket_enums.dart';
 import '../../domain/entities/ticket_entity.dart';
+import '../../domain/entities/item_despacho_bodega_entity.dart';
 import '../widgets/full_photo_widget.dart';
 import '../widgets/copy_icon_button_widget.dart';
 import '../widgets/tarjeta_no_requiere_compras_widget.dart';
@@ -47,6 +48,17 @@ class DetalleTicketPage extends StatelessWidget {
             const SizedBox(height: 12),
             _buildDataCard(context),
 
+            // NUEVO: solo para equipo Caracol -- tabla de los repuestos
+            // que este ticket tiene apartados (reservados) en bodega,
+            // pendientes de despachar. Se calcula con datos que el ticket
+            // ya trae (itemsDespachoBodega), no requiere leer nada mas.
+            if (ticket.equipo == TipoEquipo.Caracol && _repuestosReservados.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              const Text("Repuestos Apartados en Bodega", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
+              const SizedBox(height: 12),
+              _buildRepuestosReservadosCard(context),
+            ],
+
             const SizedBox(height: 24),
 
             // ✅ MÓDULO VISUAL: Visualización de telemetría (fotos y videos mezclados)
@@ -62,6 +74,85 @@ class DetalleTicketPage extends StatelessWidget {
           ],
         ),
       ),
+      ),
+    );
+  }
+
+  // NUEVO: repuestos de este ticket que todavia tienen cantidad pendiente
+  // de despachar (cantidadSolicitada - cantidadDespachada > 0). En un
+  // ticket Caracol esa misma cantidad es exactamente lo que sigue
+  // apartado (stockReservado) en inventario_bodega para este ticket.
+  List<ItemDespachoBodegaEntity> get _repuestosReservados {
+    return ticket.itemsDespachoBodega
+        .where((item) => item.cantidadFaltante > 0)
+        .toList();
+  }
+
+  Widget _buildRepuestosReservadosCard(BuildContext context) {
+    final items = _repuestosReservados;
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Estos repuestos siguen apartados en inventario para este ticket, pendientes de que bodega los despache.',
+              style: TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+            const SizedBox(height: 12),
+            Table(
+              columnWidths: const {
+                0: FlexColumnWidth(2),
+                1: FlexColumnWidth(3),
+                2: FlexColumnWidth(1.4),
+              },
+              border: TableBorder(
+                horizontalInside: BorderSide(color: Colors.grey.shade300),
+              ),
+              children: [
+                const TableRow(
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.symmetric(vertical: 6),
+                      child: Text('Código', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.symmetric(vertical: 6),
+                      child: Text('Descripción', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.symmetric(vertical: 6),
+                      child: Text('Reservado', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    ),
+                  ],
+                ),
+                for (final item in items)
+                  TableRow(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Text(item.codigo, style: const TextStyle(fontSize: 12)),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Text(item.descripcion, style: const TextStyle(fontSize: 12)),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Text(
+                          '${item.cantidadFaltante.toStringAsFixed(item.cantidadFaltante.truncateToDouble() == item.cantidadFaltante ? 0 : 2)} ${item.unidad}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

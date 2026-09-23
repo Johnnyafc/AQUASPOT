@@ -19,6 +19,17 @@ class GeneradorPdfEvaluacion {
     return '$dia de $mes de $anio';
   }
 
+  // NUEVO: el informe de evaluacion tecnica siempre cierra con "ING." antes
+  // del nombre de quien firma. Si el nombre ya viene con ese prefijo (ej.
+  // alguien lo guardo asi manualmente), no se duplica.
+  static String _conPrefijoIng(String nombre) {
+    final normalizado = nombre.trim();
+    final yaLoTiene = normalizado.toUpperCase().startsWith('ING.') ||
+        normalizado.toUpperCase().startsWith('ING ');
+    if (yaLoTiene) return normalizado;
+    return 'ING. $normalizado';
+  }
+
   static Future<Uint8List> generarPdf({
     required TicketEntity ticket,
     required List<ActividadEvaluacionSeleccionada> actividadesSeleccionadas,
@@ -141,10 +152,17 @@ class GeneradorPdfEvaluacion {
                             border: pw.Border.all(color: PdfColors.grey300),
                             borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
                           ),
-                          child: pw.ClipRRect(
-                            horizontalRadius: 4,
-                            verticalRadius: 4,
-                            child: pw.Image(foto, fit: pw.BoxFit.cover),
+                          // FIX: BoxFit.cover recortaba la foto para llenar el
+                          // recuadro de 220x150. BoxFit.contain la muestra
+                          // completa, escalada para entrar entera (puede
+                          // quedar mas chica o con espacio a los lados, pero
+                          // nunca cortada) y centrada en el recuadro.
+                          child: pw.Center(
+                            child: pw.ClipRRect(
+                              horizontalRadius: 4,
+                              verticalRadius: 4,
+                              child: pw.Image(foto, fit: pw.BoxFit.contain),
+                            ),
                           ),
                         );
                       }).toList(),
@@ -201,7 +219,7 @@ class GeneradorPdfEvaluacion {
               pw.Text('Cordialmente,', style: const pw.TextStyle(fontSize: 11)),
               pw.SizedBox(height: 4),
               pw.Text(
-                nombreTecnico.isNotEmpty ? nombreTecnico : 'Técnico de Servicio',
+                _conPrefijoIng(nombreTecnico.isNotEmpty ? nombreTecnico : 'Técnico de Servicio'),
                 style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
               ),
               pw.Text('AQUASPOT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11, color: PdfColors.blue800)),

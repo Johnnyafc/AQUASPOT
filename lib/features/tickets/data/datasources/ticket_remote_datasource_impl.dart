@@ -231,10 +231,454 @@ Stream<String?> escucharEstadoExcel(String ticketId) {
   @override
   Future<TicketModel> actualizarTicket(TicketModel ticket) async {
     try {
-      await firestore.collection('tickets').doc(ticket.id).update(ticket.toJson());
+      final Map<String, dynamic> json = ticket.toJson();
+
+      // PROTECCION MINIMA: si esta escritura trae el codigo de proyecto
+      // vacio/nulo, no lo mandamos -- asi una copia local desactualizada
+      // (ej. una pantalla que se abrio antes de que Costos lo generara)
+      // nunca puede borrar un codigo de proyecto que el servidor ya tiene.
+      // Si de verdad se quiere limpiar el codigo, usar actualizarCampos()
+      // mandando explicitamente 'codigoProyecto': null.
+      if (ticket.codigoProyecto == null || ticket.codigoProyecto!.trim().isEmpty) {
+        json.remove('codigoProyecto');
+      }
+
+      await firestore.collection('tickets').doc(ticket.id).update(json);
       return ticket;
     } catch (e) {
       print("🚨 ERROR CRUDO DE FIREBASE (ACTUALIZACIÓN): $e");
+      throw ServerException(e.toString());
+    }
+  }
+
+  // NUEVO: escritura parcial por campos. Cada handler del bloc decide
+  // explicitamente que campos manda -- nada mas se toca en el documento.
+  // Se usa sobre todo para los flujos que pueden operar con una copia
+  // vieja del ticket en memoria (ej. despacho de bodega) y para la via
+  // administrativa (ForzarCambioEstadoAdminEvent), que si puede mandar
+  // cualquier campo, incluidos los protegidos arriba.
+  @override
+  Future<TicketModel> actualizarCampos(String ticketId, Map<String, dynamic> campos) async {
+    try {
+      final docRef = firestore.collection('tickets').doc(ticketId);
+      await docRef.update(campos);
+
+      // Releemos el documento para devolver el estado real y completo que
+      // quedo en el servidor (no una copia local reconstruida a mano),
+      // asi el bloc puede sincronizar su estado en memoria con precision.
+      final snapshot = await docRef.get();
+      final data = snapshot.data();
+      if (data == null) {
+        throw ServerException('El ticket $ticketId no existe tras actualizar campos.');
+      }
+      data['id'] = snapshot.id;
+      return TicketModel.fromJson(data);
+    } catch (e) {
+      print("🚨 ERROR CRUDO DE FIREBASE (ACTUALIZACION PARCIAL): $e");
+      throw ServerException(e.toString());
+    }
+  }
+
+  // NUEVO: escritura parcial DENTRO de una transaccion, que primero lee
+  // el estado real (fresco) del ticket en Firestore y solo aplica los
+  // campos si 'estadoActual' esta en la lista permitida. Si el ticket ya
+  // avanzo de etapa, no escribe nada y lanza un error claro. Pensado para
+  // el requerimiento (repuestosTaller) editable por comercial en Caracol,
+  // para que el candado de etapa no dependa de un objeto local que puede
+  // estar desactualizado.
+  @override
+  Future<void> actualizarCamposConGuardaEstado({
+    required String ticketId,
+    required Map<String, dynamic> campos,
+    required List<String> estadosPermitidos,
+  }) async {
+    try {
+      final docRef = firestore.collection('tickets').doc(ticketId);
+      await firestore.runTransaction((tx) async {
+        final snap = await tx.get(docRef);
+        if (!snap.exists) {
+          throw ServerException('El ticket $ticketId no existe.');
+        }
+        final estadoActual = snap.data()?['estadoActual'] as String?;
+        if (!estadosPermitidos.contains(estadoActual)) {
+          throw ServerException(
+            'El ticket ya no esta en una etapa editable (estado actual: $estadoActual). No se guardo el cambio.',
+          );
+        }
+        tx.update(docRef, campos);
+      });
+    } catch (e) {
+      print("🚨 ERROR CRUDO DE FIREBASE (GUARDA DE ESTADO): $e");
+      if (e is ServerException) rethrow;
+      throw ServerException(e.toString());
+    }
+  }
+
+  // NUEVO: mismo id de documento que usa la carga masiva por Excel
+  // (guardarLoteInventario) para que el descuento apunte SIEMPRE al mismo
+  // documento en inventario_bodega que un codigo determinado.
+  String _idInventarioDesdeCodigo(String codigo) {
+    return codigo
+        .trim()
+        .replaceAll('/', '_')
+        .replaceAll('.', '_')
+        .replaceAll('#', '_')
+        .replaceAll(' ', '_');
+  }
+
+  // NUEVO: guarda evidencias de un despacho de bodega y descuenta stock de
+  // inventario_bodega para ese despacho puntual, dentro de UNA sola
+  // transaccion (o se guarda todo, o no se guarda nada).
+  //
+  // Idempotencia: se lee el ticket TAL COMO ESTA en el servidor (no lo que
+  // llego del cliente) y se revisa el campo stockDescontado del despacho
+  // con id == despachoId. Si ya es true, no se toca ningun documento de
+  // inventario -- solo se guarda 'campos' (fotos nuevas, evento de
+  // auditoria, posible cambio de estadoActual) tal cual llego. Si es
+  // false, se resta 'cantidad' de 'stockDisponible' por cada item de
+  // itemsADescontar (tope en cero, nunca negativo), y se marca ese
+  // despacho puntual (dentro de campos['historialDespachos']) como
+  // stockDescontado: true antes de escribir el ticket.
+  @override
+  Future<void> guardarEvidenciasDespachoConDescuentoStock({
+    required String ticketId,
+    required String despachoId,
+    required Map<String, dynamic> campos,
+    required List<Map<String, dynamic>> itemsADescontar,
+    required bool liberarReserva,
+  }) async {
+    try {
+      final ticketRef = firestore.collection('tickets').doc(ticketId);
+      await firestore.runTransaction((tx) async {
+        final ticketSnap = await tx.get(ticketRef);
+        if (!ticketSnap.exists) {
+          throw ServerException('El ticket $ticketId no existe.');
+        }
+
+        final historialServidor =
+            (ticketSnap.data()?['historialDespachos'] as List<dynamic>?) ?? [];
+        bool yaDescontado = false;
+        for (final d in historialServidor) {
+          if (d is Map && d['id'] == despachoId) {
+            yaDescontado = (d['stockDescontado'] as bool?) ?? false;
+            break;
+          }
+        }
+
+        // 1. TODAS las lecturas de inventario van ANTES de cualquier
+        // escritura: es un requisito de las transacciones de Firestore.
+        final Map<String, DocumentSnapshot<Map<String, dynamic>>> inventarioSnaps = {};
+        if (!yaDescontado) {
+          for (final item in itemsADescontar) {
+            final codigo = (item['codigo'] as String?)?.trim() ?? '';
+            final docId = _idInventarioDesdeCodigo(codigo);
+            if (docId.isEmpty || inventarioSnaps.containsKey(docId)) continue;
+            final ref = firestore.collection('inventario_bodega').doc(docId);
+            inventarioSnaps[docId] = await tx.get(ref);
+          }
+        }
+
+        // 2. Escrituras de descuento de stock (solo la primera vez).
+        // Si liberarReserva es true (ticket Caracol), en el mismo paso se
+        // libera de stockReservado lo mismo que se resta de
+        // stockDisponible -- lo que estaba apartado ya se consumio de
+        // verdad, deja de estar "pendiente".
+        if (!yaDescontado) {
+          for (final item in itemsADescontar) {
+            final codigo = (item['codigo'] as String?)?.trim() ?? '';
+            final cantidad = (item['cantidad'] as num?)?.toDouble() ?? 0.0;
+            final docId = _idInventarioDesdeCodigo(codigo);
+            if (docId.isEmpty || cantidad <= 0) continue;
+            final snap = inventarioSnaps[docId];
+            if (snap == null || !snap.exists) {
+              // Sin documento de inventario para este codigo: se omite,
+              // no se frena el resto del descuento ni el guardado.
+              continue;
+            }
+            final stockActual = (snap.data()?['stockDisponible'] as num?)?.toDouble() ?? 0.0;
+            final nuevoStock = stockActual - cantidad;
+            final Map<String, dynamic> ajusteInventario = {
+              // Tope en cero: nunca queda negativo.
+              'stockDisponible': nuevoStock < 0 ? 0.0 : nuevoStock,
+            };
+            if (liberarReserva) {
+              final reservadoActual = (snap.data()?['stockReservado'] as num?)?.toDouble() ?? 0.0;
+              final nuevoReservado = reservadoActual - cantidad;
+              ajusteInventario['stockReservado'] = nuevoReservado < 0 ? 0.0 : nuevoReservado;
+            }
+            tx.update(snap.reference, ajusteInventario);
+          }
+        }
+
+        // 3. Marca stockDescontado:true en el despacho correspondiente,
+        // dentro del historialDespachos que se va a escribir en el ticket.
+        final historialAEscribir = (campos['historialDespachos'] as List<dynamic>?) ?? [];
+        final historialConFlag = historialAEscribir.map((d) {
+          final mapa = Map<String, dynamic>.from(d as Map);
+          if (mapa['id'] == despachoId) {
+            mapa['stockDescontado'] = true;
+          }
+          return mapa;
+        }).toList();
+
+        final camposFinal = Map<String, dynamic>.from(campos);
+        camposFinal['historialDespachos'] = historialConFlag;
+
+        // 4. Escritura del ticket (evidencias + auditoria + estado).
+        tx.update(ticketRef, camposFinal);
+      });
+    } catch (e) {
+      print("🚨 ERROR CRUDO DE FIREBASE (DESCUENTO DE STOCK): $e");
+      if (e is ServerException) rethrow;
+      throw ServerException(e.toString());
+    }
+  }
+
+  // NUEVO: evaluacion tecnica del supervisor + reserva de stock (Caracol),
+  // en una sola transaccion. Candado de idempotencia: si el ticket YA
+  // tenia evaluacionTecnica guardada en el servidor, no se vuelve a
+  // reservar (protege contra doble clic / reintento de red en el boton
+  // "Confirmar y Subir").
+  @override
+  Future<void> guardarEvaluacionTecnicaConReservaStock({
+    required TicketModel ticket,
+    required List<Map<String, dynamic>> itemsAReservar,
+  }) async {
+    try {
+      final ticketRef = firestore.collection('tickets').doc(ticket.id);
+      await firestore.runTransaction((tx) async {
+        final ticketSnap = await tx.get(ticketRef);
+        if (!ticketSnap.exists) {
+          throw ServerException('El ticket ${ticket.id} no existe.');
+        }
+
+        final yaTeniaEvaluacion = ticketSnap.data()?['evaluacionTecnica'] != null;
+
+        // 1. Lecturas de inventario ANTES de cualquier escritura.
+        final Map<String, DocumentSnapshot<Map<String, dynamic>>> inventarioSnaps = {};
+        if (!yaTeniaEvaluacion) {
+          for (final item in itemsAReservar) {
+            final codigo = (item['codigo'] as String?)?.trim() ?? '';
+            final docId = _idInventarioDesdeCodigo(codigo);
+            if (docId.isEmpty || inventarioSnaps.containsKey(docId)) continue;
+            final ref = firestore.collection('inventario_bodega').doc(docId);
+            inventarioSnaps[docId] = await tx.get(ref);
+          }
+        }
+
+        // 2. Reserva (solo la primera vez que este ticket guarda su
+        // evaluacion tecnica).
+        if (!yaTeniaEvaluacion) {
+          for (final item in itemsAReservar) {
+            final codigo = (item['codigo'] as String?)?.trim() ?? '';
+            final cantidad = (item['cantidad'] as num?)?.toDouble() ?? 0.0;
+            final docId = _idInventarioDesdeCodigo(codigo);
+            if (docId.isEmpty || cantidad <= 0) continue;
+            final snap = inventarioSnaps[docId];
+            if (snap == null || !snap.exists) {
+              // Sin documento de inventario para este codigo: no hay
+              // nada que apartar, se omite (no frena el guardado).
+              continue;
+            }
+            final reservadoActual = (snap.data()?['stockReservado'] as num?)?.toDouble() ?? 0.0;
+            tx.update(snap.reference, {
+              'stockReservado': reservadoActual + cantidad,
+            });
+          }
+        }
+
+        // 3. Escritura del ticket -- mismo criterio que actualizarTicket
+        // (proteger codigoProyecto si viene vacio/nulo en esta copia).
+        final Map<String, dynamic> json = ticket.toJson();
+        if (ticket.codigoProyecto == null || ticket.codigoProyecto!.trim().isEmpty) {
+          json.remove('codigoProyecto');
+        }
+        tx.update(ticketRef, json);
+      });
+    } catch (e) {
+      print("🚨 ERROR CRUDO DE FIREBASE (RESERVA EVALUACION TECNICA): $e");
+      if (e is ServerException) rethrow;
+      throw ServerException(e.toString());
+    }
+  }
+
+  // NUEVO: guardado de campos con candado de estado (igual que
+  // actualizarCamposConGuardaEstado) MAS el ajuste de stockReservado
+  // segun el delta entre lo que el servidor tenia guardado en
+  // evaluacionTecnica.repuestosTaller y la nueva lista -- todo leido
+  // fresco dentro de la misma transaccion, para no depender de una copia
+  // vieja en el celular de quien esta editando.
+  @override
+  Future<void> actualizarCamposConGuardaEstadoYAjusteReserva({
+    required String ticketId,
+    required Map<String, dynamic> campos,
+    required List<String> estadosPermitidos,
+    required List<Map<String, dynamic>> repuestosTallerNuevos,
+  }) async {
+    try {
+      final ticketRef = firestore.collection('tickets').doc(ticketId);
+      await firestore.runTransaction((tx) async {
+        final ticketSnap = await tx.get(ticketRef);
+        if (!ticketSnap.exists) {
+          throw ServerException('El ticket $ticketId no existe.');
+        }
+        final estadoActual = ticketSnap.data()?['estadoActual'] as String?;
+        if (!estadosPermitidos.contains(estadoActual)) {
+          throw ServerException(
+            'El ticket ya no esta en una etapa editable (estado actual: $estadoActual). No se guardo el cambio.',
+          );
+        }
+
+        // 1. Cantidad actual (segun el servidor, no el celular) por codigo.
+        final Map<String, double> cantidadActualPorCodigo = {};
+        final evalServidor = ticketSnap.data()?['evaluacionTecnica'] as Map<String, dynamic>?;
+        final repuestosServidor = evalServidor?['repuestosTaller'] as List<dynamic>? ?? [];
+        for (final r in repuestosServidor) {
+          if (r is Map) {
+            final cod = (r['codigo'] as String?)?.trim() ?? '';
+            if (cod.isEmpty) continue;
+            final cant = (r['cantidad'] as num?)?.toDouble() ?? 0.0;
+            cantidadActualPorCodigo[cod] = (cantidadActualPorCodigo[cod] ?? 0.0) + cant;
+          }
+        }
+
+        // 2. Cantidad nueva (lo que se esta por guardar) por codigo.
+        final Map<String, double> cantidadNuevaPorCodigo = {};
+        for (final r in repuestosTallerNuevos) {
+          final cod = (r['codigo'] as String?)?.trim() ?? '';
+          if (cod.isEmpty) continue;
+          final cant = (r['cantidad'] as num?)?.toDouble() ?? 0.0;
+          cantidadNuevaPorCodigo[cod] = (cantidadNuevaPorCodigo[cod] ?? 0.0) + cant;
+        }
+
+        // 3. Deltas por codigo (positivo = reservar mas, negativo =
+        // liberar). Se ignoran los codigos sin cambio.
+        final Set<String> todosLosCodigos = {
+          ...cantidadActualPorCodigo.keys,
+          ...cantidadNuevaPorCodigo.keys,
+        };
+        final Map<String, double> deltasPorCodigo = {};
+        for (final cod in todosLosCodigos) {
+          final delta = (cantidadNuevaPorCodigo[cod] ?? 0.0) - (cantidadActualPorCodigo[cod] ?? 0.0);
+          if (delta != 0) deltasPorCodigo[cod] = delta;
+        }
+
+        // 4. TODAS las lecturas de inventario antes de cualquier escritura.
+        final Map<String, DocumentSnapshot<Map<String, dynamic>>> inventarioSnaps = {};
+        for (final cod in deltasPorCodigo.keys) {
+          final docId = _idInventarioDesdeCodigo(cod);
+          if (docId.isEmpty) continue;
+          final ref = firestore.collection('inventario_bodega').doc(docId);
+          inventarioSnaps[docId] = await tx.get(ref);
+        }
+
+        // 5. Aplica los ajustes de stockReservado.
+        deltasPorCodigo.forEach((cod, delta) {
+          final docId = _idInventarioDesdeCodigo(cod);
+          final snap = inventarioSnaps[docId];
+          if (snap == null || !snap.exists) return; // nada que ajustar
+          final reservadoActual = (snap.data()?['stockReservado'] as num?)?.toDouble() ?? 0.0;
+          final nuevoReservado = reservadoActual + delta;
+          tx.update(snap.reference, {
+            // Tope en cero como red de seguridad -- no deberia activarse
+            // nunca porque el candado de estado ya impide editar una vez
+            // que bodega empezo a despachar.
+            'stockReservado': nuevoReservado < 0 ? 0.0 : nuevoReservado,
+          });
+        });
+
+        // 6. Escritura del ticket (igual que actualizarCamposConGuardaEstado).
+        tx.update(ticketRef, campos);
+      });
+    } catch (e) {
+      print("🚨 ERROR CRUDO DE FIREBASE (AJUSTE DE RESERVA): $e");
+      if (e is ServerException) rethrow;
+      throw ServerException(e.toString());
+    }
+  }
+
+  // NUEVO: anula el ticket y libera lo que quedaba pendiente de
+  // stockReservado (repuestosTaller actual del servidor menos lo ya
+  // despachado, leido fresco dentro de la transaccion) -- solo se llama
+  // para tickets Caracol desde el bloc.
+  @override
+  Future<void> anularTicketConLiberacionReserva({
+    required TicketModel ticket,
+  }) async {
+    try {
+      final ticketRef = firestore.collection('tickets').doc(ticket.id);
+      await firestore.runTransaction((tx) async {
+        final ticketSnap = await tx.get(ticketRef);
+        if (!ticketSnap.exists) {
+          throw ServerException('El ticket ${ticket.id} no existe.');
+        }
+
+        // 1. Cantidad reservada por codigo (repuestosTaller del servidor).
+        final Map<String, double> reservadoPorCodigo = {};
+        final evalServidor = ticketSnap.data()?['evaluacionTecnica'] as Map<String, dynamic>?;
+        final repuestosServidor = evalServidor?['repuestosTaller'] as List<dynamic>? ?? [];
+        for (final r in repuestosServidor) {
+          if (r is Map) {
+            final cod = (r['codigo'] as String?)?.trim() ?? '';
+            if (cod.isEmpty) continue;
+            final cant = (r['cantidad'] as num?)?.toDouble() ?? 0.0;
+            reservadoPorCodigo[cod] = (reservadoPorCodigo[cod] ?? 0.0) + cant;
+          }
+        }
+
+        // 2. Cantidad ya despachada por codigo (itemsDespachoBodega del
+        // servidor) -- eso ya se libero en su momento, no se vuelve a tocar.
+        final Map<String, double> despachadoPorCodigo = {};
+        final itemsServidor = ticketSnap.data()?['itemsDespachoBodega'] as List<dynamic>? ?? [];
+        for (final it in itemsServidor) {
+          if (it is Map) {
+            final cod = (it['codigo'] as String?)?.trim() ?? '';
+            if (cod.isEmpty) continue;
+            final cant = (it['cantidadDespachada'] as num?)?.toDouble() ?? 0.0;
+            despachadoPorCodigo[cod] = (despachadoPorCodigo[cod] ?? 0.0) + cant;
+          }
+        }
+
+        // 3. Pendiente a liberar por codigo (nunca negativo).
+        final Map<String, double> pendientePorCodigo = {};
+        reservadoPorCodigo.forEach((cod, reservado) {
+          final despachado = despachadoPorCodigo[cod] ?? 0.0;
+          final pendiente = reservado - despachado;
+          if (pendiente > 0) pendientePorCodigo[cod] = pendiente;
+        });
+
+        // 4. TODAS las lecturas de inventario antes de cualquier escritura.
+        final Map<String, DocumentSnapshot<Map<String, dynamic>>> inventarioSnaps = {};
+        for (final cod in pendientePorCodigo.keys) {
+          final docId = _idInventarioDesdeCodigo(cod);
+          if (docId.isEmpty) continue;
+          final ref = firestore.collection('inventario_bodega').doc(docId);
+          inventarioSnaps[docId] = await tx.get(ref);
+        }
+
+        // 5. Libera stockReservado.
+        pendientePorCodigo.forEach((cod, pendiente) {
+          final docId = _idInventarioDesdeCodigo(cod);
+          final snap = inventarioSnaps[docId];
+          if (snap == null || !snap.exists) return;
+          final reservadoActual = (snap.data()?['stockReservado'] as num?)?.toDouble() ?? 0.0;
+          final nuevoReservado = reservadoActual - pendiente;
+          tx.update(snap.reference, {
+            'stockReservado': nuevoReservado < 0 ? 0.0 : nuevoReservado,
+          });
+        });
+
+        // 6. Escritura del ticket como anulado (mismo criterio que
+        // actualizarTicket).
+        final Map<String, dynamic> json = ticket.toJson();
+        if (ticket.codigoProyecto == null || ticket.codigoProyecto!.trim().isEmpty) {
+          json.remove('codigoProyecto');
+        }
+        tx.update(ticketRef, json);
+      });
+    } catch (e) {
+      print("🚨 ERROR CRUDO DE FIREBASE (ANULACION CON LIBERACION DE RESERVA): $e");
+      if (e is ServerException) rethrow;
       throw ServerException(e.toString());
     }
   }

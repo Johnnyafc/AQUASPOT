@@ -46,6 +46,7 @@ class RegistroDespachoModel extends RegistroDespachoEntity {
     required super.items,
     super.notas,
     super.fotosEvidenciasUrls,
+    super.stockDescontado,
   });
 
   factory RegistroDespachoModel.fromJson(Map<String, dynamic> json) {
@@ -74,6 +75,8 @@ class RegistroDespachoModel extends RegistroDespachoEntity {
       items: items,
       notas: json['notas']?.toString(),
       fotosEvidenciasUrls: fotosEvidenciasUrls,
+      // Despachos guardados antes de este campo no lo traen -> false por defecto.
+      stockDescontado: json['stockDescontado'] as bool? ?? false,
     );
   }
 
@@ -88,6 +91,7 @@ class RegistroDespachoModel extends RegistroDespachoEntity {
           .toList(),
       notas: entity.notas,
       fotosEvidenciasUrls: entity.fotosEvidenciasUrls,
+      stockDescontado: entity.stockDescontado,
     );
   }
 
@@ -103,6 +107,7 @@ class RegistroDespachoModel extends RegistroDespachoEntity {
       }).toList(),
       'notas': notas,
       'fotosEvidenciasUrls': fotosEvidenciasUrls,
+      'stockDescontado': stockDescontado,
     };
   }
 }

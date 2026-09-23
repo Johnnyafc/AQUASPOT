@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 import 'package:file_picker/file_picker.dart' as fp;
 import 'package:image_picker/image_picker.dart';
 import '../../domain/entities/ticket_entity.dart';
+import '../../domain/entities/evento_auditoria_entity.dart';
 import '../../domain/entities/item_despacho_bodega_entity.dart';
 import '../../domain/entities/registro_despacho_entity.dart';
 import '../../domain/entities/orden_recepcion_repuestos_entity.dart';
@@ -155,11 +156,14 @@ class CrearTicketEvent extends TicketEvent {
 // 3. Etapa 2: Técnico en el taller emite su diagnóstico
 class ActualizarEvaluacionEvent extends TicketEvent {
   final TicketEntity ticket;
+  // NUEVO: si viene, se agrega via arrayUnion a historialEventos en Firestore
+  // (solo se usa en el camino con candado de estado -- ver ticket_bloc.dart).
+  final EventoAuditoriaEntity? eventoAuditoria;
 
-  const ActualizarEvaluacionEvent({required this.ticket});
+  const ActualizarEvaluacionEvent({required this.ticket, this.eventoAuditoria});
 
   @override
-  List<Object> get props => [ticket];
+  List<Object?> get props => [ticket, eventoAuditoria];
 }
 
 // 4. Etapa 3: Gatillo final para Firebase y el Webhook de Python
@@ -834,3 +838,48 @@ class ValidarConsumoOrdenTallerEvent extends TicketEvent {
   @override
   List<Object?> get props => [ticket, ordenId, nombreSupervisor, rolSupervisor];
 }
+
+// ==========================================
+// MODULO ADMIN: CAMBIO DE ESTADO MANUAL SIN RESTRICCIONES
+// ==========================================
+// Via explicita para mover un ticket de cualquier estado a cualquier otro,
+// resetear los hitos de costos/compras, o corregir cualquier otro campo
+// (via camposExtra). Queda auditado siempre con motivo + quien lo hizo.
+// A diferencia del resto de eventos, esta via NO pasa por las protecciones
+// de actualizarTicket() -- usa actualizarCampos() sin restricciones.
+class ForzarCambioEstadoAdminEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final EstadoTicket nuevoEstado;
+  final String motivo;
+  final String nombreAdmin;
+  final String rolAdmin;
+  final bool resetearCostos;
+  final bool resetearCompras;
+  final String? nuevoCodigoProyecto; // null = no tocar el campo
+  final Map<String, dynamic>? camposExtra; // via de escape para cualquier otro campo
+
+  const ForzarCambioEstadoAdminEvent({
+    required this.ticket,
+    required this.nuevoEstado,
+    required this.motivo,
+    required this.nombreAdmin,
+    required this.rolAdmin,
+    this.resetearCostos = false,
+    this.resetearCompras = false,
+    this.nuevoCodigoProyecto,
+    this.camposExtra,
+  });
+
+  @override
+  List<Object?> get props => [
+        ticket,
+        nuevoEstado,
+        motivo,
+        nombreAdmin,
+        rolAdmin,
+        resetearCostos,
+        resetearCompras,
+        nuevoCodigoProyecto,
+        camposExtra,
+      ];
+}

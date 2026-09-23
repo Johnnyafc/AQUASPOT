@@ -10,6 +10,7 @@ class ItemInventarioModel extends ItemInventarioEntity {
     super.unidad = 'UNIDAD',
     super.ubicacion,
     required super.fechaActualizacion,
+    super.stockReservado,
   });
 
   factory ItemInventarioModel.fromFirestore(Map<String, dynamic> json) {
@@ -26,9 +27,18 @@ class ItemInventarioModel extends ItemInventarioEntity {
       unidad: json['unidad'] as String? ?? 'UNIDAD',
       ubicacion: json['ubicacion'] as String?,
       fechaActualizacion: parseFecha(json['fechaActualizacion']),
+      // Si el documento no trae el campo (aun no se reservo nada, o es
+      // un item que solo vino del Excel), se toma como 0.0.
+      stockReservado: (json['stockReservado'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
+  // OJO: a proposito NO incluye 'stockReservado'. Este metodo lo usa
+  // unicamente la carga masiva por Excel (guardarLoteInventario) con
+  // SetOptions(merge: true) -- si stockReservado viniera aca, cada carga
+  // pisaria a 0 lo que los tickets Caracol tienen apartado. La reserva
+  // solo se toca via FieldValue.increment() desde las transacciones de
+  // tickets (ver ticket_remote_datasource_impl.dart).
   Map<String, dynamic> toFirestore() {
     return {
       'codigo': codigo,
@@ -48,6 +58,7 @@ class ItemInventarioModel extends ItemInventarioEntity {
       unidad: entity.unidad,
       ubicacion: entity.ubicacion,
       fechaActualizacion: entity.fechaActualizacion,
+      stockReservado: entity.stockReservado,
     );
   }
 }

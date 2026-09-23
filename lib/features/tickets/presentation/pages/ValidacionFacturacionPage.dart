@@ -47,7 +47,7 @@ class _BandejaValidacionFacturacionPageState extends State<BandejaValidacionFact
             }
 
             // 2. Selección de lista
-            final listaAProcesar = state.tickets.isNotEmpty ? state.tickets : (state.historial ?? []);
+            final listaAProcesar = state.historial;
             
             if (listaAProcesar.isEmpty) {
               return _buildEmptyState('Lista vacía: Ni tickets ni historial llegaron del servidor.');

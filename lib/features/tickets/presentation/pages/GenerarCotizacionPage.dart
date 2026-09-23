@@ -12,6 +12,7 @@ import 'package:file_picker/file_picker.dart' as fp;
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import '../../../../core/enum/segmento_operativo.dart';
 import '../../domain/entities/evaluacion_tecnica_entity.dart';
+import '../../domain/entities/evento_auditoria_entity.dart';
 import '../widgets/copy_icon_button_widget.dart';
 import '../widgets/tarjeta_no_requiere_compras_widget.dart';
 import '../../domain/entities/repuesto_registrado_entity.dart';
@@ -36,8 +37,21 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
   // 💼 ESTADO DINÁMICO DE LA PROPUESTA COMERCIAL Y MATERIALES DE TALLER
   late List<RepuestoRegistradoEntity> _repuestosComerciales;
   late List<RepuestoRegistradoEntity> _repuestosTaller;
+  // NUEVO: copia del requerimiento de taller al abrir/guardar la pagina,
+  // usada solo para calcular el detalle de auditoria (que se quito/agrego/
+  // cambio) cada vez que comercial guarda. Equipo Caracol unicamente.
+  late List<RepuestoRegistradoEntity> _repuestosTallerOriginal;
   double? _totalHorasHombre;
   bool _propuestaModificada = false;
+
+  bool get _esCaracol => widget.ticket.equipo == TipoEquipo.Caracol;
+
+  // Candado de etapa: SOLO aplica a Caracol. Cualquier otro equipo se
+  // comporta exactamente igual que antes (siempre editable en esta pantalla).
+  bool get _puedeEditarRequerimiento =>
+      !_esCaracol ||
+      widget.ticket.estadoActual == EstadoTicket.comercial ||
+      widget.ticket.estadoActual == EstadoTicket.cotizado;
 
   @override
   void initState() {
@@ -49,6 +63,7 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
     _repuestosTaller = evaluacion != null
         ? List<RepuestoRegistradoEntity>.from(evaluacion.repuestosTaller)
         : [];
+    _repuestosTallerOriginal = List<RepuestoRegistradoEntity>.from(_repuestosTaller);
     _totalHorasHombre = evaluacion?.totalHorasHombre ??
         evaluacion?.actividades.fold<double>(0.0, (acc, a) => acc + a.horasHombre);
 
@@ -123,6 +138,15 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
 
   // 🏭 SUBRUTINAS DE GESTIÓN DE MATERIALES DE TALLER / BODEGA
   void _incrementarCantidadTaller(int index) {
+    if (!_puedeEditarRequerimiento) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Este requerimiento ya no se puede editar: el ticket avanzó más allá de comercial.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     setState(() {
       final rep = _repuestosTaller[index];
       _repuestosTaller[index] = rep.copyWith(cantidad: rep.cantidad + 1);
@@ -131,6 +155,15 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
   }
 
   void _decrementarCantidadTaller(int index) {
+    if (!_puedeEditarRequerimiento) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Este requerimiento ya no se puede editar: el ticket avanzó más allá de comercial.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     final rep = _repuestosTaller[index];
     if (rep.cantidad > 1) {
       setState(() {
@@ -143,6 +176,15 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
   }
 
   void _confirmarEliminarRepuestoTaller(int index) {
+    if (!_puedeEditarRequerimiento) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Este requerimiento ya no se puede editar: el ticket avanzó más allá de comercial.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     final item = _repuestosTaller[index];
     showDialog(
       context: context,
@@ -184,6 +226,15 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
   }
 
   void _mostrarDialogoEditarCantidadTaller(int index) {
+    if (!_puedeEditarRequerimiento) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Este requerimiento ya no se puede editar: el ticket avanzó más allá de comercial.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     final rep = _repuestosTaller[index];
     final cantActual = (rep.cantidad % 1 == 0) ? rep.cantidad.toInt().toString() : rep.cantidad.toString();
     final controller = TextEditingController(text: cantActual);
@@ -242,6 +293,15 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
   }
 
   void _mostrarDialogoAgregarRepuestoTaller() {
+    if (!_puedeEditarRequerimiento) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Este requerimiento ya no se puede editar: el ticket avanzó más allá de comercial.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     final itemsCatalogo = _obtenerItemsCatalogo();
     showDialog(
       context: context,
@@ -486,6 +546,44 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
     );
   }
 
+  // NUEVO: arma un resumen legible de lo que cambio en el requerimiento
+  // de taller (quito/agrego/cambio cantidad) comparando contra la copia
+  // capturada al abrir la pagina o en el ultimo guardado. Devuelve null si
+  // no hubo cambios reales en esa lista.
+  String? _describirCambiosRequerimientoTaller() {
+    String claveDe(RepuestoRegistradoEntity r) =>
+        r.codigo.trim().isNotEmpty ? r.codigo.trim().toUpperCase() : r.descripcion.trim().toUpperCase();
+    String cantidadStr(double c) => (c % 1 == 0) ? c.toInt().toString() : c.toString();
+
+    final original = {for (final r in _repuestosTallerOriginal) claveDe(r): r};
+    final actual = {for (final r in _repuestosTaller) claveDe(r): r};
+
+    final quitados = <String>[];
+    final agregados = <String>[];
+    final cambiados = <String>[];
+
+    original.forEach((clave, r) {
+      if (!actual.containsKey(clave)) {
+        quitados.add('${r.descripcion} (${cantidadStr(r.cantidad)} ${r.unidad})');
+      }
+    });
+    actual.forEach((clave, r) {
+      if (!original.containsKey(clave)) {
+        agregados.add('${r.descripcion} (${cantidadStr(r.cantidad)} ${r.unidad})');
+      } else if (original[clave]!.cantidad != r.cantidad) {
+        cambiados.add('${r.descripcion} (${cantidadStr(original[clave]!.cantidad)} -> ${cantidadStr(r.cantidad)})');
+      }
+    });
+
+    if (quitados.isEmpty && agregados.isEmpty && cambiados.isEmpty) return null;
+
+    final partes = <String>[];
+    if (quitados.isNotEmpty) partes.add('Quitó: ${quitados.join(", ")}');
+    if (agregados.isNotEmpty) partes.add('Agregó: ${agregados.join(", ")}');
+    if (cambiados.isNotEmpty) partes.add('Cambió cantidad: ${cambiados.join(", ")}');
+    return partes.join(' | ');
+  }
+
   void _guardarCambiosPropuesta() {
     final evaluacionBase = widget.ticket.evaluacionTecnica ??
         const EvaluacionTecnicaEntity(
@@ -493,17 +591,45 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
           observacion: '',
         );
 
+    // NUEVO: auditoria del requerimiento de taller, solo para Caracol y
+    // solo si de verdad hubo un cambio en esa lista especifica.
+    EventoAuditoriaEntity? eventoAuditoria;
+    if (_esCaracol) {
+      final descripcionCambios = _describirCambiosRequerimientoTaller();
+      if (descripcionCambios != null) {
+        final authState = context.read<AuthBloc>().state;
+        String operador = 'DESCONOCIDO';
+        String rol = 'SIN_ROL';
+        if (authState is Authenticated) {
+          operador = authState.usuario.nombre;
+          rol = authState.usuario.rol.name.toUpperCase();
+        }
+        eventoAuditoria = EventoAuditoriaEntity(
+          accion: 'COMERCIAL MODIFICÓ REQUERIMIENTO (Taller): $descripcionCambios',
+          usuarioNombre: operador,
+          usuarioRol: rol,
+          timestamp: DateTime.now(),
+        );
+      }
+    }
+
     final ticketActualizado = widget.ticket.copyWith(
       evaluacionTecnica: evaluacionBase.copyWith(
         repuestosComercial: _repuestosComerciales,
         repuestosTaller: _repuestosTaller,
         totalHorasHombre: _totalHorasHombre,
       ),
+      historialEventos: eventoAuditoria != null
+          ? [...widget.ticket.historialEventos, eventoAuditoria]
+          : widget.ticket.historialEventos,
     );
 
     context.read<TicketBloc>().add(
-      ActualizarEvaluacionEvent(ticket: ticketActualizado),
+      ActualizarEvaluacionEvent(ticket: ticketActualizado, eventoAuditoria: eventoAuditoria),
     );
+
+    // Reiniciamos la base de comparacion para el proximo guardado.
+    _repuestosTallerOriginal = List<RepuestoRegistradoEntity>.from(_repuestosTaller);
 
     setState(() {
       _propuestaModificada = false;

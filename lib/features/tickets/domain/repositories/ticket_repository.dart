@@ -17,6 +17,42 @@ abstract class ITicketRepository {
   
   // ✅ EL ÚNICO CONDUCTO DE ACTUALIZACIÓN PERMITIDO
   Future<Either<Failure, TicketEntity>> actualizarTicket(TicketEntity ticket);
+  // NUEVO: escritura parcial por campos (ver ITicketRepository / datasource).
+  Future<Either<Failure, TicketEntity>> actualizarCampos(String ticketId, Map<String, dynamic> campos);
+  // NUEVO: escritura parcial con candado de estado (ver datasource).
+  Future<Either<Failure, void>> actualizarCamposConGuardaEstado({
+    required String ticketId,
+    required Map<String, dynamic> campos,
+    required List<String> estadosPermitidos,
+  });
+
+  // NUEVO: evidencias de despacho de bodega + descuento automatico de
+  // stock (ver datasource / ticket_bloc._onActualizarEvidenciasDespacho).
+  Future<Either<Failure, void>> guardarEvidenciasDespachoConDescuentoStock({
+    required String ticketId,
+    required String despachoId,
+    required Map<String, dynamic> campos,
+    required List<Map<String, dynamic>> itemsADescontar,
+    required bool liberarReserva,
+  });
+
+  // NUEVO: reserva de stock (Caracol) -- ver datasource.
+  Future<Either<Failure, void>> guardarEvaluacionTecnicaConReservaStock({
+    required TicketEntity ticket,
+    required List<Map<String, dynamic>> itemsAReservar,
+  });
+
+  Future<Either<Failure, void>> actualizarCamposConGuardaEstadoYAjusteReserva({
+    required String ticketId,
+    required Map<String, dynamic> campos,
+    required List<String> estadosPermitidos,
+    required List<Map<String, dynamic>> repuestosTallerNuevos,
+  });
+
+  Future<Either<Failure, void>> anularTicketConLiberacionReserva({
+    required TicketEntity ticket,
+  });
+
   
   Future<Either<Failure, TicketEntity>> notificarYGenerarActa(TicketEntity ticket);
   // Añade esta línea dentro de tu abstract class TicketRepository:

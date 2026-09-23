@@ -24,11 +24,21 @@ class BandejaTrabajosPage extends StatefulWidget {
 }
 
 class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
+  // NUEVO: segmento real del supervisor logueado. Cada supervisor solo
+  // debe ver los requerimientos de su propio equipo (contador, cosechadora
+  // o caracol) -- antes esta pantalla mandaba SegmentoOperativo.ninguno
+  // fijo, que el datasource trata como "sin filtro" (ve todo).
+  SegmentoOperativo _segmentoUsuario = SegmentoOperativo.ninguno;
+
   @override
   void initState() {
     super.initState();
+    final authState = context.read<AuthBloc>().state;
+    if (authState is Authenticated) {
+      _segmentoUsuario = authState.usuario.segmento;
+    }
     context.read<TicketBloc>().add(
-      const ObtenerHistorialTicketsEvent(segmento: SegmentoOperativo.ninguno),
+      ObtenerHistorialTicketsEvent(segmento: _segmentoUsuario),
     );
   }
 
@@ -47,7 +57,7 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
             tooltip: 'Refrescar tickets',
             onPressed: () {
               context.read<TicketBloc>().add(
-                    const ObtenerHistorialTicketsEvent(segmento: SegmentoOperativo.ninguno),
+                    ObtenerHistorialTicketsEvent(segmento: _segmentoUsuario),
                   );
             },
           ),
@@ -115,7 +125,7 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
                         color: Colors.blueGrey,
                         onRefresh: () async {
                           context.read<TicketBloc>().add(
-                            const ObtenerHistorialTicketsEvent(segmento: SegmentoOperativo.ninguno),
+                            ObtenerHistorialTicketsEvent(segmento: _segmentoUsuario),
                           );
                         },
                         child: ListView.builder(
@@ -657,7 +667,7 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
                     ).then((_) {
                       if (context.mounted) {
                         context.read<TicketBloc>().add(
-                              const ObtenerHistorialTicketsEvent(segmento: SegmentoOperativo.ninguno),
+                              ObtenerHistorialTicketsEvent(segmento: _segmentoUsuario),
                             );
                       }
                     });
@@ -685,7 +695,7 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
                     ).then((_) {
                       if (context.mounted) {
                         context.read<TicketBloc>().add(
-                              const ObtenerHistorialTicketsEvent(segmento: SegmentoOperativo.ninguno),
+                              ObtenerHistorialTicketsEvent(segmento: _segmentoUsuario),
                             );
                       }
                     });
