@@ -828,15 +828,32 @@ class _DashboardViewState extends State<_DashboardView> {
   }
 
   Widget _seccionEquipo(List<ResumenTicketDash> data) {
+    // 🔒 El conteo "# de tickets por equipo" sí cuenta todos los tickets
+    // (en curso, finalizados, anulados) — es un volumen, no un tiempo.
     final conteoEquipo = <String, int>{};
-    final sumaHoras = <String, double>{};
     for (final r in data) {
       conteoEquipo[r.equipo] = (conteoEquipo[r.equipo] ?? 0) + 1;
-      sumaHoras[r.equipo] = (sumaHoras[r.equipo] ?? 0) + r.horasTotales;
     }
     final labelsEquipo = conteoEquipo.keys.toList()..sort();
     final valoresEquipo = labelsEquipo.map((l) => conteoEquipo[l]!.toDouble()).toList();
-    final valoresHoras = labelsEquipo.map((l) => sumaHoras[l]! / conteoEquipo[l]!).toList();
+
+    // ⏱️ El promedio de horas, en cambio, solo debe salir de tickets
+    // FINALIZADOS: uno en curso todavía no tiene su tiempo total real (el
+    // reloj sigue corriendo), y uno anulado se cortó a mitad de camino y
+    // no representa cómo se comporta el proceso normalmente. Mezclarlos
+    // distorsiona el promedio.
+    final finalizados = data.where((r) => r.estadoBucket == 'Cerrado');
+    final sumaHoras = <String, double>{};
+    final conteoHorasEquipo = <String, int>{};
+    for (final r in finalizados) {
+      sumaHoras[r.equipo] = (sumaHoras[r.equipo] ?? 0) + r.horasTotales;
+      conteoHorasEquipo[r.equipo] = (conteoHorasEquipo[r.equipo] ?? 0) + 1;
+    }
+    final valoresHoras = labelsEquipo.map((l) {
+      final conteo = conteoHorasEquipo[l];
+      if (conteo == null || conteo == 0) return 0.0;
+      return sumaHoras[l]! / conteo;
+    }).toList();
 
     return _grid([
       _card(
@@ -846,68 +863,77 @@ class _DashboardViewState extends State<_DashboardView> {
       ),
       _card(
         titulo: 'Tiempo de atención promedio por equipo',
-        nota: 'Horas transcurridas desde creación hasta el último registro (promedio por ticket)',
+        nota: 'Horas transcurridas desde creación hasta el último registro (promedio por ticket, solo tickets finalizados)',
         child: _barChartFl(labels: labelsEquipo, values: valoresHoras, color: _sand, mostrarDecimales: true),
       ),
     ]);
   }
 
-  // 🆕 Tiempo que se demoró cada departamento (usuarioRol) en completar
-  // su parte: el segmento entre dos pasos consecutivos del historial se
-  // atribuye al departamento que ejecutó el paso de llegada.
-  // 🔧 Desglose por USUARIO (antes: por segmento operativo). El segmento
-  // operativo (caracol/cosechadora/contador) no dice quién se demoró; el
-  // usuario sí — así se puede ver, dentro de un mismo departamento, qué
-  // persona está tomando más tiempo en promedio.
+  // 🆕 Tiempo que se demoró cada PROCESO (etapa del flujo: Comercial,
+  // Costos, Compras, Bodega, Proceso de Trabajo, etc.) en completar su
+  // parte: el segmento entre dos pasos consecutivos del historial se
+  // clasifica según a qué proceso pertenece la acción del paso de
+  // llegada (ver _procesoDeAccion). Antes se agrupaba por el ROL de quien
+  // hizo el paso (usuarioRol) — eso mezclaba, por ejemplo, todo lo que
+  // hacía un SUPERVISOR sin importar en qué etapa del flujo estaba
+  // actuando. Agrupar por proceso responde la pregunta de negocio real:
+  // "¿en qué etapa del flujo se estanca más un ticket?".
+  // 🔒 Solo se consideran segmentos de tickets FINALIZADOS (ver filtro en
+  // el llamador): un ticket en curso todavía no tiene un tiempo cerrado
+  // para ese paso, y uno anulado no representa el comportamiento normal
+  // del proceso.
+  // 🔧 Desglose por USUARIO dentro de cada proceso, para ver qué persona
+  // está tomando más tiempo en promedio dentro de esa etapa.
   Widget _seccionDepartamentos(List<SegmentoTiempoDash> segmentos) {
-    final sumaPorDepto = <String, double>{};
-    final conteoPorDepto = <String, int>{};
-    // 🆕 depto -> usuario -> [suma horas, conteo] — permite desglosar el
-    // tiempo de un departamento (ej. SUPERVISOR) por cada persona que lo
-    // atendió, en vez de un solo promedio mezclado.
-    final porDeptoYUsuario = <String, Map<String, List<double>>>{};
+    final sumaPorProceso = <String, double>{};
+    final conteoPorProceso = <String, int>{};
+    // 🆕 proceso -> usuario -> [suma horas, conteo] — permite desglosar el
+    // tiempo de un proceso (ej. COMPRAS) por cada persona que lo atendió,
+    // en vez de un solo promedio mezclado.
+    final porProcesoYUsuario = <String, Map<String, List<double>>>{};
 
     for (final s in segmentos) {
-      sumaPorDepto[s.departamento] = (sumaPorDepto[s.departamento] ?? 0) + s.horas;
-      conteoPorDepto[s.departamento] = (conteoPorDepto[s.departamento] ?? 0) + 1;
+      final proceso = _procesoDeAccion(s.accion);
+      sumaPorProceso[proceso] = (sumaPorProceso[proceso] ?? 0) + s.horas;
+      conteoPorProceso[proceso] = (conteoPorProceso[proceso] ?? 0) + 1;
 
       final usuario = s.usuarioNombre.trim().isEmpty ? 'Sin asignar' : s.usuarioNombre;
-      final porUsuario = porDeptoYUsuario.putIfAbsent(s.departamento, () => {});
+      final porUsuario = porProcesoYUsuario.putIfAbsent(proceso, () => {});
       final acumulado = porUsuario.putIfAbsent(usuario, () => [0, 0]);
       acumulado[0] += s.horas;
       acumulado[1] += 1;
     }
 
-    final labels = sumaPorDepto.keys.toList()..sort();
-    final valoresDepto = labels.map((d) => sumaPorDepto[d]! / conteoPorDepto[d]!).toList();
+    final labels = sumaPorProceso.keys.toList()..sort();
+    final valoresProceso = labels.map((d) => sumaPorProceso[d]! / conteoPorProceso[d]!).toList();
 
-    // 📋 Leyenda siempre visible: departamento (promedio general, en
+    // 📋 Leyenda siempre visible: proceso (promedio general, en
     // días/horas/minutos) ordenado de mayor a menor demora, con el
-    // desglose por usuario debajo cuando el departamento tuvo más de una
+    // desglose por usuario debajo cuando el proceso tuvo más de una
     // persona atendiendo tickets.
-    final ordenDeptos = [...labels]
-      ..sort((a, b) => (sumaPorDepto[b]! / conteoPorDepto[b]!).compareTo(sumaPorDepto[a]! / conteoPorDepto[a]!));
+    final ordenProcesos = [...labels]
+      ..sort((a, b) => (sumaPorProceso[b]! / conteoPorProceso[b]!).compareTo(sumaPorProceso[a]! / conteoPorProceso[a]!));
 
     return _card(
-      titulo: 'Tiempo promedio por departamento',
-      nota: 'Tiempo promedio entre que un ticket llega a un departamento y ese departamento marca su paso como completado, desglosado por la persona que lo atendió',
+      titulo: 'Tiempo promedio por proceso',
+      nota: 'Tiempo promedio entre que un ticket llega a una etapa del flujo y esa etapa marca su paso como completado, desglosado por la persona que lo atendió (solo tickets finalizados)',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _barChartFl(
             labels: labels,
-            values: valoresDepto,
+            values: valoresProceso,
             color: _slate,
             mostrarDecimales: true,
             formateadorTooltip: _fmtDuracionHoras,
           ),
-          if (ordenDeptos.isNotEmpty) ...[
+          if (ordenProcesos.isNotEmpty) ...[
             const SizedBox(height: 12),
             const Divider(height: 1),
             const SizedBox(height: 8),
-            ...ordenDeptos.map((depto) {
-              final promedioGeneral = sumaPorDepto[depto]! / conteoPorDepto[depto]!;
-              final porUsuario = porDeptoYUsuario[depto] ?? const {};
+            ...ordenProcesos.map((proceso) {
+              final promedioGeneral = sumaPorProceso[proceso]! / conteoPorProceso[proceso]!;
+              final porUsuario = porProcesoYUsuario[proceso] ?? const {};
               final usuariosOrdenados = porUsuario.keys.toList()
                 ..sort((a, b) => (porUsuario[b]![0] / porUsuario[b]![1]).compareTo(porUsuario[a]![0] / porUsuario[a]![1]));
 
@@ -919,7 +945,7 @@ class _DashboardViewState extends State<_DashboardView> {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(depto, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          child: Text(proceso, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
                         ),
                         Text(
                           _fmtDuracionHoras(promedioGeneral),
@@ -927,9 +953,9 @@ class _DashboardViewState extends State<_DashboardView> {
                         ),
                       ],
                     ),
-                    // 🆕 Solo se desglosa por usuario cuando el
-                    // departamento tuvo más de una persona atendiendo — si
-                    // solo hubo una, ya coincide con la fila de arriba.
+                    // 🆕 Solo se desglosa por usuario cuando el proceso
+                    // tuvo más de una persona atendiendo — si solo hubo
+                    // una, ya coincide con la fila de arriba.
                     if (usuariosOrdenados.length > 1)
                       ...usuariosOrdenados.map((usuario) {
                         final par = porUsuario[usuario]!;
@@ -956,6 +982,29 @@ class _DashboardViewState extends State<_DashboardView> {
         ],
       ),
     );
+  }
+
+  // 🆕 Clasifica la acción de auditoría de un paso del historial (texto
+  // libre, ej. "FASE COSTOS - Código Proyecto Asignado: X") en el proceso
+  // del flujo al que pertenece. Es un clasificador por palabras clave,
+  // igual al patrón que ya se usa en otras pantallas para detectar
+  // "caracol" por texto — no depende de un campo nuevo en Firestore, así
+  // que funciona también con el historial ya guardado.
+  // ⚠️ El orden de los checks importa cuando una acción menciona más de
+  // una palabra clave (ej. una acción de bodega que menciona "taller" se
+  // clasifica como Bodega, no como Proceso de Trabajo).
+  String _procesoDeAccion(String accion) {
+    final a = accion.toUpperCase();
+    if (a.contains('GARANT')) return 'Revisión Garantía';
+    if (a.contains('RECEP')) return 'Recepción';
+    if (a.contains('COMERCIAL') || a.contains('COTIZA')) return 'Comercial';
+    if (a.contains('COSTO')) return 'Costos';
+    if (a.contains('COMPRA')) return 'Compras';
+    if (a.contains('BODEGA') || a.contains('DESPACHO')) return 'Bodega';
+    if (a.contains('TALLER') || a.contains('TRABAJO')) return 'Proceso de Trabajo';
+    if (a.contains('FACTUR')) return 'Facturación';
+    if (a.contains('ENTREGA') || a.contains('GUÍA') || a.contains('GUIA')) return 'Entrega';
+    return 'Otro';
   }
 
   Widget _seccionDimensiones(List<ResumenTicketDash> data) {
@@ -1489,6 +1538,13 @@ class _DashboardViewState extends State<_DashboardView> {
           final ordenados = _ordenar(filtrados);
           final segmentosFiltrados = _segmentosDe(filtrados, datos.segmentos);
 
+          // 🔒 "Tiempo promedio por proceso" solo debe salir de tickets
+          // FINALIZADOS (ver nota en _seccionEquipo): un ticket en curso
+          // no tiene un tiempo cerrado todavía, y uno anulado no
+          // representa el comportamiento normal del proceso.
+          final idsFinalizados = filtrados.where((r) => r.estadoBucket == 'Cerrado').map((r) => r.id).toSet();
+          final segmentosFinalizados = segmentosFiltrados.where((s) => idsFinalizados.contains(s.ticketId)).toList();
+
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -1500,12 +1556,14 @@ class _DashboardViewState extends State<_DashboardView> {
                 _seccionTendencia(filtrados),
                 _seccionTitulo('Por equipo'),
                 _seccionEquipo(filtrados),
-                _seccionTitulo('Tiempo por departamento'),
-                _seccionDepartamentos(segmentosFiltrados),
-                _seccionTitulo('Tiempos de Ciclo: Trabajo Neto vs. Espera'),
-                _seccionTiemposNetosVsEspera(filtrados),
-                _seccionTitulo('Lead Time de Repuestos y Evaluación de Proveedores'),
-                _seccionRankingRepuestos(datos.rankingRepuestos),
+                _seccionTitulo('Tiempo por proceso'),
+                _seccionDepartamentos(segmentosFinalizados),
+                // 🆕 Secciones "Tiempos de Ciclo: Trabajo Neto vs. Espera" y
+                // "Lead Time de Repuestos y Evaluación de Proveedores"
+                // retiradas de la vista por pedido — el cálculo sigue
+                // existiendo (_seccionTiemposNetosVsEspera /
+                // _seccionRankingRepuestos, más abajo en este archivo), así
+                // que es fácil reactivarlas más adelante si hacen falta.
                 _seccionTitulo('Otras dimensiones'),
                 _seccionDimensiones(filtrados),
                 _seccionTitulo('Clientes y fallas'),

@@ -533,4 +533,22 @@ extension TicketMetrics on TicketEntity {
     }
     return masReciente;
   }
+
+  // 🆕 Fecha en que el ticket fue CREADO: el timestamp más antiguo de su
+  // historial (simétrico a fechaInicioEstadoActual, que toma el más
+  // reciente). Se usa para mostrar cuánto tiempo lleva el ticket en total
+  // desde que se creó, sin importar en qué estado esté ahora (ver
+  // TiempoEnCursoWidget). Tampoco requiere ningún campo nuevo en
+  // Firestore: se deriva de historialEventos, que ya se guarda desde el
+  // primer paso.
+  DateTime? get fechaCreacionTicket {
+    if (historialEventos.isEmpty) return null;
+    DateTime? masAntiguo;
+    for (final evento in historialEventos) {
+      if (masAntiguo == null || evento.timestamp.isBefore(masAntiguo)) {
+        masAntiguo = evento.timestamp;
+      }
+    }
+    return masAntiguo;
+  }
 }

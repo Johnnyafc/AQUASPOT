@@ -755,6 +755,31 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
                                 ],
                               ),
                             ),
+
+                            // 🆕 TIEMPO TOTAL DESDE LA CREACIÓN DEL TICKET — mismo
+                            // widget y mismo formato que el de arriba, pero contando
+                            // desde el primer evento del historial en vez del más
+                            // reciente. Se muestra debajo para no perder el dato de
+                            // "cuánto lleva estancado en el paso actual".
+                            const SizedBox(height: 4),
+                            TiempoEnCursoWidget(
+                              desde: ticket.fechaCreacionTicket,
+                              builder: (context, texto) => Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.schedule, size: 12, color: kTicketIcono),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      'Desde creación: $texto',
+                                      style: const TextStyle(fontWeight: FontWeight.w600, color: kTicketTextoSecundario, fontSize: 12),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                       ),

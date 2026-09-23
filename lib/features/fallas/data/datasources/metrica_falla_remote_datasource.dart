@@ -8,7 +8,7 @@ class MetricaFallaRemoteDataSource {
   final FirebaseFirestore _firestore;
 
   MetricaFallaRemoteDataSource({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   CollectionReference<Map<String, dynamic>> get _col =>
       _firestore.collection('catalogo_metricas_falla');
@@ -36,7 +36,9 @@ class MetricaFallaRemoteDataSource {
     await _col.doc(docId).set(model.toJson(), SetOptions(merge: true));
   }
 
-  Future<MatrizFallasEquipoEntity> _obtenerMatrizActual(String tipoEquipo) async {
+  Future<MatrizFallasEquipoEntity> _obtenerMatrizActual(
+    String tipoEquipo,
+  ) async {
     final docId = _docKey(tipoEquipo);
     final snap = await _col.doc(docId).get();
     if (!snap.exists || snap.data() == null) {
@@ -53,7 +55,9 @@ class MetricaFallaRemoteDataSource {
     final matriz = await _obtenerMatrizActual(tipoEquipo);
     final cats = List<CategoriaFallaEntity>.from(matriz.categorias);
     final catTrim = nombreCategoria.trim();
-    final existe = cats.any((c) => c.nombre.trim().toLowerCase() == catTrim.toLowerCase());
+    final existe = cats.any(
+      (c) => c.nombre.trim().toLowerCase() == catTrim.toLowerCase(),
+    );
 
     if (!existe && catTrim.isNotEmpty) {
       cats.add(CategoriaFallaEntity(nombre: catTrim, subcategorias: const []));
@@ -68,7 +72,11 @@ class MetricaFallaRemoteDataSource {
   }) async {
     final matriz = await _obtenerMatrizActual(tipoEquipo);
     final cats = matriz.categorias
-        .where((c) => c.nombre.trim().toLowerCase() != nombreCategoria.trim().toLowerCase())
+        .where(
+          (c) =>
+              c.nombre.trim().toLowerCase() !=
+              nombreCategoria.trim().toLowerCase(),
+        )
         .toList();
     await guardarMatriz(matriz.copyWith(categorias: cats));
   }
@@ -82,7 +90,8 @@ class MetricaFallaRemoteDataSource {
     final matriz = await _obtenerMatrizActual(tipoEquipo);
     final cats = List<CategoriaFallaEntity>.from(matriz.categorias);
     final catIdx = cats.indexWhere(
-      (c) => c.nombre.trim().toLowerCase() == nombreCategoria.trim().toLowerCase(),
+      (c) =>
+          c.nombre.trim().toLowerCase() == nombreCategoria.trim().toLowerCase(),
     );
     final subTrim = nombreSubcategoria.trim();
     if (subTrim.isEmpty) return;
@@ -90,7 +99,9 @@ class MetricaFallaRemoteDataSource {
     if (catIdx >= 0) {
       final actualCat = cats[catIdx];
       final subs = List<SubcategoriaFallaEntity>.from(actualCat.subcategorias);
-      final existeSub = subs.any((s) => s.nombre.trim().toLowerCase() == subTrim.toLowerCase());
+      final existeSub = subs.any(
+        (s) => s.nombre.trim().toLowerCase() == subTrim.toLowerCase(),
+      );
 
       if (!existeSub) {
         subs.add(SubcategoriaFallaEntity(nombre: subTrim, fallas: const []));
@@ -102,7 +113,9 @@ class MetricaFallaRemoteDataSource {
       cats.add(
         CategoriaFallaEntity(
           nombre: nombreCategoria.trim(),
-          subcategorias: [SubcategoriaFallaEntity(nombre: subTrim, fallas: const [])],
+          subcategorias: [
+            SubcategoriaFallaEntity(nombre: subTrim, fallas: const []),
+          ],
         ),
       );
       await guardarMatriz(matriz.copyWith(categorias: cats));
@@ -118,13 +131,18 @@ class MetricaFallaRemoteDataSource {
     final matriz = await _obtenerMatrizActual(tipoEquipo);
     final cats = List<CategoriaFallaEntity>.from(matriz.categorias);
     final catIdx = cats.indexWhere(
-      (c) => c.nombre.trim().toLowerCase() == nombreCategoria.trim().toLowerCase(),
+      (c) =>
+          c.nombre.trim().toLowerCase() == nombreCategoria.trim().toLowerCase(),
     );
 
     if (catIdx >= 0) {
       final actualCat = cats[catIdx];
       final subs = actualCat.subcategorias
-          .where((s) => s.nombre.trim().toLowerCase() != nombreSubcategoria.trim().toLowerCase())
+          .where(
+            (s) =>
+                s.nombre.trim().toLowerCase() !=
+                nombreSubcategoria.trim().toLowerCase(),
+          )
           .toList();
       cats[catIdx] = actualCat.copyWith(subcategorias: subs);
       await guardarMatriz(matriz.copyWith(categorias: cats));
@@ -141,7 +159,8 @@ class MetricaFallaRemoteDataSource {
     final matriz = await _obtenerMatrizActual(tipoEquipo);
     final cats = List<CategoriaFallaEntity>.from(matriz.categorias);
     final catIdx = cats.indexWhere(
-      (c) => c.nombre.trim().toLowerCase() == nombreCategoria.trim().toLowerCase(),
+      (c) =>
+          c.nombre.trim().toLowerCase() == nombreCategoria.trim().toLowerCase(),
     );
     final fallaTrim = nuevaFalla.trim();
     if (fallaTrim.isEmpty) return;
@@ -150,18 +169,27 @@ class MetricaFallaRemoteDataSource {
       final actualCat = cats[catIdx];
       final subs = List<SubcategoriaFallaEntity>.from(actualCat.subcategorias);
       final subIdx = subs.indexWhere(
-        (s) => s.nombre.trim().toLowerCase() == nombreSubcategoria.trim().toLowerCase(),
+        (s) =>
+            s.nombre.trim().toLowerCase() ==
+            nombreSubcategoria.trim().toLowerCase(),
       );
 
       if (subIdx >= 0) {
         final actualSub = subs[subIdx];
         if (!actualSub.fallas.contains(fallaTrim)) {
-          subs[subIdx] = actualSub.copyWith(fallas: [...actualSub.fallas, fallaTrim]);
+          subs[subIdx] = actualSub.copyWith(
+            fallas: [...actualSub.fallas, fallaTrim],
+          );
           cats[catIdx] = actualCat.copyWith(subcategorias: subs);
           await guardarMatriz(matriz.copyWith(categorias: cats));
         }
       } else {
-        subs.add(SubcategoriaFallaEntity(nombre: nombreSubcategoria.trim(), fallas: [fallaTrim]));
+        subs.add(
+          SubcategoriaFallaEntity(
+            nombre: nombreSubcategoria.trim(),
+            fallas: [fallaTrim],
+          ),
+        );
         cats[catIdx] = actualCat.copyWith(subcategorias: subs);
         await guardarMatriz(matriz.copyWith(categorias: cats));
       }
@@ -170,7 +198,10 @@ class MetricaFallaRemoteDataSource {
         CategoriaFallaEntity(
           nombre: nombreCategoria.trim(),
           subcategorias: [
-            SubcategoriaFallaEntity(nombre: nombreSubcategoria.trim(), fallas: [fallaTrim])
+            SubcategoriaFallaEntity(
+              nombre: nombreSubcategoria.trim(),
+              fallas: [fallaTrim],
+            ),
           ],
         ),
       );
@@ -188,20 +219,25 @@ class MetricaFallaRemoteDataSource {
     final matriz = await _obtenerMatrizActual(tipoEquipo);
     final cats = List<CategoriaFallaEntity>.from(matriz.categorias);
     final catIdx = cats.indexWhere(
-      (c) => c.nombre.trim().toLowerCase() == nombreCategoria.trim().toLowerCase(),
+      (c) =>
+          c.nombre.trim().toLowerCase() == nombreCategoria.trim().toLowerCase(),
     );
 
     if (catIdx >= 0) {
       final actualCat = cats[catIdx];
       final subs = List<SubcategoriaFallaEntity>.from(actualCat.subcategorias);
       final subIdx = subs.indexWhere(
-        (s) => s.nombre.trim().toLowerCase() == nombreSubcategoria.trim().toLowerCase(),
+        (s) =>
+            s.nombre.trim().toLowerCase() ==
+            nombreSubcategoria.trim().toLowerCase(),
       );
 
       if (subIdx >= 0) {
         final actualSub = subs[subIdx];
         subs[subIdx] = actualSub.copyWith(
-          fallas: actualSub.fallas.where((f) => f != fallaAEliminar.trim()).toList(),
+          fallas: actualSub.fallas
+              .where((f) => f != fallaAEliminar.trim())
+              .toList(),
         );
         cats[catIdx] = actualCat.copyWith(subcategorias: subs);
         await guardarMatriz(matriz.copyWith(categorias: cats));
@@ -237,14 +273,16 @@ class MetricaFallaRemoteDataSource {
     final matriz = await _obtenerMatrizActual(tipoEquipo);
     final cats = List<CategoriaFallaEntity>.from(matriz.categorias);
     final catIdx = cats.indexWhere(
-      (c) => c.nombre.trim().toLowerCase() == nombreCategoria.trim().toLowerCase(),
+      (c) =>
+          c.nombre.trim().toLowerCase() == nombreCategoria.trim().toLowerCase(),
     );
     final nuevoTrim = nuevoNombre.trim();
     if (catIdx >= 0 && nuevoTrim.isNotEmpty) {
       final actualCat = cats[catIdx];
       final subs = List<SubcategoriaFallaEntity>.from(actualCat.subcategorias);
       final subIdx = subs.indexWhere(
-        (s) => s.nombre.trim().toLowerCase() == nombreActual.trim().toLowerCase(),
+        (s) =>
+            s.nombre.trim().toLowerCase() == nombreActual.trim().toLowerCase(),
       );
       if (subIdx >= 0) {
         subs[subIdx] = subs[subIdx].copyWith(nombre: nuevoTrim);
@@ -265,14 +303,17 @@ class MetricaFallaRemoteDataSource {
     final matriz = await _obtenerMatrizActual(tipoEquipo);
     final cats = List<CategoriaFallaEntity>.from(matriz.categorias);
     final catIdx = cats.indexWhere(
-      (c) => c.nombre.trim().toLowerCase() == nombreCategoria.trim().toLowerCase(),
+      (c) =>
+          c.nombre.trim().toLowerCase() == nombreCategoria.trim().toLowerCase(),
     );
     final nuevaTrim = nuevaFalla.trim();
     if (catIdx >= 0 && nuevaTrim.isNotEmpty) {
       final actualCat = cats[catIdx];
       final subs = List<SubcategoriaFallaEntity>.from(actualCat.subcategorias);
       final subIdx = subs.indexWhere(
-        (s) => s.nombre.trim().toLowerCase() == nombreSubcategoria.trim().toLowerCase(),
+        (s) =>
+            s.nombre.trim().toLowerCase() ==
+            nombreSubcategoria.trim().toLowerCase(),
       );
       if (subIdx >= 0) {
         final actualSub = subs[subIdx];
@@ -357,10 +398,7 @@ class MetricaFallaRemoteDataSource {
             subcategorias: [
               SubcategoriaFallaEntity(
                 nombre: 'Estructura y Ensamblaje',
-                fallas: [
-                  'Defectos de soldadura',
-                  'Defectos de ensamblaje',
-                ],
+                fallas: ['Defectos de soldadura', 'Defectos de ensamblaje'],
               ),
             ],
           ),
@@ -377,9 +415,7 @@ class MetricaFallaRemoteDataSource {
               ),
               SubcategoriaFallaEntity(
                 nombre: 'Licenciamiento',
-                fallas: [
-                  'Error de licencia',
-                ],
+                fallas: ['Error de licencia'],
               ),
             ],
           ),
