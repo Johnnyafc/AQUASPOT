@@ -21,6 +21,7 @@ import 'package:aquaspot_postventa/features/inventario/presentation/pages/gestio
 import 'package:aquaspot_postventa/features/catalogo/presentation/pages/gestion_catalogo_actividades_page.dart';
 import 'package:aquaspot_postventa/features/tecnicos/presentation/pages/gestion_tecnicos_page.dart';
 import 'package:aquaspot_postventa/features/fallas/presentation/pages/gestion_metricas_fallas_page.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_fallas_pendientes_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/auth_bloc.dart';
@@ -313,6 +314,13 @@ class _InicioView extends StatelessWidget {
         icon: Icons.troubleshoot_outlined,
         color: Colors.blueGrey.shade700,
         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GestionMetricasFallasPage())),
+      ));
+
+      modules.add(_buildCardOption(
+        title: 'Agregar Fallas a Tickets Antiguos',
+        icon: Icons.playlist_add_check_circle_outlined,
+        color: Colors.deepOrange,
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaFallasPendientesPage())),
       ));
     }
 
