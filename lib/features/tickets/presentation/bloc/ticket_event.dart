@@ -667,6 +667,19 @@ class GuardarValidacionBodegaComprasEvent extends TicketEvent {
   List<Object?> get props => [ticket, items, transferirABodega, transferirDirectoATaller, nombreUsuario, rolUsuario];
 }
 
+class SincronizarStockDespachoBodegaEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final List<ItemDespachoBodegaEntity> itemsActualizados;
+
+  const SincronizarStockDespachoBodegaEvent({
+    required this.ticket,
+    required this.itemsActualizados,
+  });
+
+  @override
+  List<Object?> get props => [ticket, itemsActualizados];
+}
+
 class RegistrarDespachoBodegaEvent extends TicketEvent {
   final TicketEntity ticket;
   final List<ItemDespachoBodegaEntity> itemsActualizados;

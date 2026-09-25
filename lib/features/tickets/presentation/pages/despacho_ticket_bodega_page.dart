@@ -92,6 +92,45 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
         }
       }
     }
+
+    // 💾 SINCRONIZACION AUTOMATICA CON INVENTARIO REAL:
+    // El bloque de arriba ya recalculo el stock en vivo contra InventarioBloc,
+    // pero ese resultado solo vivia en esta pantalla (variable local _items) y
+    // se perdia al cerrarla. Si detectamos que el cruce contra inventario real
+    // cambio algo respecto a lo que hay guardado en el ticket, lo persistimos
+    // en segundo plano para que la lista de Bodega y el resto de pantallas
+    // dejen de mostrar estos repuestos como pendientes.
+    if (_huboCambiosDeStockReal(ticket.itemsDespachoBodega, _items)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        context.read<TicketBloc>().add(
+          SincronizarStockDespachoBodegaEvent(
+            ticket: ticket,
+            itemsActualizados: _items,
+          ),
+        );
+      });
+    }
+  }
+
+  // Compara los items tal como estan guardados en el ticket contra el
+  // recalculo en vivo hecho arriba, para saber si vale la pena escribir
+  // en Firestore (evita sincronizaciones innecesarias en cada apertura).
+  bool _huboCambiosDeStockReal(
+    List<ItemDespachoBodegaEntity> originales,
+    List<ItemDespachoBodegaEntity> recalculados,
+  ) {
+    if (originales.isEmpty) return false;
+    final mapaOriginal = {for (final i in originales) i.codigo: i};
+    for (final item in recalculados) {
+      final original = mapaOriginal[item.codigo];
+      if (original == null) continue;
+      if (original.stockDisponibleAlEvaluar != item.stockDisponibleAlEvaluar ||
+          original.validadoPorCompras != item.validadoPorCompras) {
+        return true;
+      }
+    }
+    return false;
   }
 
   @override

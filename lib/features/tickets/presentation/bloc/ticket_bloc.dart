@@ -104,6 +104,7 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     on<ReportarIncidenciaComercialEvent>(_onReportarIncidencia);
     on<DeclararNoRequiereComprasEvent>(_onDeclararNoRequiereCompras);
     on<GuardarValidacionBodegaComprasEvent>(_onGuardarValidacionBodegaCompras);
+    on<SincronizarStockDespachoBodegaEvent>(_onSincronizarStockDespachoBodega);
     on<RegistrarDespachoBodegaEvent>(_onRegistrarDespachoBodega);
     on<ActualizarEvidenciasDespachoEvent>(_onActualizarEvidenciasDespacho);
     on<AsignarTecnicosTrabajoEvent>(_onAsignarTecnicosTrabajo);
@@ -2631,6 +2632,53 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
         emit(state.copyWith(
           status: TicketStatus.operationSuccess,
           message: mensajeExito,
+          historial: listaActualizada,
+          tickets: listaTickets,
+          currentTicket: ticketGuardado,
+        ));
+      },
+    );
+  }
+
+  // 🔄 SINCRONIZACION SILENCIOSA DE STOCK EN BODEGA:
+  // Cuando Bodega abre el detalle de despacho, la pantalla recalcula en vivo
+  // el cruce contra el inventario real (InventarioBloc). Antes ese resultado
+  // solo se usaba para pintar la pantalla y se perdia al cerrarla. Aqui lo
+  // persistimos en el ticket para que el resto de pantallas (listas, tarjetas,
+  // dashboards) dejen de mostrar estos repuestos como pendientes sin necesidad
+  // de que Compras vuelva a tocar el ticket.
+  //
+  // No emitimos TicketStatus.operationSuccess a proposito: esto ocurre de forma
+  // automatica al abrir la pantalla (no por una accion explicita del usuario),
+  // asi que evitamos un SnackBar de exito o un cierre automatico de pantalla
+  // que confundirian a Bodega. Si la escritura falla, simplemente no hacemos
+  // nada: el proximo intento (proxima vez que se abra el ticket, o cuando
+  // Compras lo procese) volvera a corregir el dato.
+  Future<void> _onSincronizarStockDespachoBodega(
+    SincronizarStockDespachoBodegaEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    final ticketActualizado = event.ticket.copyWith(
+      itemsDespachoBodega: event.itemsActualizados,
+    );
+
+    final result = await actualizarTicket(ticketActualizado);
+
+    result.fold(
+      (failure) {
+        // Fallo silencioso: no interrumpimos a Bodega por una sincronizacion
+        // de fondo que ellos no iniciaron explicitamente.
+      },
+      (ticketGuardado) {
+        final listaActualizada = state.historial
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+        final listaTickets = state.tickets
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.loaded,
           historial: listaActualizada,
           tickets: listaTickets,
           currentTicket: ticketGuardado,
