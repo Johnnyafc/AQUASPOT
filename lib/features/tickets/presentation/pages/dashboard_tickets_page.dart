@@ -997,7 +997,9 @@ class _DashboardViewState extends State<_DashboardView> {
     final a = accion.toUpperCase();
     if (a.contains('GARANT')) return 'Revisión Garantía';
     if (a.contains('RECEP')) return 'Recepción';
-    if (a.contains('COMERCIAL') || a.contains('COTIZA')) return 'Comercial';
+    if (a.contains('EVALUACI')) return 'Evaluación Técnica';
+    if (a.contains('COTIZA')) return 'Cotizado';
+    if (a.contains('COMERCIAL')) return 'Comercial';
     if (a.contains('COSTO')) return 'Costos';
     if (a.contains('COMPRA')) return 'Compras';
     if (a.contains('BODEGA') || a.contains('DESPACHO')) return 'Bodega';
