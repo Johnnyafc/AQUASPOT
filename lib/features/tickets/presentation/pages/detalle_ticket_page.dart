@@ -8,6 +8,7 @@ import '../../domain/entities/item_despacho_bodega_entity.dart';
 import '../widgets/full_photo_widget.dart';
 import '../widgets/copy_icon_button_widget.dart';
 import '../widgets/tarjeta_no_requiere_compras_widget.dart';
+import '../widgets/trazabilidad_grafica_widget.dart';
 
 class DetalleTicketPage extends StatelessWidget {
   final TicketEntity ticket;
@@ -65,6 +66,12 @@ class DetalleTicketPage extends StatelessWidget {
             const Text("Evidencia Multimedia", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
             const SizedBox(height: 12),
             _buildEvidenciasCard(context),
+
+            const SizedBox(height: 24),
+
+            const Text("Tiempos por Proceso", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
+            const SizedBox(height: 12),
+            TrazabilidadGraficaWidget(ticket: ticket),
 
             const SizedBox(height: 24),
 
