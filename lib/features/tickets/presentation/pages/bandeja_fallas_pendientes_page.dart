@@ -1,10 +1,13 @@
 // lib/features/tickets/presentation/pages/bandeja_fallas_pendientes_page.dart
 //
-// 🆕 Tarjeta de supervisión: lista los tickets antiguos que aún NO tienen
-// diagnóstico de fallas registrado (ticket.diagnosticoFallas vacío), para
-// que el supervisor los complete retroactivamente. Filtrado por el mismo
-// segmento operativo del supervisor logueado (caracol/cosechadora/contador),
-// igual que el resto de bandejas de supervisión (ver bandeja_revisiones_garantias_page.dart).
+// 🆕 Tarjeta de supervisión: lista los tickets que aún NO tienen su
+// diagnóstico de fallas completo -- ya sea porque no tienen ninguna
+// categoría/falla registrada (ticket.diagnosticoFallas vacío), o porque
+// tienen fallas diagnosticadas a las que todavía les falta registrar al
+// menos una razón del problema -- para que el supervisor lo complete
+// retroactivamente. Filtrado por el mismo segmento operativo del supervisor
+// logueado (caracol/cosechadora/contador), igual que el resto de bandejas
+// de supervisión (ver bandeja_revisiones_garantias_page.dart).
 
 import 'package:aquaspot_postventa/core/enum/segmento_operativo.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_bloc.dart';
@@ -76,8 +79,14 @@ class _BandejaFallasPendientesPageState extends State<BandejaFallasPendientesPag
           }
 
           if (state.status == TicketStatus.loaded || state.status == TicketStatus.operationSuccess) {
-            // ✅ FILTRO: solo tickets sin diagnóstico de fallas registrado aún
-            final pendientes = state.historial.where((t) => t.diagnosticoFallas.isEmpty).toList();
+            // ✅ FILTRO: tickets sin ninguna falla diagnosticada todavía, O con
+            // fallas diagnosticadas a las que les falta registrar al menos una razón.
+            // Solo sale de esta bandeja cuando TODAS sus fallas diagnosticadas ya
+            // tienen por lo menos una razón del problema registrada.
+            final pendientes = state.historial.where((t) {
+              if (t.diagnosticoFallas.isEmpty) return true;
+              return t.diagnosticoFallas.any((d) => d.razonesProblema.isEmpty);
+            }).toList();
 
             if (pendientes.isEmpty) {
               return const Center(child: Text("No hay tickets pendientes de diagnóstico de fallas.", style: TextStyle(color: Colors.grey)));

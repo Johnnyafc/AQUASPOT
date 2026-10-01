@@ -7,6 +7,7 @@ class DiagnosticoFallaModel extends DiagnosticoFallaEntity {
     required super.categoria,
     super.subcategoria = '',
     required super.falla,
+    super.razonesProblema = const [],
   });
 
   factory DiagnosticoFallaModel.fromJson(Map<String, dynamic> json) {
@@ -14,6 +15,7 @@ class DiagnosticoFallaModel extends DiagnosticoFallaEntity {
       categoria: json['categoria']?.toString() ?? '',
       subcategoria: json['subcategoria']?.toString() ?? '',
       falla: json['falla']?.toString() ?? json['razon']?.toString() ?? '',
+      razonesProblema: (json['razonesProblema'] as List?)?.map((e) => e.toString()).toList() ?? const [],
     );
   }
 
@@ -22,6 +24,7 @@ class DiagnosticoFallaModel extends DiagnosticoFallaEntity {
       categoria: entity.categoria,
       subcategoria: entity.subcategoria,
       falla: entity.falla,
+      razonesProblema: entity.razonesProblema,
     );
   }
 
@@ -32,6 +35,7 @@ class DiagnosticoFallaModel extends DiagnosticoFallaEntity {
       'subcategoria': subcategoria,
       'falla': falla,
       'razon': falla,
+      'razonesProblema': razonesProblema,
     };
   }
 }
@@ -40,6 +44,7 @@ class SubcategoriaFallaModel extends SubcategoriaFallaEntity {
   const SubcategoriaFallaModel({
     required super.nombre,
     required super.fallas,
+    super.razonesPorFalla = const {},
   });
 
   factory SubcategoriaFallaModel.fromJson(Map<String, dynamic> json) {
@@ -48,6 +53,13 @@ class SubcategoriaFallaModel extends SubcategoriaFallaEntity {
       fallas: (json['fallas'] as List?)?.map((e) => e.toString()).toList() ??
               (json['razones'] as List?)?.map((e) => e.toString()).toList() ??
               [],
+      razonesPorFalla: (json['razonesPorFalla'] as Map?)?.map(
+            (k, v) => MapEntry(
+              k.toString(),
+              (v as List?)?.map((e) => e.toString()).toList() ?? <String>[],
+            ),
+          ) ??
+          const {},
     );
   }
 
@@ -55,6 +67,7 @@ class SubcategoriaFallaModel extends SubcategoriaFallaEntity {
     return SubcategoriaFallaModel(
       nombre: entity.nombre,
       fallas: entity.fallas,
+      razonesPorFalla: entity.razonesPorFalla,
     );
   }
 
@@ -62,6 +75,7 @@ class SubcategoriaFallaModel extends SubcategoriaFallaEntity {
     return {
       'nombre': nombre,
       'fallas': fallas,
+      'razonesPorFalla': razonesPorFalla,
     };
   }
 }

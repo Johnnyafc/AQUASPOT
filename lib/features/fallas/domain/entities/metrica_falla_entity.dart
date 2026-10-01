@@ -6,24 +6,28 @@ import 'package:equatable/equatable.dart';
 class SubcategoriaFallaEntity extends Equatable {
   final String nombre; // Ej: "Comap", "Relé", "Cableado"
   final List<String> fallas; // Ej: ["Falla en tarjeta electrónica", "Fallo en borneras"]
+  final Map<String, List<String>> razonesPorFalla; // falla -> razones del problema configuradas para esa falla
 
   const SubcategoriaFallaEntity({
     required this.nombre,
     required this.fallas,
+    this.razonesPorFalla = const {},
   });
 
   SubcategoriaFallaEntity copyWith({
     String? nombre,
     List<String>? fallas,
+    Map<String, List<String>>? razonesPorFalla,
   }) {
     return SubcategoriaFallaEntity(
       nombre: nombre ?? this.nombre,
       fallas: fallas ?? this.fallas,
+      razonesPorFalla: razonesPorFalla ?? this.razonesPorFalla,
     );
   }
 
   @override
-  List<Object?> get props => [nombre, fallas];
+  List<Object?> get props => [nombre, fallas, razonesPorFalla];
 }
 
 /// Representa una categoría mayor de fallas (ej: "Eléctrico", "Mecánico", "Software")
@@ -82,15 +86,31 @@ class DiagnosticoFallaEntity extends Equatable {
   final String categoria; // Ej: "Eléctrico"
   final String subcategoria; // Ej: "Comap"
   final String falla; // Ej: "Falla en tarjeta electrónica"
+  final List<String> razonesProblema; // Razones del problema (causa raíz) asociadas a esta falla diagnosticada
 
   const DiagnosticoFallaEntity({
     required this.categoria,
     this.subcategoria = '',
     required this.falla,
+    this.razonesProblema = const [],
   });
 
   /// Getter de retrocompatibilidad para vistas y funciones que accedían a .razon
   String get razon => falla;
+
+  DiagnosticoFallaEntity copyWith({
+    String? categoria,
+    String? subcategoria,
+    String? falla,
+    List<String>? razonesProblema,
+  }) {
+    return DiagnosticoFallaEntity(
+      categoria: categoria ?? this.categoria,
+      subcategoria: subcategoria ?? this.subcategoria,
+      falla: falla ?? this.falla,
+      razonesProblema: razonesProblema ?? this.razonesProblema,
+    );
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -98,6 +118,7 @@ class DiagnosticoFallaEntity extends Equatable {
       'subcategoria': subcategoria,
       'falla': falla,
       'razon': falla, // Preserva compatibilidad con registros históricos de Firestore
+      'razonesProblema': razonesProblema,
     };
   }
 
@@ -106,9 +127,10 @@ class DiagnosticoFallaEntity extends Equatable {
       categoria: json['categoria']?.toString() ?? '',
       subcategoria: json['subcategoria']?.toString() ?? '',
       falla: json['falla']?.toString() ?? json['razon']?.toString() ?? '',
+      razonesProblema: (json['razonesProblema'] as List?)?.map((e) => e.toString()).toList() ?? const [],
     );
   }
 
   @override
-  List<Object?> get props => [categoria, subcategoria, falla];
+  List<Object?> get props => [categoria, subcategoria, falla, razonesProblema];
 }

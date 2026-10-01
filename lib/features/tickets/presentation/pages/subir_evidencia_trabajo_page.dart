@@ -351,9 +351,155 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
     );
   }
 
+  Future<void> _agregarRazonAlCatalogo({
+    required String tipoEquipo,
+    required String nombreCategoria,
+    required String nombreSubcategoria,
+    required String falla,
+    required List<String> razonesActualesCatalogo,
+    required String nuevaRazon,
+  }) async {
+    try {
+      await _fallasDataSource.actualizarRazonesFalla(
+        tipoEquipo: tipoEquipo,
+        nombreCategoria: nombreCategoria,
+        nombreSubcategoria: nombreSubcategoria,
+        falla: falla,
+        razones: [...razonesActualesCatalogo, nuevaRazon],
+      );
+    } catch (_) {
+      // Si falla el guardado en catálogo, la razón igual queda aplicada a
+      // este ticket; no se bloquea el flujo del técnico/supervisor por esto.
+    }
+  }
+
   void _mostrarModalDiagnosticoFallas() {
     final List<DiagnosticoFallaEntity> seleccionadas =
         List<DiagnosticoFallaEntity>.from(_diagnosticoFallas);
+    final Map<String, TextEditingController> otraRazonCtrls = {};
+
+    Widget construirSelectorRazones({
+      required StateSetter setSheetState,
+      required String tipoEquipo,
+      required String nombreCategoria,
+      required String nombreSubcategoria,
+      required String falla,
+      required List<String> opcionesCatalogo,
+      required DiagnosticoFallaEntity diagnostico,
+    }) {
+      final opciones = <String>[
+        ...opcionesCatalogo,
+        ...diagnostico.razonesProblema.where((r) => !opcionesCatalogo.contains(r)),
+      ];
+      final claveCtrl = '$nombreCategoria|$nombreSubcategoria|$falla';
+      final otraRazonCtrl = otraRazonCtrls.putIfAbsent(claveCtrl, () => TextEditingController());
+
+      void actualizarRazones(List<String> nuevasRazones) {
+        setSheetState(() {
+          final idx = seleccionadas.indexWhere(
+            (f) => f.categoria == nombreCategoria && f.subcategoria == nombreSubcategoria && f.falla == falla,
+          );
+          if (idx >= 0) {
+            seleccionadas[idx] = seleccionadas[idx].copyWith(razonesProblema: nuevasRazones);
+          }
+        });
+      }
+
+      void agregarOtraRazon() {
+        final texto = otraRazonCtrl.text.trim();
+        if (texto.isEmpty) return;
+        final yaExiste = diagnostico.razonesProblema.any((r) => r.toLowerCase() == texto.toLowerCase());
+        if (!yaExiste) {
+          actualizarRazones([...diagnostico.razonesProblema, texto]);
+          _agregarRazonAlCatalogo(
+            tipoEquipo: tipoEquipo,
+            nombreCategoria: nombreCategoria,
+            nombreSubcategoria: nombreSubcategoria,
+            falla: falla,
+            razonesActualesCatalogo: opcionesCatalogo,
+            nuevaRazon: texto,
+          );
+        }
+        otraRazonCtrl.clear();
+      }
+
+      return Container(
+        margin: const EdgeInsets.only(top: 2, bottom: 8),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.deepOrange.shade50,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.deepOrange.shade100),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Razón del problema',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.deepOrange),
+            ),
+            const SizedBox(height: 4),
+            if (opciones.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Text(
+                  'Esta falla no tiene razones configuradas todavía. Agrégalas desde '
+                  '"Métricas y Causas de Fallas", o escribe una abajo.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
+                ),
+              )
+            else
+              Wrap(
+                spacing: 6,
+                runSpacing: 2,
+                children: opciones.map((razon) {
+                  final marcada = diagnostico.razonesProblema.contains(razon);
+                  return FilterChip(
+                    label: Text(razon, style: const TextStyle(fontSize: 11)),
+                    selected: marcada,
+                    selectedColor: Colors.deepOrange.shade200,
+                    backgroundColor: Colors.white,
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (sel) {
+                      final nuevas = List<String>.from(diagnostico.razonesProblema);
+                      if (sel) {
+                        if (!nuevas.contains(razon)) nuevas.add(razon);
+                      } else {
+                        nuevas.remove(razon);
+                      }
+                      actualizarRazones(nuevas);
+                    },
+                  );
+                }).toList(),
+              ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: otraRazonCtrl,
+                    style: const TextStyle(fontSize: 12),
+                    decoration: InputDecoration(
+                      hintText: 'Otra razón...',
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                    onSubmitted: (_) => agregarOtraRazon(),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.add_circle, color: Colors.deepOrange, size: 20),
+                  tooltip: 'Agregar razón',
+                  onPressed: agregarOtraRazon,
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
 
     showModalBottomSheet(
       context: context,
@@ -506,36 +652,55 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
                                               )
                                             else
                                               ...sub.fallas.map((falla) {
-                                                final isChecked = seleccionadas.any(
+                                                final idxSel = seleccionadas.indexWhere(
                                                   (f) =>
                                                       f.categoria == cat.nombre &&
                                                       f.subcategoria == sub.nombre &&
                                                       f.falla == falla,
                                                 );
+                                                final isChecked = idxSel >= 0;
 
-                                                return CheckboxListTile(
-                                                  dense: true,
-                                                  value: isChecked,
-                                                  title: Text(falla, style: const TextStyle(fontSize: 13)),
-                                                  activeColor: Colors.deepOrange,
-                                                  onChanged: (val) {
-                                                    setSheetState(() {
-                                                      if (val == true) {
-                                                        seleccionadas.add(DiagnosticoFallaEntity(
-                                                          categoria: cat.nombre,
-                                                          subcategoria: sub.nombre,
+                                                return Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    CheckboxListTile(
+                                                      dense: true,
+                                                      value: isChecked,
+                                                      title: Text(falla, style: const TextStyle(fontSize: 13)),
+                                                      activeColor: Colors.deepOrange,
+                                                      onChanged: (val) {
+                                                        setSheetState(() {
+                                                          if (val == true) {
+                                                            seleccionadas.add(DiagnosticoFallaEntity(
+                                                              categoria: cat.nombre,
+                                                              subcategoria: sub.nombre,
+                                                              falla: falla,
+                                                            ));
+                                                          } else {
+                                                            seleccionadas.removeWhere(
+                                                              (f) =>
+                                                                  f.categoria == cat.nombre &&
+                                                                  f.subcategoria == sub.nombre &&
+                                                                  f.falla == falla,
+                                                            );
+                                                          }
+                                                        });
+                                                      },
+                                                    ),
+                                                    if (isChecked)
+                                                      Padding(
+                                                        padding: const EdgeInsets.only(left: 28, right: 12, bottom: 10),
+                                                        child: construirSelectorRazones(
+                                                          setSheetState: setSheetState,
+                                                          tipoEquipo: widget.ticket.equipo.name,
+                                                          nombreCategoria: cat.nombre,
+                                                          nombreSubcategoria: sub.nombre,
                                                           falla: falla,
-                                                        ));
-                                                      } else {
-                                                        seleccionadas.removeWhere(
-                                                          (f) =>
-                                                              f.categoria == cat.nombre &&
-                                                              f.subcategoria == sub.nombre &&
-                                                              f.falla == falla,
-                                                        );
-                                                      }
-                                                    });
-                                                  },
+                                                          opcionesCatalogo: sub.razonesPorFalla[falla] ?? const [],
+                                                          diagnostico: seleccionadas[idxSel],
+                                                        ),
+                                                      ),
+                                                  ],
                                                 );
                                               }),
                                           ],
@@ -598,7 +763,11 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      for (final ctrl in otraRazonCtrls.values) {
+        ctrl.dispose();
+      }
+    });
   }
 
   Future<void> _seleccionarInformeTecnico() async {

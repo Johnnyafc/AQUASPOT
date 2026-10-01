@@ -234,10 +234,13 @@ class MetricaFallaRemoteDataSource {
 
       if (subIdx >= 0) {
         final actualSub = subs[subIdx];
+        final nuevasRazonesPorFalla = Map<String, List<String>>.from(actualSub.razonesPorFalla)
+          ..remove(fallaAEliminar.trim());
         subs[subIdx] = actualSub.copyWith(
           fallas: actualSub.fallas
               .where((f) => f != fallaAEliminar.trim())
               .toList(),
+          razonesPorFalla: nuevasRazonesPorFalla,
         );
         cats[catIdx] = actualCat.copyWith(subcategorias: subs);
         await guardarMatriz(matriz.copyWith(categorias: cats));
@@ -321,12 +324,55 @@ class MetricaFallaRemoteDataSource {
         if (fIdx >= 0) {
           final nuevasFallas = List<String>.from(actualSub.fallas);
           nuevasFallas[fIdx] = nuevaTrim;
-          subs[subIdx] = actualSub.copyWith(fallas: nuevasFallas);
+          final nuevasRazonesPorFalla = Map<String, List<String>>.from(actualSub.razonesPorFalla);
+          if (fallaActual != nuevaTrim && nuevasRazonesPorFalla.containsKey(fallaActual)) {
+            nuevasRazonesPorFalla[nuevaTrim] = nuevasRazonesPorFalla.remove(fallaActual)!;
+          }
+          subs[subIdx] = actualSub.copyWith(fallas: nuevasFallas, razonesPorFalla: nuevasRazonesPorFalla);
           cats[catIdx] = actualCat.copyWith(subcategorias: subs);
           await guardarMatriz(matriz.copyWith(categorias: cats));
         }
       }
     }
+  }
+
+  /// 10. Reemplaza el conjunto de razones del problema configuradas para una falla específica
+  Future<void> actualizarRazonesFalla({
+    required String tipoEquipo,
+    required String nombreCategoria,
+    required String nombreSubcategoria,
+    required String falla,
+    required List<String> razones,
+  }) async {
+    final matriz = await _obtenerMatrizActual(tipoEquipo);
+    final cats = List<CategoriaFallaEntity>.from(matriz.categorias);
+    final catIdx = cats.indexWhere(
+      (c) =>
+          c.nombre.trim().toLowerCase() == nombreCategoria.trim().toLowerCase(),
+    );
+    if (catIdx < 0) return;
+
+    final actualCat = cats[catIdx];
+    final subs = List<SubcategoriaFallaEntity>.from(actualCat.subcategorias);
+    final subIdx = subs.indexWhere(
+      (s) =>
+          s.nombre.trim().toLowerCase() ==
+          nombreSubcategoria.trim().toLowerCase(),
+    );
+    if (subIdx < 0) return;
+
+    final actualSub = subs[subIdx];
+    final razonesLimpias =
+        razones.map((r) => r.trim()).where((r) => r.isNotEmpty).toSet().toList();
+    final nuevoMapa = Map<String, List<String>>.from(actualSub.razonesPorFalla);
+    if (razonesLimpias.isEmpty) {
+      nuevoMapa.remove(falla);
+    } else {
+      nuevoMapa[falla] = razonesLimpias;
+    }
+    subs[subIdx] = actualSub.copyWith(razonesPorFalla: nuevoMapa);
+    cats[catIdx] = actualCat.copyWith(subcategorias: subs);
+    await guardarMatriz(matriz.copyWith(categorias: cats));
   }
 
   /// Alias de retrocompatibilidad

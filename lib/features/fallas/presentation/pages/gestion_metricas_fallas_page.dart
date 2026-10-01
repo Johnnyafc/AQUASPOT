@@ -19,6 +19,16 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
   final List<String> _equipos = ['Contador', 'Caracol', 'Cosechadora'];
   String _filtroTexto = '';
 
+  static const List<String> _razonesEstandar = [
+    'Diseño defectuoso',
+    'Defecto de materiales',
+    'Deficiencias de fabricación',
+    'Defectos de instalación',
+    'Condiciones de servicio',
+    'Deficiencias de mantenimiento',
+    'Operación incorrecta',
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -534,6 +544,164 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
               child: const Text('Actualizar'),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  void _abrirModalRazonesFalla({
+    required String tipoEquipo,
+    required String nombreCategoria,
+    required String nombreSubcategoria,
+    required String falla,
+    required List<String> razonesActuales,
+  }) {
+    final List<String> opciones = [
+      ..._razonesEstandar,
+      ...razonesActuales.where((r) => !_razonesEstandar.contains(r)),
+    ];
+    final Set<String> seleccionadas = Set<String>.from(razonesActuales);
+    final otraRazonCtrl = TextEditingController();
+
+    void agregarOtra(StateSetter setModalState) {
+      final texto = otraRazonCtrl.text.trim();
+      if (texto.isEmpty) return;
+      setModalState(() {
+        if (!opciones.any((o) => o.toLowerCase() == texto.toLowerCase())) {
+          opciones.add(texto);
+        }
+        seleccionadas.add(texto);
+        otraRazonCtrl.clear();
+      });
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  const Icon(Icons.fact_check_outlined, color: Colors.deepOrange),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('Razones del Problema', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        Text(
+                          falla,
+                          style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 400,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Marque las razones que aplican a esta falla. Quedarán disponibles para seleccionarlas luego al diagnosticar un ticket.',
+                        style: TextStyle(fontSize: 12, color: Colors.blueGrey),
+                      ),
+                      const SizedBox(height: 8),
+                      ...opciones.map((razon) {
+                        return CheckboxListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          title: Text(razon, style: const TextStyle(fontSize: 13)),
+                          value: seleccionadas.contains(razon),
+                          onChanged: (checked) {
+                            setModalState(() {
+                              if (checked == true) {
+                                seleccionadas.add(razon);
+                              } else {
+                                seleccionadas.remove(razon);
+                              }
+                            });
+                          },
+                        );
+                      }),
+                      const Divider(),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: otraRazonCtrl,
+                              decoration: InputDecoration(
+                                hintText: 'Otra razón...',
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              onSubmitted: (_) => agregarOtra(setModalState),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          IconButton(
+                            icon: const Icon(Icons.add_circle, color: Colors.deepOrange),
+                            tooltip: 'Agregar razón',
+                            onPressed: () => agregarOtra(setModalState),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.check, size: 18),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepOrange,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    final razonesFinal = seleccionadas.toList();
+                    Navigator.pop(ctx);
+                    try {
+                      await _dataSource.actualizarRazonesFalla(
+                        tipoEquipo: tipoEquipo,
+                        nombreCategoria: nombreCategoria,
+                        nombreSubcategoria: nombreSubcategoria,
+                        falla: falla,
+                        razones: razonesFinal,
+                      );
+                      messenger.showSnackBar(
+                        const SnackBar(
+                          content: Text('Razones del problema actualizadas'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    } catch (e) {
+                      messenger.showSnackBar(
+                        SnackBar(content: Text('Error al guardar: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  },
+                  label: const Text('Guardar'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -1449,6 +1617,28 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
                                                               ),
                                                             ),
                                                             const SizedBox(width: 6),
+                                                            // Botón Razones del Problema (Nivel 3)
+                                                            InkWell(
+                                                              borderRadius: BorderRadius.circular(12),
+                                                              onTap: () => _abrirModalRazonesFalla(
+                                                                tipoEquipo: tipoEquipo,
+                                                                nombreCategoria: cat.nombre,
+                                                                nombreSubcategoria: sub.nombre,
+                                                                falla: falla,
+                                                                razonesActuales: sub.razonesPorFalla[falla] ?? const [],
+                                                              ),
+                                                              child: Padding(
+                                                                padding: const EdgeInsets.all(3.0),
+                                                                child: Icon(
+                                                                  Icons.fact_check_outlined,
+                                                                  size: 15,
+                                                                  color: (sub.razonesPorFalla[falla]?.isNotEmpty ?? false)
+                                                                      ? Colors.green
+                                                                      : Colors.blueGrey,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                            const SizedBox(width: 4),
                                                             // Botón Editar Falla (Nivel 3)
                                                             InkWell(
                                                               borderRadius: BorderRadius.circular(12),
