@@ -1189,6 +1189,7 @@ class _DashboardViewState extends State<_DashboardView> {
   Widget _seccionDiagnosticoFallas(List<ResumenTicketDash> data) {
     String clave(String t) => t.trim().toLowerCase();
     String pct(num parte, num total) => total == 0 ? '0' : (parte / total * 100).toStringAsFixed(0);
+    String comunes(List<MapEntry<String, int>> top) => top.map((e) => '${e.key} (${e.value})').join(', ');
 
     final validos = data.where((r) => r.estadoBucket != 'Anulado').toList();
     final conDiagnostico = validos.where((r) => r.diagnosticos.isNotEmpty).toList();
@@ -1196,147 +1197,144 @@ class _DashboardViewState extends State<_DashboardView> {
       for (final r in conDiagnostico)
         for (final d in r.diagnosticos) (ticket: r, d: d),
     ];
+    final fallas = [
+      for (final x in pares)
+        FallaParaParte(
+          categoria: x.d.categoria,
+          parte: x.d.subcategoria,
+          falla: x.d.falla,
+          razones: x.d.razones,
+          ticketId: x.ticket.id,
+          equipo: x.ticket.equipo,
+        ),
+    ];
 
-    // ---------------------------------------------------------------- Categorías
-    final etiquetaCat = <String, String>{};
-    final conteoCat = <String, int>{};
-    final ticketsCat = <String, Set<String>>{};
-    final ticketsCatEquipo = <String, Map<String, Set<String>>>{};
-    final fallasCat = <String, Map<String, int>>{};
-    for (final x in pares) {
-      final k = clave(x.d.categoria);
-      if (k.isEmpty) continue;
-      etiquetaCat.putIfAbsent(k, () => x.d.categoria.trim());
-      conteoCat[k] = (conteoCat[k] ?? 0) + 1;
-      ticketsCat.putIfAbsent(k, () => <String>{}).add(x.ticket.id);
-      ticketsCatEquipo.putIfAbsent(k, () => {}).putIfAbsent(x.ticket.equipo, () => <String>{}).add(x.ticket.id);
-      final f = fallasCat.putIfAbsent(k, () => <String, int>{});
-      f[x.d.falla.trim()] = (f[x.d.falla.trim()] ?? 0) + 1;
-    }
-    final clavesCat = conteoCat.keys.toList()..sort((a, b) => conteoCat[b]!.compareTo(conteoCat[a]!));
-    final colorCat = {for (var i = 0; i < clavesCat.length; i++) clavesCat[i]: _seriesColors[i % _seriesColors.length]};
-    final totalFallas = conteoCat.values.fold<int>(0, (s, v) => s + v);
+    // Un pastel General (null) y uno por equipo en cada tarjeta. Con el
+    // filtro "Equipo" de arriba, solo el de ese equipo (el General sería igual).
+    final List<String?> pasteles = _equipo != null ? [_equipo] : [null, ...FallasPorParteService.equiposDe(fallas)];
 
-    // La categoría elegida se ignora si ya no existe con los filtros actuales.
-    final catSel = (_categoriaSel != null && conteoCat.containsKey(_categoriaSel)) ? _categoriaSel : null;
-
-    // En vista general (filtro Equipo en "Todos") el detalle desglosa los
-    // tickets afectados por equipo, ej. "5 (Cosechadora 3 · Caracol 2)".
-    String ticketsPorEquipo(Map<String, Set<String>> porEquipo) {
+    // En el pastel General el detalle desglosa los tickets afectados por
+    // equipo, ej. "5 (Cosechadora 3 · Caracol 2)"; en el de un equipo, solo el total.
+    String ticketsAfectados(Map<String, Set<String>> porEquipo, String? equipo) {
       final total = porEquipo.values.expand((s) => s).toSet().length;
-      if (_equipo != null) return '$total';
+      if (equipo != null || _equipo != null) return '$total';
       final partes = porEquipo.entries.toList()..sort((a, b) => b.value.length.compareTo(a.value.length));
       return '$total (${partes.map((e) => '${e.key} ${e.value.length}').join(' · ')})';
     }
-    final paresCat = catSel == null ? pares : pares.where((x) => clave(x.d.categoria) == catSel).toList();
+
+    // ---------------------------------------------------------------- Categorías
+    // Nombres y colores salen del total general: cada categoría tiene el
+    // mismo color en todos los pasteles.
+    final categorias = FallasPorParteService.agruparCategorias(fallas);
+    final etiquetaCat = {for (final c in categorias) c.clave: c.etiqueta};
+    final colorCat = {
+      for (var i = 0; i < categorias.length; i++) categorias[i].clave: _seriesColors[i % _seriesColors.length],
+    };
+    final totalFallas = categorias.fold<int>(0, (s, c) => s + c.valor);
+
+    // La categoría elegida se ignora si ya no existe con los filtros actuales.
+    final catSel = (_categoriaSel != null && etiquetaCat.containsKey(_categoriaSel)) ? _categoriaSel : null;
+
+    List<_PorcionDona> porcionesCategoria(String? equipo) {
+      final cats = FallasPorParteService.agruparCategorias(FallasPorParteService.filtrar(fallas, equipo: equipo));
+      final total = cats.fold<int>(0, (s, c) => s + c.valor);
+      return [
+        for (final c in cats)
+          _PorcionDona(
+            clave: c.clave,
+            etiqueta: c.etiqueta,
+            valor: c.valor,
+            color: colorCat[c.clave] ?? _slate,
+            detalle: [
+              '${c.valor} falla(s) · ${pct(c.valor, total)}% del total',
+              'Tickets afectados: ${ticketsAfectados(c.ticketsPorEquipo, equipo)}',
+              'Más comunes: ${comunes(c.masComunes())}',
+            ],
+          ),
+      ];
+    }
 
     // ---------------------------------------------------------------- Partes
     // Sin categoría elegida: todas las partes con el color de su categoría.
-    // Con categoría: solo sus partes, cada una con su color.
-    final partes = FallasPorParteService.agrupar(
-      [
-        for (final x in pares)
-          FallaParaParte(
-            categoria: x.d.categoria,
-            parte: x.d.subcategoria,
-            falla: x.d.falla,
-            ticketId: x.ticket.id,
-            equipo: x.ticket.equipo,
-          ),
-      ],
-      claveCategoria: catSel,
-    );
+    // Con categoría: solo sus partes, cada una con su color (el mismo en
+    // todos los pasteles, según el orden del total general).
+    final partesGeneral = FallasPorParteService.agrupar(fallas, claveCategoria: catSel);
+    final colorParte = {
+      for (var i = 0; i < partesGeneral.length; i++)
+        partesGeneral[i].clave: partesGeneral[i].esSinParte
+            ? Colors.blueGrey.shade300
+            : (catSel == null
+                ? (colorCat[partesGeneral[i].claveCategoria] ?? _slate)
+                : _seriesColors[i % _seriesColors.length]),
+    };
     // La parte elegida se ignora si ya no existe con los filtros actuales.
-    final parteSel = partes.where((p) => p.clave == _parteSel).firstOrNull;
-    final totalFallasPartes = partes.fold<int>(0, (s, p) => s + p.fallas);
-    final porcionesParte = [
-      for (var i = 0; i < partes.length; i++)
-        _PorcionDona(
-          clave: partes[i].clave,
-          etiqueta: catSel == null ? '${partes[i].parte} · ${partes[i].categoria}' : partes[i].parte,
-          valor: partes[i].fallas,
-          color: partes[i].esSinParte
-              ? Colors.blueGrey.shade300
-              : (catSel == null ? (colorCat[partes[i].claveCategoria] ?? _slate) : _seriesColors[i % _seriesColors.length]),
-          detalle: [
-            '${partes[i].fallas} falla(s) · ${pct(partes[i].fallas, totalFallasPartes)}% ${catSel == null ? 'del total' : 'de ${etiquetaCat[catSel]}'}',
-            'Tickets afectados: ${ticketsPorEquipo(partes[i].ticketsPorEquipo)}',
-            'Más comunes: ${partes[i].masComunes().map((e) => '${e.key} (${e.value})').join(', ')}',
-          ],
-        ),
-    ];
+    final parteSel = partesGeneral.where((p) => p.clave == _parteSel).firstOrNull;
 
-    // Alcance de "Razones de falla" y "Fallas más frecuentes": la categoría
-    // elegida y, si hay, la parte elegida.
-    final paresFiltro = parteSel == null
-        ? paresCat
-        : paresCat.where((x) => FallasPorParteService.clave(x.d.categoria, x.d.subcategoria) == parteSel.clave).toList();
-    final String? tituloAlcance =
-        parteSel != null ? '${parteSel.categoria} › ${parteSel.parte}' : (catSel != null ? etiquetaCat[catSel] : null);
-
-    final porcionesCat = [
-      for (final k in clavesCat)
-        _PorcionDona(
-          clave: k,
-          etiqueta: etiquetaCat[k]!,
-          valor: conteoCat[k]!,
-          color: colorCat[k]!,
-          detalle: [
-            '${conteoCat[k]} falla(s) · ${pct(conteoCat[k]!, totalFallas)}% del total',
-            'Tickets afectados: ${ticketsPorEquipo(ticketsCatEquipo[k]!)}',
-            'Más comunes: ${(fallasCat[k]!.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).take(3).map((e) => '${e.key} (${e.value})').join(', ')}',
-          ],
-        ),
-    ];
+    List<_PorcionDona> porcionesParte(String? equipo) {
+      final partes = FallasPorParteService.agrupar(
+        FallasPorParteService.filtrar(fallas, equipo: equipo),
+        claveCategoria: catSel,
+      );
+      final total = partes.fold<int>(0, (s, p) => s + p.fallas);
+      return [
+        for (final p in partes)
+          _PorcionDona(
+            clave: p.clave,
+            etiqueta: catSel == null ? '${p.parte} · ${p.categoria}' : p.parte,
+            valor: p.fallas,
+            color: colorParte[p.clave] ?? _slate,
+            detalle: [
+              '${p.fallas} falla(s) · ${pct(p.fallas, total)}% ${catSel == null ? 'del total' : 'de ${etiquetaCat[catSel]}'}',
+              'Tickets afectados: ${ticketsAfectados(p.ticketsPorEquipo, equipo)}',
+              'Más comunes: ${comunes(p.masComunes())}',
+            ],
+          ),
+      ];
+    }
 
     // ---------------------------------------------------------------- Razones
-    final estandar = {for (final r in razonesProblemaEstandar) clave(r): r};
-    const otras = 'Otras (texto libre)';
-    final marcas = <String, int>{};
-    final fallasConRazon = <String, int>{};
-    final ticketsConRazon = <String, Set<String>>{};
-    final ticketsConRazonEquipo = <String, Map<String, Set<String>>>{};
-    final catsConRazon = <String, Map<String, int>>{};
-    for (final x in paresFiltro) {
-      final vistas = <String>{};
-      for (final razon in x.d.razones) {
-        if (razon.trim().isEmpty) continue;
-        final et = estandar[clave(razon)] ?? otras;
-        marcas[et] = (marcas[et] ?? 0) + 1;
-        if (vistas.add(et)) {
-          fallasConRazon[et] = (fallasConRazon[et] ?? 0) + 1;
-          ticketsConRazon.putIfAbsent(et, () => <String>{}).add(x.ticket.id);
-          ticketsConRazonEquipo.putIfAbsent(et, () => {}).putIfAbsent(x.ticket.equipo, () => <String>{}).add(x.ticket.id);
-          final c = catsConRazon.putIfAbsent(et, () => <String, int>{});
-          final cat = x.d.categoria.trim();
-          c[cat] = (c[cat] ?? 0) + 1;
-        }
-      }
-    }
-    final totalMarcas = marcas.values.fold<int>(0, (s, v) => s + v);
-    final totalFallasAlcance = paresFiltro.length;
     // Color fijo por razón (mismo orden del catálogo) para que no cambie al filtrar.
     Color colorRazon(String et) {
       final i = razonesProblemaEstandar.indexOf(et);
       return i < 0 ? Colors.blueGrey.shade300 : _seriesColors[i % _seriesColors.length];
     }
-    final clavesRazon = marcas.keys.toList()..sort((a, b) => marcas[b]!.compareTo(marcas[a]!));
-    final porcionesRazon = [
-      for (final et in clavesRazon)
-        _PorcionDona(
-          clave: et,
-          etiqueta: et,
-          valor: marcas[et]!,
-          color: colorRazon(et),
-          detalle: [
-            '${marcas[et]} marca(s) · ${pct(marcas[et]!, totalMarcas)}% de las marcas',
-            'Presente en ${fallasConRazon[et]} de $totalFallasAlcance falla(s) (${pct(fallasConRazon[et]!, totalFallasAlcance)}%)',
-            'Tickets afectados: ${ticketsPorEquipo(ticketsConRazonEquipo[et]!)}',
-            if (catSel == null)
-              'Predomina en: ${(catsConRazon[et]!.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).take(3).map((e) => '${e.key} (${e.value})').join(', ')}',
-          ],
-        ),
-    ];
+
+    List<_PorcionDona> porcionesRazon(String? equipo) {
+      final alcance = FallasPorParteService.filtrar(
+        fallas,
+        equipo: equipo,
+        claveCategoria: catSel,
+        claveParte: parteSel?.clave,
+      ).where((f) => clave(f.categoria).isNotEmpty).toList();
+      final razones = FallasPorParteService.agruparRazones(alcance);
+      final totalMarcas = razones.fold<int>(0, (s, r) => s + r.valor);
+      return [
+        for (final r in razones)
+          _PorcionDona(
+            clave: r.clave,
+            etiqueta: r.etiqueta,
+            valor: r.valor,
+            color: colorRazon(r.clave),
+            detalle: [
+              '${r.valor} marca(s) · ${pct(r.valor, totalMarcas)}% de las marcas',
+              'Presente en ${r.fallas} de ${alcance.length} falla(s) (${pct(r.fallas, alcance.length)}%)',
+              'Tickets afectados: ${ticketsAfectados(r.ticketsPorEquipo, equipo)}',
+              if (catSel == null) 'Predomina en: ${comunes(r.masComunes())}',
+            ],
+          ),
+      ];
+    }
+
+    // Alcance de "Fallas más frecuentes": la categoría elegida y, si hay, la parte.
+    final paresFiltro = pares.where((x) {
+      if (catSel != null && clave(x.d.categoria) != catSel) return false;
+      if (parteSel != null && FallasPorParteService.clave(x.d.categoria, x.d.subcategoria) != parteSel.clave) {
+        return false;
+      }
+      return true;
+    }).toList();
+    final String? tituloAlcance =
+        parteSel != null ? '${parteSel.categoria} › ${parteSel.parte}' : (catSel != null ? etiquetaCat[catSel] : null);
 
     // ---------------------------------------------------------------- Fallas por equipo
     final porEquipo = <String, Map<String, ({String categoria, String texto, int n})>>{};
@@ -1387,7 +1385,21 @@ class _DashboardViewState extends State<_DashboardView> {
           });
 
     final notaCategorias =
-        '$totalFallas falla(s) en ${conDiagnostico.length} ticket(s) — ${conDiagnostico.length} de ${validos.length} tickets tienen diagnóstico. No incluye anulados (no llegan a Proceso de Trabajo). Clic en una categoría para filtrar.';
+        '$totalFallas falla(s) en ${conDiagnostico.length} ticket(s) — ${conDiagnostico.length} de ${validos.length} tickets tienen diagnóstico. No incluye anulados (no llegan a Proceso de Trabajo). Un pastel por equipo. Clic en una categoría para filtrar.';
+
+    void elegirCategoria(String k) => setState(() {
+          _categoriaSel = _categoriaSel == k ? null : k;
+          _parteSel = null;
+        });
+    void elegirParte(String k) => setState(() {
+          if (_parteSel == k) {
+            _parteSel = null;
+            return;
+          }
+          _parteSel = k;
+          // Elegir una parte también deja elegida su categoría.
+          _categoriaSel = partesGeneral.firstWhere((p) => p.clave == k).claveCategoria;
+        });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1421,48 +1433,43 @@ class _DashboardViewState extends State<_DashboardView> {
               ],
             ),
           ),
-        _grid([
-          _card(
-            titulo: 'Fallas por categoría',
-            nota: notaCategorias,
-            child: _DonaInteractiva(
-              porciones: porcionesCat,
-              textoTotal: 'fallas',
-              seleccionada: catSel,
-              onSeleccionar: (k) => setState(() {
-                _categoriaSel = _categoriaSel == k ? null : k;
-                _parteSel = null;
-              }),
-            ),
+        _card(
+          titulo: 'Fallas por categoría',
+          nota: notaCategorias,
+          child: _pastelesPorEquipo(
+            id: 'categoria',
+            equipos: pasteles,
+            porciones: porcionesCategoria,
+            textoTotal: 'fallas',
+            seleccionada: catSel,
+            onSeleccionar: elegirCategoria,
           ),
-          _card(
-            titulo: catSel == null ? 'Fallas por parte' : 'Fallas por parte — ${etiquetaCat[catSel]}',
-            nota: 'Parte del equipo donde ocurrió la falla (Categoría › Parte › Falla). "Sin parte": fallas guardadas antes sin parte. Clic en una parte para filtrar.',
-            child: _DonaInteractiva(
-              porciones: porcionesParte,
-              textoTotal: 'fallas',
-              textoFiltro: 'esa parte',
-              seleccionada: parteSel?.clave,
-              onSeleccionar: (k) => setState(() {
-                if (_parteSel == k) {
-                  _parteSel = null;
-                  return;
-                }
-                _parteSel = k;
-                // Elegir una parte también deja elegida su categoría.
-                _categoriaSel = partes.firstWhere((p) => p.clave == k).claveCategoria;
-              }),
-            ),
+        ),
+        const SizedBox(height: 16),
+        _card(
+          titulo: catSel == null ? 'Fallas por parte' : 'Fallas por parte — ${etiquetaCat[catSel]}',
+          nota: 'Parte del equipo donde ocurrió la falla (Categoría › Parte › Falla). "Sin parte": fallas guardadas antes sin parte. Clic en una parte para filtrar.',
+          child: _pastelesPorEquipo(
+            id: 'parte',
+            equipos: pasteles,
+            porciones: porcionesParte,
+            textoTotal: 'fallas',
+            textoFiltro: 'esa parte',
+            seleccionada: parteSel?.clave,
+            onSeleccionar: elegirParte,
           ),
-          _card(
-            titulo: tituloAlcance == null ? 'Razones de falla (causa raíz)' : 'Razones de falla — $tituloAlcance',
-            nota: 'Porcentaje de veces que se marcó cada causa raíz (una falla puede tener varias)',
-            child: _DonaInteractiva(
-              porciones: porcionesRazon,
-              textoTotal: 'marcas',
-            ),
+        ),
+        const SizedBox(height: 16),
+        _card(
+          titulo: tituloAlcance == null ? 'Razones de falla (causa raíz)' : 'Razones de falla — $tituloAlcance',
+          nota: 'Porcentaje de veces que se marcó cada causa raíz (una falla puede tener varias)',
+          child: _pastelesPorEquipo(
+            id: 'razon',
+            equipos: pasteles,
+            porciones: porcionesRazon,
+            textoTotal: 'marcas',
           ),
-        ], columnasAncho: 3),
+        ),
         const SizedBox(height: 16),
         _card(
           titulo: tituloAlcance == null ? 'Fallas más frecuentes' : 'Fallas más frecuentes — $tituloAlcance',
@@ -1473,6 +1480,72 @@ class _DashboardViewState extends State<_DashboardView> {
         ),
       ],
     );
+  }
+
+  // Contenido de una tarjeta de "Diagnóstico de fallas": un pastel por
+  // equipo (null = General), lado a lado (hasta 4 por fila). Cada pastel
+  // funciona como los demás del dashboard; el clic filtra todos a la vez.
+  Widget _pastelesPorEquipo({
+    required String id,
+    required List<String?> equipos,
+    required List<_PorcionDona> Function(String? equipo) porciones,
+    required String textoTotal,
+    String textoFiltro = 'esa categoría',
+    String? seleccionada,
+    ValueChanged<String>? onSeleccionar,
+  }) {
+    return LayoutBuilder(builder: (context, c) {
+      final porFila = c.maxWidth >= 1100 ? 4 : (c.maxWidth >= 560 ? 2 : 1);
+      final columnas = equipos.length < porFila ? equipos.length : porFila;
+      final ancho = (c.maxWidth - 16.0 * (columnas - 1)) / columnas;
+      return Wrap(
+        spacing: 16,
+        runSpacing: 16,
+        children: [
+          for (final equipo in equipos)
+            Builder(builder: (context) {
+              final ps = porciones(equipo);
+              final total = ps.fold<int>(0, (s, p) => s + p.valor);
+              return SizedBox(
+                width: ancho,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFAFAF7),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text((equipo ?? 'General').toUpperCase(),
+                                style: const TextStyle(
+                                    fontSize: 13, fontWeight: FontWeight.bold, color: _navy, letterSpacing: 0.4)),
+                          ),
+                          Text('$total $textoTotal', style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600)),
+                        ],
+                      ),
+                      const Divider(height: 16),
+                      _DonaInteractiva(
+                        key: ValueKey('$id|${equipo ?? 'general'}'),
+                        porciones: ps,
+                        textoTotal: textoTotal,
+                        textoFiltro: textoFiltro,
+                        seleccionada: seleccionada,
+                        onSeleccionar: onSeleccionar,
+                        maxVisibles: 6,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+        ],
+      );
+    });
   }
 
   // Panel de "Fallas más frecuentes" de UN equipo: ranking numerado, cada
@@ -2148,13 +2221,18 @@ class _DonaInteractiva extends StatefulWidget {
   final ValueChanged<String>? onSeleccionar;
   // Qué filtra el clic, para el texto de ayuda ("Clic para filtrar por …").
   final String textoFiltro;
+  // Si hay más porciones que esto, la leyenda muestra las primeras y agrupa
+  // el resto en "Otras (n)", que al pulsarla se expande (null = todas).
+  final int? maxVisibles;
 
   const _DonaInteractiva({
+    super.key,
     required this.porciones,
     required this.textoTotal,
     this.seleccionada,
     this.onSeleccionar,
     this.textoFiltro = 'esa categoría',
+    this.maxVisibles,
   });
 
   @override
@@ -2162,7 +2240,18 @@ class _DonaInteractiva extends StatefulWidget {
 }
 
 class _DonaInteractivaState extends State<_DonaInteractiva> {
+  static const String _claveOtras = '__otras__';
   int? _hover;
+  bool _expandido = false;
+
+  // Clic en una porción: "Otras" expande la leyenda; el resto filtra.
+  void _tocar(String clave) {
+    if (clave == _claveOtras) {
+      setState(() => _expandido = true);
+    } else {
+      widget.onSeleccionar?.call(clave);
+    }
+  }
 
   void _setHover(int? i) {
     if (_hover != i) setState(() => _hover = i);
@@ -2170,13 +2259,35 @@ class _DonaInteractivaState extends State<_DonaInteractiva> {
 
   @override
   Widget build(BuildContext context) {
-    final ps = widget.porciones;
-    if (ps.isEmpty) {
+    final todas = widget.porciones;
+    if (todas.isEmpty) {
       return SizedBox(height: 160, child: Center(child: Text('Sin datos', style: TextStyle(color: Colors.grey.shade500))));
     }
+    // "Otras" solo si agrupa al menos 2 (no tiene sentido "Otras (1)").
+    final maxVis = widget.maxVisibles;
+    final puedeContraer = maxVis != null && todas.length > maxVis + 1;
+    final ocultas = puedeContraer && !_expandido ? todas.sublist(maxVis) : const <_PorcionDona>[];
+    final ps = ocultas.isEmpty
+        ? todas
+        : [
+            ...todas.take(maxVis!),
+            _PorcionDona(
+              clave: _claveOtras,
+              etiqueta: 'Otras (${ocultas.length})',
+              valor: ocultas.fold<int>(0, (s, p) => s + p.valor),
+              color: Colors.grey.shade400,
+              detalle: [
+                for (final o in ocultas.take(8)) '${o.etiqueta}: ${o.valor}',
+                if (ocultas.length > 8) '… y ${ocultas.length - 8} más',
+                'Clic para ver todas',
+              ],
+            ),
+          ];
     final total = ps.fold<int>(0, (s, p) => s + p.valor);
     final maxValor = ps.map((p) => p.valor).reduce((a, b) => a > b ? a : b);
-    final selIdx = widget.seleccionada == null ? -1 : ps.indexWhere((p) => p.clave == widget.seleccionada);
+    var selIdx = widget.seleccionada == null ? -1 : ps.indexWhere((p) => p.clave == widget.seleccionada);
+    // Elegida pero escondida dentro de "Otras": se resalta "Otras".
+    if (selIdx < 0 && ocultas.any((p) => p.clave == widget.seleccionada)) selIdx = ps.length - 1;
     final hover = (_hover != null && _hover! < ps.length) ? _hover : null;
     final foco = hover ?? (selIdx >= 0 ? selIdx : null);
     String pct(int v) => total == 0 ? '0' : (v / total * 100).toStringAsFixed(0);
@@ -2195,9 +2306,7 @@ class _DonaInteractivaState extends State<_DonaInteractiva> {
                 touchCallback: (event, respuesta) {
                   final idx = respuesta?.touchedSection?.touchedSectionIndex;
                   final valido = idx != null && idx >= 0 && idx < ps.length;
-                  if (event is FlTapUpEvent && valido && widget.onSeleccionar != null) {
-                    widget.onSeleccionar!(ps[idx].clave);
-                  }
+                  if (event is FlTapUpEvent && valido) _tocar(ps[idx].clave);
                   if (!event.isInterestedForInteractions || !valido) {
                     _setHover(null);
                     return;
@@ -2251,9 +2360,11 @@ class _DonaInteractivaState extends State<_DonaInteractiva> {
           MouseRegion(
             onEnter: (_) => _setHover(i),
             onExit: (_) => _setHover(null),
-            cursor: widget.onSeleccionar != null ? SystemMouseCursors.click : MouseCursor.defer,
+            cursor: (widget.onSeleccionar != null || ps[i].clave == _claveOtras)
+                ? SystemMouseCursors.click
+                : MouseCursor.defer,
             child: GestureDetector(
-              onTap: widget.onSeleccionar == null ? null : () => widget.onSeleccionar!(ps[i].clave),
+              onTap: (widget.onSeleccionar == null && ps[i].clave != _claveOtras) ? null : () => _tocar(ps[i].clave),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 120),
                 margin: const EdgeInsets.only(bottom: 4),
@@ -2288,6 +2399,7 @@ class _DonaInteractivaState extends State<_DonaInteractiva> {
                         ],
                       ),
                     ),
+                    if (ps[i].clave == _claveOtras) Icon(Icons.expand_more, size: 18, color: Colors.grey.shade600),
                     const SizedBox(width: 10),
                     Text('${ps[i].valor}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _navy)),
                     SizedBox(
@@ -2298,6 +2410,15 @@ class _DonaInteractivaState extends State<_DonaInteractiva> {
                   ],
                 ),
               ),
+            ),
+          ),
+        if (puedeContraer && _expandido)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => setState(() => _expandido = false),
+              icon: const Icon(Icons.expand_less, size: 18),
+              label: const Text('Ver menos', style: TextStyle(fontSize: 12)),
             ),
           ),
       ],
