@@ -14,6 +14,8 @@
 // - Fallas sin categoría se ignoran.
 // - Razones: las del catálogo estándar con su nombre; el resto como
 //   "Otras (texto libre)". Una falla puede tener varias razones.
+// - "Fallas más frecuentes": cada falla con la categoría y la parte de las
+//   que deriva (la misma falla en dos partes son dos filas).
 
 import '../../../../core/utils/constants.dart' show razonesProblemaEstandar;
 
@@ -84,6 +86,26 @@ class ResumenGrupo {
   });
 
   List<MapEntry<String, int>> masComunes([int n = 3]) => FallasPorParteService._top(conteoDetalle, n);
+}
+
+/// Una falla con la categoría y la parte de las que deriva, y cuántas veces
+/// se diagnosticó.
+class ResumenFalla {
+  final String clave;
+  final String categoria;
+  final String parte;
+  final String falla;
+  final int veces;
+
+  const ResumenFalla({
+    required this.clave,
+    required this.categoria,
+    required this.parte,
+    required this.falla,
+    required this.veces,
+  });
+
+  bool get esSinParte => parte == FallasPorParteService.sinParte;
 }
 
 class FallasPorParteService {
@@ -203,6 +225,34 @@ class FallasPorParteService {
       if (porCantidad != 0) return porCantidad;
       if (a.esSinParte != b.esSinParte) return a.esSinParte ? 1 : -1;
       return a.parte.toLowerCase().compareTo(b.parte.toLowerCase());
+    });
+    return resumen;
+  }
+
+  /// Agrupa las fallas por categoría › parte › falla, de la más diagnosticada
+  /// a la menos (a igual cantidad, por nombre de la falla).
+  static List<ResumenFalla> agruparFallas(Iterable<FallaParaParte> fallas) {
+    final primeras = <String, FallaParaParte>{};
+    final veces = <String, int>{};
+    for (final f in fallas) {
+      if (normalizar(f.categoria).isEmpty || f.falla.trim().isEmpty) continue;
+      final k = '${clave(f.categoria, f.parte)}|${normalizar(f.falla)}';
+      primeras.putIfAbsent(k, () => f);
+      veces[k] = (veces[k] ?? 0) + 1;
+    }
+    final resumen = [
+      for (final k in veces.keys)
+        ResumenFalla(
+          clave: k,
+          categoria: primeras[k]!.categoria.trim(),
+          parte: primeras[k]!.parte.trim().isEmpty ? sinParte : primeras[k]!.parte.trim(),
+          falla: primeras[k]!.falla.trim(),
+          veces: veces[k]!,
+        ),
+    ];
+    resumen.sort((a, b) {
+      final porCantidad = b.veces.compareTo(a.veces);
+      return porCantidad != 0 ? porCantidad : a.falla.toLowerCase().compareTo(b.falla.toLowerCase());
     });
     return resumen;
   }

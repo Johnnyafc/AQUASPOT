@@ -2,7 +2,8 @@
 //
 // Dashboard → "Fallas por parte": agrupación de las fallas diagnosticadas
 // por parte (Categoría → Parte → Falla), filtro por categoría y "Sin parte";
-// categorías, razones del problema y filtro por equipo (un pastel por equipo).
+// categorías, razones del problema y filtro por equipo (un pastel por equipo);
+// "Fallas más frecuentes" con la categoría y la parte de cada falla.
 
 import 'package:aquaspot_postventa/features/tickets/domain/services/fallas_por_parte_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -139,5 +140,25 @@ void main() {
   test('11. Equipos de los pasteles: los 3 base siempre y otros con datos al final', () {
     expect(S.equiposDe([]), ['Cosechadora', 'Contador', 'Caracol']);
     expect(S.equiposDe([f('Mecánico', 'Motor', 'A', equipo: 'Otros')]), ['Cosechadora', 'Contador', 'Caracol', 'Otros']);
+  });
+
+  test('12. Fallas más frecuentes: cuenta por categoría › parte › falla y ordena', () {
+    final r = S.agruparFallas([
+      f('Mecánico', 'Motor diésel', 'Fuga de aceite', ticket: 'T1'),
+      f('Mecánico', 'motor diésel ', 'fuga de aceite', ticket: 'T2'),
+      f('Mecánico', 'Bomba hidráulica', 'Fuga de aceite', ticket: 'T3'),
+      f('Hidráulico', '', 'Motor hidráulico dañado', ticket: 'T4'),
+      f('', 'Motor', 'Sin categoría'),
+    ]);
+    expect(r.length, 3);
+    expect(r.first.falla, 'Fuga de aceite');
+    expect(r.first.parte, 'Motor diésel');
+    expect(r.first.veces, 2);
+    // Misma falla en otra parte = otra fila; empates por nombre de la falla.
+    expect(r.map((x) => '${x.categoria} › ${x.parte} › ${x.falla}').skip(1), [
+      'Mecánico › Bomba hidráulica › Fuga de aceite',
+      'Hidráulico › ${S.sinParte} › Motor hidráulico dañado',
+    ]);
+    expect(r.last.esSinParte, isTrue);
   });
 }

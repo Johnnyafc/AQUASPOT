@@ -1325,64 +1325,34 @@ class _DashboardViewState extends State<_DashboardView> {
       ];
     }
 
-    // Alcance de "Fallas más frecuentes": la categoría elegida y, si hay, la parte.
-    final paresFiltro = pares.where((x) {
-      if (catSel != null && clave(x.d.categoria) != catSel) return false;
-      if (parteSel != null && FallasPorParteService.clave(x.d.categoria, x.d.subcategoria) != parteSel.clave) {
-        return false;
-      }
-      return true;
-    }).toList();
     final String? tituloAlcance =
         parteSel != null ? '${parteSel.categoria} › ${parteSel.parte}' : (catSel != null ? etiquetaCat[catSel] : null);
 
-    // ---------------------------------------------------------------- Fallas por equipo
-    final porEquipo = <String, Map<String, ({String categoria, String texto, int n})>>{};
-    for (final x in paresFiltro) {
-      final sub = x.d.subcategoria.trim();
-      final falla = x.d.falla.trim();
-      final k = '${clave(x.d.categoria)}|${clave(sub)}|${clave(falla)}';
-      final mapa = porEquipo.putIfAbsent(x.ticket.equipo, () => {});
-      final previo = mapa[k];
-      mapa[k] = (
-        categoria: previo?.categoria ?? x.d.categoria.trim(),
-        texto: previo?.texto ?? (sub.isEmpty ? falla : '$sub · $falla'),
-        n: (previo?.n ?? 0) + 1,
+    // ---------------------------------------------------------------- Fallas más frecuentes
+    // Un panel por equipo (General primero), como los pasteles; todas las
+    // fallas de la categoría / parte elegidas, con 10 a la vista.
+    final fallasAlcance = FallasPorParteService.filtrar(fallas, claveCategoria: catSel, claveParte: parteSel?.clave);
+    final Widget listaFallas = LayoutBuilder(builder: (context, c) {
+      final porFila = c.maxWidth >= 1100 ? 4 : (c.maxWidth >= 560 ? 2 : 1);
+      final columnas = pasteles.length < porFila ? pasteles.length : porFila;
+      final ancho = (c.maxWidth - 16.0 * (columnas - 1)) / columnas;
+      return Wrap(
+        spacing: 16,
+        runSpacing: 16,
+        children: [
+          for (final equipo in pasteles)
+            SizedBox(
+              width: ancho,
+              child: _PanelFallasFrecuentes(
+                key: ValueKey('frecuentes|${equipo ?? 'general'}'),
+                equipo: equipo ?? 'General',
+                filas: FallasPorParteService.agruparFallas(FallasPorParteService.filtrar(fallasAlcance, equipo: equipo)),
+                colorCategoria: (cat) => colorCat[clave(cat)] ?? _slate,
+              ),
+            ),
+        ],
       );
-    }
-    int totalDe(String e) => porEquipo[e]!.values.fold<int>(0, (s, v) => s + v.n);
-    final equipos = porEquipo.keys.toList()..sort((a, b) => totalDe(b).compareTo(totalDe(a)));
-    final unSoloEquipo = _equipo != null;
-
-    final Widget listaFallas = equipos.isEmpty
-        ? Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text('Sin datos', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-          )
-        : LayoutBuilder(builder: (context, c) {
-            // Un panel por equipo, lado a lado (hasta 3 por fila).
-            final porFila = c.maxWidth >= 1000 ? 3 : (c.maxWidth >= 640 ? 2 : 1);
-            final columnas = equipos.length < porFila ? equipos.length : porFila;
-            final ancho = (c.maxWidth - 16.0 * (columnas - 1)) / columnas;
-            return Wrap(
-              spacing: 16,
-              runSpacing: 16,
-              children: [
-                for (final equipo in equipos)
-                  SizedBox(
-                    width: ancho,
-                    child: _panelFallasEquipo(
-                      equipo: equipo,
-                      total: totalDe(equipo),
-                      filas: (porEquipo[equipo]!.values.toList()..sort((a, b) => b.n.compareTo(a.n)))
-                          .take(unSoloEquipo ? 10 : 5)
-                          .toList(),
-                      colorCategoria: (cat) => colorCat[clave(cat)] ?? _slate,
-                    ),
-                  ),
-              ],
-            );
-          });
+    });
 
     final notaCategorias =
         '$totalFallas falla(s) en ${conDiagnostico.length} ticket(s) — ${conDiagnostico.length} de ${validos.length} tickets tienen diagnóstico. No incluye anulados (no llegan a Proceso de Trabajo). Un pastel por equipo. Clic en una categoría para filtrar.';
@@ -1473,9 +1443,8 @@ class _DashboardViewState extends State<_DashboardView> {
         const SizedBox(height: 16),
         _card(
           titulo: tituloAlcance == null ? 'Fallas más frecuentes' : 'Fallas más frecuentes — $tituloAlcance',
-          nota: unSoloEquipo
-              ? 'Top 10 del equipo seleccionado · % sobre las fallas del equipo'
-              : 'Top 5 por equipo (elija un equipo en el filtro para ver el top 10) · % sobre las fallas del equipo',
+          nota: 'Todas las fallas por equipo, con la categoría › parte de la que deriva cada una (10 a la vista; '
+              '"Ver más" para el resto) · % sobre las fallas del equipo',
           child: listaFallas,
         ),
       ],
@@ -1546,135 +1515,6 @@ class _DashboardViewState extends State<_DashboardView> {
         ],
       );
     });
-  }
-
-  // Panel de "Fallas más frecuentes" de UN equipo: ranking numerado, cada
-  // falla con su barra justo debajo (fácil de leer de un vistazo) y su
-  // categoría como punto de color (mismo color que en el gráfico).
-  Widget _panelFallasEquipo({
-    required String equipo,
-    required int total,
-    required List<({String categoria, String texto, int n})> filas,
-    required Color Function(String categoria) colorCategoria,
-  }) {
-    final maxN = filas.isEmpty ? 0 : filas.first.n;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFAFAF7),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(equipo.toUpperCase(),
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _navy, letterSpacing: 0.4)),
-              ),
-              Text('$total falla(s)', style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600)),
-            ],
-          ),
-          const Divider(height: 16),
-          for (var i = 0; i < filas.length; i++)
-            _filaFalla(
-              posicion: i + 1,
-              categoria: filas[i].categoria,
-              color: colorCategoria(filas[i].categoria),
-              texto: filas[i].texto,
-              n: filas[i].n,
-              totalEquipo: total,
-              maxN: maxN,
-              equipo: equipo,
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _filaFalla({
-    required int posicion,
-    required String categoria,
-    required Color color,
-    required String texto,
-    required int n,
-    required int totalEquipo,
-    required int maxN,
-    required String equipo,
-  }) {
-    final porcentaje = totalEquipo == 0 ? 0 : n / totalEquipo * 100;
-    // "Subcategoría · Falla": la falla en negrita, la subcategoría debajo.
-    final partes = texto.split(' · ');
-    final falla = partes.length > 1 ? partes.sublist(1).join(' · ') : texto;
-    final subcategoria = partes.length > 1 ? partes.first : '';
-    return Tooltip(
-      message: '$categoria › $texto\n$n falla(s) · ${porcentaje.toStringAsFixed(0)}% de las fallas de ${equipo.toUpperCase()}',
-      waitDuration: const Duration(milliseconds: 300),
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 22,
-              child: Text('$posicion', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey.shade500)),
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(falla,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.black87)),
-                      ),
-                      const SizedBox(width: 8),
-                      Text('$n', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: _navy)),
-                      SizedBox(
-                        width: 40,
-                        child: Text('${porcentaje.toStringAsFixed(0)}%',
-                            textAlign: TextAlign.right, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Container(width: 7, height: 7, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-                      const SizedBox(width: 5),
-                      Flexible(
-                        child: Text(
-                          subcategoria.isEmpty ? categoria : '$categoria · $subcategoria',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 5),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: maxN == 0 ? 0 : n / maxN,
-                      minHeight: 6,
-                      color: color,
-                      backgroundColor: color.withValues(alpha: 0.12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Widget _seccionGarantias(List<ResumenTicketDash> data) {
@@ -2195,6 +2035,160 @@ class _ColumnaTabla {
 
 // 🍩 Porción de un gráfico de dona interactivo: etiqueta, valor, color y
 // las líneas de detalle que se muestran al pasar el mouse.
+// Panel de "Fallas más frecuentes" de UN equipo (o General): ranking
+// numerado, cada falla con su categoría › parte (de dónde deriva) y su
+// barra debajo. Muestra 10; "Ver más" despliega el resto en el mismo panel.
+class _PanelFallasFrecuentes extends StatefulWidget {
+  final String equipo;
+  final List<ResumenFalla> filas;
+  final Color Function(String categoria) colorCategoria;
+
+  const _PanelFallasFrecuentes({
+    super.key,
+    required this.equipo,
+    required this.filas,
+    required this.colorCategoria,
+  });
+
+  @override
+  State<_PanelFallasFrecuentes> createState() => _PanelFallasFrecuentesState();
+}
+
+class _PanelFallasFrecuentesState extends State<_PanelFallasFrecuentes> {
+  static const int _visibles = 10;
+  bool _expandido = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final filas = widget.filas;
+    final total = filas.fold<int>(0, (s, f) => s + f.veces);
+    final maxN = filas.isEmpty ? 0 : filas.first.veces;
+    final mostradas = _expandido ? filas : filas.take(_visibles).toList();
+    final restantes = filas.length - _visibles;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFAF7),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(widget.equipo.toUpperCase(),
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _navy, letterSpacing: 0.4)),
+              ),
+              Text('$total falla(s)', style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600)),
+            ],
+          ),
+          const Divider(height: 16),
+          if (filas.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Center(child: Text('Sin datos', style: TextStyle(color: Colors.grey.shade500, fontSize: 12))),
+            ),
+          for (var i = 0; i < mostradas.length; i++) _fila(i + 1, mostradas[i], total, maxN),
+          if (restantes > 0)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => setState(() => _expandido = !_expandido),
+                icon: Icon(_expandido ? Icons.expand_less : Icons.expand_more, size: 18),
+                label: Text(_expandido ? 'Ver menos' : 'Ver más ($restantes)', style: const TextStyle(fontSize: 12)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _fila(int posicion, ResumenFalla f, int totalEquipo, int maxN) {
+    final porcentaje = totalEquipo == 0 ? 0 : f.veces / totalEquipo * 100;
+    final color = widget.colorCategoria(f.categoria);
+    return Tooltip(
+      message: '${f.categoria} › ${f.parte} › ${f.falla}\n'
+          '${f.veces} falla(s) · ${porcentaje.toStringAsFixed(0)}% de las fallas de ${widget.equipo.toUpperCase()}',
+      waitDuration: const Duration(milliseconds: 300),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 22,
+              child: Text('$posicion', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey.shade500)),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(f.falla,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.black87)),
+                      ),
+                      const SizedBox(width: 8),
+                      Text('${f.veces}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: _navy)),
+                      SizedBox(
+                        width: 40,
+                        child: Text('${porcentaje.toStringAsFixed(0)}%',
+                            textAlign: TextAlign.right, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  // De dónde deriva: "● Categoría › Parte" (parte en negrita).
+                  Row(
+                    children: [
+                      Container(width: 7, height: 7, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                      const SizedBox(width: 5),
+                      Flexible(
+                        child: Text.rich(
+                          TextSpan(
+                            style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600),
+                            children: [
+                              TextSpan(text: '${f.categoria} › '),
+                              TextSpan(
+                                text: f.parte,
+                                style: f.esSinParte
+                                    ? const TextStyle(fontStyle: FontStyle.italic)
+                                    : const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                              ),
+                            ],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 5),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: maxN == 0 ? 0 : f.veces / maxN,
+                      minHeight: 6,
+                      color: color,
+                      backgroundColor: color.withValues(alpha: 0.12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _PorcionDona {
   final String clave;
   final String etiqueta;
