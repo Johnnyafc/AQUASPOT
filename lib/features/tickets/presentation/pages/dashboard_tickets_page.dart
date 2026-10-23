@@ -30,6 +30,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:printing/printing.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/services/indicadores_postventa_service.dart';
+import '../../domain/services/fallas_por_parte_service.dart';
 import '../services/generador_excel_indicadores_postventa.dart';
 import '../bloc/dashboard_bloc.dart';
 import '../bloc/dashboard_event.dart';
@@ -157,6 +158,8 @@ class _DashboardViewState extends State<_DashboardView> {
   DateTime? _fechaHasta;
   // 🔍 Categoría de falla seleccionada con clic en "Fallas por categoría".
   String? _categoriaSel;
+  // 🧩 Parte seleccionada con clic en "Fallas por parte" (clave categoría|parte).
+  String? _parteSel;
   // ⏱️ Procesos desplegados en "Tiempo promedio por proceso" (ver sus partes).
   final Set<String> _procesosExpandidos = {};
 
@@ -181,6 +184,7 @@ class _DashboardViewState extends State<_DashboardView> {
       _fechaDesde = null;
       _fechaHasta = null;
       _categoriaSel = null;
+      _parteSel = null;
     });
   }
 
@@ -1226,6 +1230,50 @@ class _DashboardViewState extends State<_DashboardView> {
     }
     final paresCat = catSel == null ? pares : pares.where((x) => clave(x.d.categoria) == catSel).toList();
 
+    // ---------------------------------------------------------------- Partes
+    // Sin categoría elegida: todas las partes con el color de su categoría.
+    // Con categoría: solo sus partes, cada una con su color.
+    final partes = FallasPorParteService.agrupar(
+      [
+        for (final x in pares)
+          FallaParaParte(
+            categoria: x.d.categoria,
+            parte: x.d.subcategoria,
+            falla: x.d.falla,
+            ticketId: x.ticket.id,
+            equipo: x.ticket.equipo,
+          ),
+      ],
+      claveCategoria: catSel,
+    );
+    // La parte elegida se ignora si ya no existe con los filtros actuales.
+    final parteSel = partes.where((p) => p.clave == _parteSel).firstOrNull;
+    final totalFallasPartes = partes.fold<int>(0, (s, p) => s + p.fallas);
+    final porcionesParte = [
+      for (var i = 0; i < partes.length; i++)
+        _PorcionDona(
+          clave: partes[i].clave,
+          etiqueta: catSel == null ? '${partes[i].parte} · ${partes[i].categoria}' : partes[i].parte,
+          valor: partes[i].fallas,
+          color: partes[i].esSinParte
+              ? Colors.blueGrey.shade300
+              : (catSel == null ? (colorCat[partes[i].claveCategoria] ?? _slate) : _seriesColors[i % _seriesColors.length]),
+          detalle: [
+            '${partes[i].fallas} falla(s) · ${pct(partes[i].fallas, totalFallasPartes)}% ${catSel == null ? 'del total' : 'de ${etiquetaCat[catSel]}'}',
+            'Tickets afectados: ${ticketsPorEquipo(partes[i].ticketsPorEquipo)}',
+            'Más comunes: ${partes[i].masComunes().map((e) => '${e.key} (${e.value})').join(', ')}',
+          ],
+        ),
+    ];
+
+    // Alcance de "Razones de falla" y "Fallas más frecuentes": la categoría
+    // elegida y, si hay, la parte elegida.
+    final paresFiltro = parteSel == null
+        ? paresCat
+        : paresCat.where((x) => FallasPorParteService.clave(x.d.categoria, x.d.subcategoria) == parteSel.clave).toList();
+    final String? tituloAlcance =
+        parteSel != null ? '${parteSel.categoria} › ${parteSel.parte}' : (catSel != null ? etiquetaCat[catSel] : null);
+
     final porcionesCat = [
       for (final k in clavesCat)
         _PorcionDona(
@@ -1249,7 +1297,7 @@ class _DashboardViewState extends State<_DashboardView> {
     final ticketsConRazon = <String, Set<String>>{};
     final ticketsConRazonEquipo = <String, Map<String, Set<String>>>{};
     final catsConRazon = <String, Map<String, int>>{};
-    for (final x in paresCat) {
+    for (final x in paresFiltro) {
       final vistas = <String>{};
       for (final razon in x.d.razones) {
         if (razon.trim().isEmpty) continue;
@@ -1266,7 +1314,7 @@ class _DashboardViewState extends State<_DashboardView> {
       }
     }
     final totalMarcas = marcas.values.fold<int>(0, (s, v) => s + v);
-    final totalFallasAlcance = paresCat.length;
+    final totalFallasAlcance = paresFiltro.length;
     // Color fijo por razón (mismo orden del catálogo) para que no cambie al filtrar.
     Color colorRazon(String et) {
       final i = razonesProblemaEstandar.indexOf(et);
@@ -1292,7 +1340,7 @@ class _DashboardViewState extends State<_DashboardView> {
 
     // ---------------------------------------------------------------- Fallas por equipo
     final porEquipo = <String, Map<String, ({String categoria, String texto, int n})>>{};
-    for (final x in paresCat) {
+    for (final x in paresFiltro) {
       final sub = x.d.subcategoria.trim();
       final falla = x.d.falla.trim();
       final k = '${clave(x.d.categoria)}|${clave(sub)}|${clave(falla)}';
@@ -1347,11 +1395,30 @@ class _DashboardViewState extends State<_DashboardView> {
         if (catSel != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: InputChip(
-              avatar: CircleAvatar(backgroundColor: colorCat[catSel], radius: 6),
-              label: Text('Categoría: ${etiquetaCat[catSel]}', style: const TextStyle(fontWeight: FontWeight.w600)),
-              onDeleted: () => setState(() => _categoriaSel = null),
-              onPressed: () => setState(() => _categoriaSel = null),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                InputChip(
+                  avatar: CircleAvatar(backgroundColor: colorCat[catSel], radius: 6),
+                  label: Text('Categoría: ${etiquetaCat[catSel]}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  onDeleted: () => setState(() {
+                    _categoriaSel = null;
+                    _parteSel = null;
+                  }),
+                  onPressed: () => setState(() {
+                    _categoriaSel = null;
+                    _parteSel = null;
+                  }),
+                ),
+                if (parteSel != null)
+                  InputChip(
+                    avatar: Icon(Icons.account_tree_outlined, size: 16, color: colorCat[catSel]),
+                    label: Text('Parte: ${parteSel.parte}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                    onDeleted: () => setState(() => _parteSel = null),
+                    onPressed: () => setState(() => _parteSel = null),
+                  ),
+              ],
             ),
           ),
         _grid([
@@ -1362,21 +1429,43 @@ class _DashboardViewState extends State<_DashboardView> {
               porciones: porcionesCat,
               textoTotal: 'fallas',
               seleccionada: catSel,
-              onSeleccionar: (k) => setState(() => _categoriaSel = _categoriaSel == k ? null : k),
+              onSeleccionar: (k) => setState(() {
+                _categoriaSel = _categoriaSel == k ? null : k;
+                _parteSel = null;
+              }),
             ),
           ),
           _card(
-            titulo: catSel == null ? 'Razones de falla (causa raíz)' : 'Razones de falla — ${etiquetaCat[catSel]}',
+            titulo: catSel == null ? 'Fallas por parte' : 'Fallas por parte — ${etiquetaCat[catSel]}',
+            nota: 'Parte del equipo donde ocurrió la falla (Categoría › Parte › Falla). "Sin parte": fallas guardadas antes sin parte. Clic en una parte para filtrar.',
+            child: _DonaInteractiva(
+              porciones: porcionesParte,
+              textoTotal: 'fallas',
+              textoFiltro: 'esa parte',
+              seleccionada: parteSel?.clave,
+              onSeleccionar: (k) => setState(() {
+                if (_parteSel == k) {
+                  _parteSel = null;
+                  return;
+                }
+                _parteSel = k;
+                // Elegir una parte también deja elegida su categoría.
+                _categoriaSel = partes.firstWhere((p) => p.clave == k).claveCategoria;
+              }),
+            ),
+          ),
+          _card(
+            titulo: tituloAlcance == null ? 'Razones de falla (causa raíz)' : 'Razones de falla — $tituloAlcance',
             nota: 'Porcentaje de veces que se marcó cada causa raíz (una falla puede tener varias)',
             child: _DonaInteractiva(
               porciones: porcionesRazon,
               textoTotal: 'marcas',
             ),
           ),
-        ]),
+        ], columnasAncho: 3),
         const SizedBox(height: 16),
         _card(
-          titulo: catSel == null ? 'Fallas más frecuentes' : 'Fallas más frecuentes — ${etiquetaCat[catSel]}',
+          titulo: tituloAlcance == null ? 'Fallas más frecuentes' : 'Fallas más frecuentes — $tituloAlcance',
           nota: unSoloEquipo
               ? 'Top 10 del equipo seleccionado · % sobre las fallas del equipo'
               : 'Top 5 por equipo (elija un equipo en el filtro para ver el top 10) · % sobre las fallas del equipo',
@@ -2057,12 +2146,15 @@ class _DonaInteractiva extends StatefulWidget {
   final String textoTotal;
   final String? seleccionada;
   final ValueChanged<String>? onSeleccionar;
+  // Qué filtra el clic, para el texto de ayuda ("Clic para filtrar por …").
+  final String textoFiltro;
 
   const _DonaInteractiva({
     required this.porciones,
     required this.textoTotal,
     this.seleccionada,
     this.onSeleccionar,
+    this.textoFiltro = 'esa categoría',
   });
 
   @override
@@ -2223,7 +2315,7 @@ class _DonaInteractivaState extends State<_DonaInteractiva> {
       child: foco == null
           ? Text(
               widget.onSeleccionar != null
-                  ? 'Pase el mouse por el gráfico o la lista para ver el detalle. Clic para filtrar por esa categoría.'
+                  ? 'Pase el mouse por el gráfico o la lista para ver el detalle. Clic para filtrar por ${widget.textoFiltro}.'
                   : 'Pase el mouse por el gráfico o la lista para ver el detalle.',
               style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
             )
