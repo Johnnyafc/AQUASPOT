@@ -10,7 +10,7 @@ bool esAdministradorMaestro(String email) => email.trim().toLowerCase() == corre
 /// `rondaDiagnosticoFallas` menor a este valor vuelve a salir en la bandeja
 /// "Fallas Pendientes por Diagnosticar" hasta que se guarde de nuevo. Para
 /// pedir una nueva revisión de todos los tickets basta con subir este número.
-const int rondaRevisionDiagnosticoFallas = 1;
+const int rondaRevisionDiagnosticoFallas = 2;
 
 /// Lista estándar de razones del problema (causa raíz) usada como catálogo
 /// base para clasificar fallas diagnosticadas, cuando una falla todavía no

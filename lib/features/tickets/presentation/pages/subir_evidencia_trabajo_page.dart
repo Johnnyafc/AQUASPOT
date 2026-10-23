@@ -600,7 +600,7 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
                                     const Padding(
                                       padding: EdgeInsets.all(12.0),
                                       child: Text(
-                                        'Sin componentes configurados en esta categoría.',
+                                        'Sin partes configuradas en esta categoría.',
                                         style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
                                       ),
                                     )
@@ -647,7 +647,7 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
                                               const Padding(
                                                 padding: EdgeInsets.all(8.0),
                                                 child: Text(
-                                                  'Sin fallas definidas en este componente.',
+                                                  'Sin fallas definidas en esta parte.',
                                                   style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
                                                 ),
                                               )

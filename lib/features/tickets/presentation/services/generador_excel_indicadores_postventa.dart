@@ -460,7 +460,7 @@ class GeneradorExcelIndicadoresPostventa {
 
       // C. Fallas más frecuentes del equipo.
       h.linea('C. Fallas más frecuentes', negrita: true);
-      h.encabezados(['Falla', 'Sistema · Subcategoría', ...cabMeses]);
+      h.encabezados(['Falla', 'Sistema · Parte', ...cabMeses]);
       final claves = _ordenarPorCantidad(delEquipo.map((f) => '${f.falla}|${f.sistema}|${f.subcategoria}'));
       for (final k in claves) {
         final partes = k.split('|');
@@ -644,7 +644,7 @@ class GeneradorExcelIndicadoresPostventa {
 
   static void _detalle3(_Hoja h, IndicadoresPostventa d) {
     h.titulo('Detalle Indicador 3 — Fallas diagnosticadas');
-    h.encabezados(['Mes', 'Ticket', 'Cliente', 'Equipo', 'Creación', 'Sistema', 'Subcategoría', 'Falla', 'Razones']);
+    h.encabezados(['Mes', 'Ticket', 'Cliente', 'Equipo', 'Creación', 'Sistema', 'Parte', 'Falla', 'Razones']);
     final lista = [...d.fallas]..sort((a, b) => a.fechaCreacion.compareTo(b.fechaCreacion));
     for (final f in lista) {
       h.texto(1, _mes(f.mes));

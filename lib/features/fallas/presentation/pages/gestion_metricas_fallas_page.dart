@@ -216,7 +216,7 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Nuevo Componente en "$nombreCategoria"',
+                  'Nueva Parte en "$nombreCategoria"',
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
@@ -228,12 +228,12 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
               controller: subCtrl,
               autofocus: true,
               decoration: InputDecoration(
-                labelText: 'Nombre del Componente o Módulo',
-                hintText: 'Ej: Comap, Relé, Cableado...',
+                labelText: 'Nombre de la Parte',
+                hintText: 'Ej: Motor diésel, Comap, Cableado...',
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
               validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Ingrese el nombre del componente' : null,
+                  (v == null || v.trim().isEmpty) ? 'Ingrese el nombre de la parte' : null,
             ),
           ),
           actions: [
@@ -260,7 +260,7 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
                     );
                     messenger.showSnackBar(
                       SnackBar(
-                        content: Text('Componente "$sub" agregado con éxito'),
+                        content: Text('Parte "$sub" agregada con éxito'),
                         backgroundColor: Colors.green,
                       ),
                     );
@@ -298,7 +298,7 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
               SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Editar Nombre de Componente',
+                  'Editar Nombre de Parte',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
@@ -310,7 +310,7 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
               controller: subCtrl,
               autofocus: true,
               decoration: InputDecoration(
-                labelText: 'Nombre del Componente',
+                labelText: 'Nombre de la Parte',
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
               validator: (v) =>
@@ -342,7 +342,7 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
                     );
                     messenger.showSnackBar(
                       SnackBar(
-                        content: Text('Componente actualizado a "$nuevoNombre"'),
+                        content: Text('Parte actualizada a "$nuevoNombre"'),
                         backgroundColor: Colors.green,
                       ),
                     );
@@ -851,7 +851,7 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
-                            '2. Componente / Módulo',
+                            '2. Parte',
                             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF003057)),
                           ),
                           if (listaSubs.isNotEmpty)
@@ -869,7 +869,7 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
                                 });
                               },
                               child: Text(
-                                esNuevoComponente ? 'Elegir existente' : '+ Crear nuevo',
+                                esNuevoComponente ? 'Elegir existente' : '+ Crear nueva',
                                 style: const TextStyle(fontSize: 12),
                               ),
                             ),
@@ -902,14 +902,14 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
                         TextFormField(
                           controller: subTextoCtrl,
                           decoration: InputDecoration(
-                            hintText: 'Ej: Comap, Motor, Relé, Sensor...',
-                            labelText: 'Nombre del Componente',
+                            hintText: 'Ej: Motor diésel, Comap, Relé, Sensor...',
+                            labelText: 'Nombre de la Parte',
                             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                           ),
                           validator: (v) =>
                               ((esNuevoComponente || listaSubs.isEmpty) && (v == null || v.trim().isEmpty))
-                                  ? 'Ingrese el nombre del componente'
+                                  ? 'Ingrese el nombre de la parte'
                                   : null,
                         ),
                       const SizedBox(height: 16),
@@ -967,7 +967,7 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
                     }
                     if (subFinal.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Debe indicar un componente válido.'), backgroundColor: Colors.orange),
+                        const SnackBar(content: Text('Debe indicar una parte válida.'), backgroundColor: Colors.orange),
                       );
                       return;
                     }
@@ -1022,7 +1022,7 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Eliminar Categoría', style: TextStyle(fontWeight: FontWeight.bold)),
         content: Text(
-          '¿Desea eliminar la categoría completa "$nombreCategoria" y todos sus componentes y fallas asociadas?',
+          '¿Desea eliminar la categoría completa "$nombreCategoria" y todas sus partes y fallas asociadas?',
         ),
         actions: [
           TextButton(
@@ -1070,9 +1070,9 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Eliminar Componente', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Eliminar Parte', style: TextStyle(fontWeight: FontWeight.bold)),
         content: Text(
-          '¿Desea eliminar el componente "$nombreSubcategoria" y todas sus fallas de "$nombreCategoria"?',
+          '¿Desea eliminar la parte "$nombreSubcategoria" y todas sus fallas de "$nombreCategoria"?',
         ),
         actions: [
           TextButton(
@@ -1095,7 +1095,7 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
                 );
                 messenger.showSnackBar(
                   const SnackBar(
-                    content: Text('Componente eliminado correctamente'),
+                    content: Text('Parte eliminada correctamente'),
                     backgroundColor: Colors.orange,
                   ),
                 );
@@ -1123,7 +1123,7 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Eliminar Falla', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: Text('¿Desea eliminar la falla "$falla" del componente "$nombreSubcategoria"?'),
+        content: Text('¿Desea eliminar la falla "$falla" de la parte "$nombreSubcategoria"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -1240,7 +1240,7 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
                     child: TextField(
                       onChanged: (val) => setState(() => _filtroTexto = val.trim().toLowerCase()),
                       decoration: InputDecoration(
-                        hintText: 'Buscar categoría, componente o falla...',
+                        hintText: 'Buscar categoría, parte o falla...',
                         prefixIcon: const Icon(Icons.search, color: Colors.blueGrey),
                         filled: true,
                         fillColor: const Color(0xFFF4F6F9),
@@ -1399,7 +1399,7 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
                                   // Botón 3: Añadir Componente (Nivel 2)
                                   IconButton(
                                     icon: const Icon(Icons.playlist_add, size: 22, color: Color(0xFF005A9C)),
-                                    tooltip: 'Añadir Componente a ${cat.nombre}',
+                                    tooltip: 'Añadir Parte a ${cat.nombre}',
                                     onPressed: () => _abrirModalNuevaSubcategoria(
                                       tipoEquipo,
                                       cat.nombre,
@@ -1424,7 +1424,7 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
                                     child: Column(
                                       children: [
                                         Text(
-                                          'Sin componentes registrados en "${cat.nombre}".',
+                                          'Sin partes registradas en "${cat.nombre}".',
                                           style: TextStyle(color: Colors.grey.shade500, fontStyle: FontStyle.italic),
                                         ),
                                         const SizedBox(height: 10),
@@ -1433,7 +1433,7 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
                                           children: [
                                             ElevatedButton.icon(
                                               icon: const Icon(Icons.playlist_add),
-                                              label: Text('Añadir Componente a ${cat.nombre} (ej: Comap)'),
+                                              label: Text('Añadir Parte a ${cat.nombre} (ej: Motor diésel)'),
                                               style: ElevatedButton.styleFrom(
                                                 backgroundColor: const Color(0xFF005A9C),
                                                 foregroundColor: Colors.white,
@@ -1532,7 +1532,7 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
                                                     // Botón Editar Componente (Nivel 2)
                                                     IconButton(
                                                       icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF003057)),
-                                                      tooltip: 'Editar Componente',
+                                                      tooltip: 'Editar Parte',
                                                       constraints: const BoxConstraints(),
                                                       padding: const EdgeInsets.all(4),
                                                       onPressed: () => _abrirModalEditarSubcategoria(
@@ -1545,7 +1545,7 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
                                                     // Botón Eliminar Componente
                                                     IconButton(
                                                       icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
-                                                      tooltip: 'Eliminar Componente',
+                                                      tooltip: 'Eliminar Parte',
                                                       constraints: const BoxConstraints(),
                                                       padding: const EdgeInsets.all(4),
                                                       onPressed: () => _confirmarEliminarSubcategoria(
@@ -1565,7 +1565,7 @@ class _GestionMetricasFallasPageState extends State<GestionMetricasFallasPage>
                                                   child: Row(
                                                     children: [
                                                       Text(
-                                                        'Sin fallas registradas en este componente.',
+                                                        'Sin fallas registradas en esta parte.',
                                                         style: TextStyle(fontSize: 12, color: Colors.grey.shade500, fontStyle: FontStyle.italic),
                                                       ),
                                                       const SizedBox(width: 8),
