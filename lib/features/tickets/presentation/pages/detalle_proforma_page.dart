@@ -13,12 +13,45 @@ import '../widgets/full_photo_widget.dart';
 import '../widgets/modal_aprobacion_comercial.dart';
 import '../widgets/copy_icon_button_widget.dart';
 import '../widgets/tarjeta_no_requiere_compras_widget.dart';
+import '../widgets/codigos_creados_costos_widget.dart';
+import '../../domain/services/creacion_codigos_venta_service.dart';
 // Importa tus dependencias necesarias
 
 class DetalleProformaPage extends StatelessWidget {
   final TicketEntity ticket;
 
   const DetalleProformaPage({super.key, required this.ticket});
+
+  // 🧾 Venta con repuestos que no están en el sistema: antes de la OV, el
+  // cliente acepta la proforma y Costos crea los códigos.
+  void _confirmarAceptacionCliente(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿El cliente aceptó la proforma?'),
+        content: const Text(
+          'El requerimiento pasará a Costos para crear los códigos de los repuestos que no están en el sistema. '
+          'Cuando Costos termine, volverá aquí para registrar la Orden de Venta.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+            onPressed: () {
+              Navigator.pop(ctx);
+              final auth = context.read<AuthBloc>().state;
+              context.read<TicketBloc>().add(ConfirmarAceptacionClienteVentaEvent(
+                    ticketId: ticket.id,
+                    nombreUsuario: auth is Authenticated ? auth.usuario.nombre : 'DESCONOCIDO',
+                    rolUsuario: auth is Authenticated ? auth.usuario.rol.name.toUpperCase() : 'SIN_ROL',
+                  ));
+            },
+            child: const Text('Sí, el cliente aceptó'),
+          ),
+        ],
+      ),
+    );
+  }
 
   // ⚙️ SUBRUTINA: Modal de confirmación para MODIFICAR o ANULAR (Rechazos)
 void _mostrarDialogoAccion(BuildContext context, String accion) {
@@ -199,6 +232,9 @@ void _mostrarDialogoAccion(BuildContext context, String accion) {
               // ==========================================
               TarjetaNoRequiereComprasWidget(ticket: ticket),
 
+              // 🧾 Venta: códigos pendientes / creados por Costos
+              CodigosCreadosCostosWidget(ticket: ticket),
+
               // ==========================================
               // 🚨 ENCLAVAMIENTO VISUAL DE FACTURACIÓN
               // ==========================================
@@ -238,12 +274,22 @@ void _mostrarDialogoAccion(BuildContext context, String accion) {
                   icon: const Icon(Icons.edit, size: 18),
                   label: const Text('Modificar'),
                 ),
-                ElevatedButton.icon(
-                  onPressed: () => ModalAprobacionComercial.show(context, ticket),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                  icon: const Icon(Icons.check, size: 18),
-                  label: const Text('Aceptar'),
-                ),
+                // 🧾 Venta con repuestos fuera del sistema: primero "Cliente
+                // aceptó" (→ Costos); la OV recién cuando hay códigos.
+                if (CreacionCodigosVentaService.requiereCreacionCodigos(ticket))
+                  ElevatedButton.icon(
+                    onPressed: () => _confirmarAceptacionCliente(context),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                    icon: const Icon(Icons.how_to_reg, size: 18),
+                    label: const Text('Cliente aceptó'),
+                  )
+                else
+                  ElevatedButton.icon(
+                    onPressed: () => ModalAprobacionComercial.show(context, ticket),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                    icon: const Icon(Icons.check, size: 18),
+                    label: const Text('Aceptar'),
+                  ),
                 ElevatedButton.icon(
                   onPressed: () => _mostrarDialogoAccion(context, 'ANULAR'),
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),

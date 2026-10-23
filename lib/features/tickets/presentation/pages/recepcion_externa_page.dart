@@ -2,11 +2,13 @@
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../core/services/acceso_temporal_bodega_service.dart';
 import '../../data/models/token_recepcion_externa_model.dart';
 import '../../data/models/ticket_model.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/entities/orden_recepcion_repuestos_entity.dart';
+import '../widgets/evidencia_retiro_widget.dart';
 
 enum EstadoCargaToken {
   cargando,
@@ -40,6 +42,11 @@ class _RecepcionExternaPageState extends State<RecepcionExternaPage> {
 
   final Map<String, TextEditingController> _cantidadesControllers = {};
   final Map<String, bool> _itemsValidados = {};
+  // 📸 Evidencia obligatoria del retiro.
+  List<XFile> _fotosHojaFirmada = [];
+  List<XFile> _fotosMateriales = [];
+
+  bool get _evidenciaCompleta => _fotosHojaFirmada.isNotEmpty && _fotosMateriales.isNotEmpty;
 
   @override
   void initState() {
@@ -110,6 +117,15 @@ class _RecepcionExternaPageState extends State<RecepcionExternaPage> {
         setState(() {
           _tokenModel = tokenModel;
           _estado = EstadoCargaToken.usado;
+        });
+        return;
+      }
+
+      // 🚫 Orden anulada por el supervisor: el enlace ya no sirve.
+      if (orden.estaAnulada) {
+        setState(() {
+          _estado = EstadoCargaToken.error;
+          _mensajeError = 'Esta orden de retiro (${orden.id}) fue anulada por el supervisor. Solicite un nuevo enlace.';
         });
         return;
       }
@@ -275,6 +291,21 @@ class _RecepcionExternaPageState extends State<RecepcionExternaPage> {
     });
 
     try {
+      // 1. Subir la evidencia (el enlace aún no se quema: si falla, se
+      //    puede reintentar).
+      Future<List<String>> subir(List<XFile> fotos, String tipo) async => [
+            for (final f in fotos)
+              await _accesoService.subirFotoRetiroExterno(
+                token: widget.token,
+                ticketId: _tokenModel!.ticketId,
+                tipo: tipo,
+                foto: f,
+              ),
+          ];
+      final urlsHoja = await subir(_fotosHojaFirmada, 'hoja');
+      final urlsMateriales = await subir(_fotosMateriales, 'materiales');
+
+      // 2. Confirmar el retiro y quemar el enlace.
       await _accesoService.consumirTokenYConfirmarRecepcion(
         token: widget.token,
         ticketId: _tokenModel!.ticketId,
@@ -282,6 +313,8 @@ class _RecepcionExternaPageState extends State<RecepcionExternaPage> {
         itemsValidados: itemsAEnviar,
         nombreTecnico: _tokenModel!.tecnicoNombre,
         notas: _notasController.text.trim(),
+        urlsHojaFirmada: urlsHoja,
+        urlsFotosMateriales: urlsMateriales,
       );
 
       setState(() {
@@ -766,6 +799,15 @@ class _RecepcionExternaPageState extends State<RecepcionExternaPage> {
           ),
           const SizedBox(height: 16),
 
+          // 📸 Evidencia obligatoria del retiro
+          EvidenciaRetiroWidget(
+            fotosHojaFirmada: _fotosHojaFirmada,
+            fotosMateriales: _fotosMateriales,
+            onHojaFirmadaCambiada: (f) => setState(() => _fotosHojaFirmada = f),
+            onMaterialesCambiados: (f) => setState(() => _fotosMateriales = f),
+          ),
+          const SizedBox(height: 16),
+
           // Observaciones
           TextField(
             controller: _notasController,
@@ -783,12 +825,14 @@ class _RecepcionExternaPageState extends State<RecepcionExternaPage> {
           // Botón Confirmar
           Builder(
             builder: (context) {
-              final bool puedeConfirmar = _estanTodosContados && !_hayExcesos;
+              final bool puedeConfirmar = _estanTodosContados && !_hayExcesos && _evidenciaCompleta;
               final String textoBoton = _hayExcesos
                   ? 'HAY CANTIDADES QUE EXCEDEN EL MÁXIMO ALISTADO'
                   : !_estanTodosContados
                       ? 'DEBE INGRESAR EL CONTEO DE TODOS LOS REPUESTOS'
-                      : 'CONFIRMAR Y FINALIZAR RETIRO';
+                      : !_evidenciaCompleta
+                          ? 'SUBA LA HOJA FIRMADA Y LA FOTO DE LOS MATERIALES'
+                          : 'CONFIRMAR Y FINALIZAR RETIRO';
 
               return SizedBox(
                 width: double.infinity,

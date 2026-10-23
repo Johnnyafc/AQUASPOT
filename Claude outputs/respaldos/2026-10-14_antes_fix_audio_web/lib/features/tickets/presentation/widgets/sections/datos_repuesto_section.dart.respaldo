@@ -1,0 +1,414 @@
+// lib/features/tickets/presentation/widgets/sections/datos_repuesto_section.dart
+//
+// Sección "2. Datos del Repuesto" para Venta de Repuesto: un buscador que
+// filtra el inventario actual por nombre o código, un campo de cantidad
+// (no se bloquea aunque el stock esté en 0 -- es solo informativo), un
+// botón para agregar la línea, y la lista de líneas ya agregadas con
+// opción de quitarlas.
+//
+// 🔧 También permite agregar un repuesto "por determinar" (el cliente no
+// sabe cuál es): sin código, con la descripción del cliente, cantidad y su
+// propia evidencia (fotos/videos y notas de voz) para el técnico. La
+// evidencia viaja en `archivosPorLinea`, en la misma posición que su línea.
+//
+// A propósito NO filtra ni pide bodega todavía: eso queda pendiente para
+// cuando se resuelva cómo diferenciar el inventario por bodega en la
+// carga de Excel (hoy el código es el único identificador del ítem).
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../../../inventario/presentation/bloc/inventario_bloc.dart';
+import '../../../../inventario/presentation/bloc/inventario_event.dart';
+import '../../../../inventario/presentation/bloc/inventario_state.dart';
+import '../../../../inventario/domain/entities/item_inventario_entity.dart';
+import '../../../domain/entities/linea_repuesto_venta_entity.dart';
+import '../../bloc/ticket_event.dart' show ArchivosLineaVenta;
+import '../camera_manager_widget.dart';
+import '../section_title_widget.dart';
+
+class DatosRepuestoSection extends StatefulWidget {
+  final List<LineaRepuestoVentaEntity> lineas;
+  // Evidencia de cada línea (misma posición que en `lineas`).
+  final List<ArchivosLineaVenta> archivosPorLinea;
+  final void Function(List<LineaRepuestoVentaEntity> lineas, List<ArchivosLineaVenta> archivos) onLineasActualizadas;
+
+  const DatosRepuestoSection({
+    super.key,
+    required this.lineas,
+    required this.archivosPorLinea,
+    required this.onLineasActualizadas,
+  });
+
+  @override
+  State<DatosRepuestoSection> createState() => _DatosRepuestoSectionState();
+}
+
+class _DatosRepuestoSectionState extends State<DatosRepuestoSection> {
+  final TextEditingController _cantidadController = TextEditingController();
+  ItemInventarioEntity? _repuestoSeleccionado;
+
+  // 🔧 Modo "por determinar"
+  bool _modoPorDeterminar = false;
+  final TextEditingController _descripcionClienteController = TextEditingController();
+  final List<XFile> _evidenciasTmp = [];
+  final List<PlatformFile> _audiosTmp = [];
+
+  @override
+  void initState() {
+    super.initState();
+    // Por si el inventario aún no se había pedido cuando se abrió esta
+    // sección (el InventarioBloc global ya lo pide en el arranque de la
+    // app, esto es solo un refuerzo defensivo).
+    final estado = context.read<InventarioBloc>().state;
+    if (estado is InventarioInitial) {
+      context.read<InventarioBloc>().add(const CargarInventarioEvent());
+    }
+  }
+
+  @override
+  void dispose() {
+    _cantidadController.dispose();
+    _descripcionClienteController.dispose();
+    super.dispose();
+  }
+
+  /// Archivos alineados con las líneas actuales (rellena si faltan).
+  List<ArchivosLineaVenta> _archivosAlineados() => List<ArchivosLineaVenta>.generate(
+        widget.lineas.length,
+        (i) => i < widget.archivosPorLinea.length ? widget.archivosPorLinea[i] : const ArchivosLineaVenta(),
+      );
+
+  void _agregarLinea() {
+    final repuesto = _repuestoSeleccionado;
+    final cantidad = double.tryParse(_cantidadController.text.trim().replaceAll(',', '.'));
+
+    if (repuesto == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('⚠️ Busque y seleccione un repuesto.'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+    if (cantidad == null || cantidad <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('⚠️ Ingrese una cantidad válida.'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    final nuevaLista = List<LineaRepuestoVentaEntity>.from(widget.lineas)
+      ..add(LineaRepuestoVentaEntity(
+        codigo: repuesto.codigo,
+        descripcion: repuesto.descripcion,
+        unidad: repuesto.unidad,
+        cantidad: cantidad,
+      ));
+    widget.onLineasActualizadas(nuevaLista, _archivosAlineados()..add(const ArchivosLineaVenta()));
+
+    setState(() {
+      _repuestoSeleccionado = null;
+      _cantidadController.clear();
+    });
+  }
+
+  void _agregarPorDeterminar() {
+    final descripcion = _descripcionClienteController.text.trim();
+    final cantidad = double.tryParse(_cantidadController.text.trim().replaceAll(',', '.'));
+
+    if (descripcion.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('⚠️ Describa el repuesto que pide el cliente.'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+    if (cantidad == null || cantidad <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('⚠️ Ingrese una cantidad válida.'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    final nuevaLista = List<LineaRepuestoVentaEntity>.from(widget.lineas)
+      ..add(LineaRepuestoVentaEntity(
+        codigo: '',
+        descripcion: '',
+        unidad: '',
+        cantidad: cantidad,
+        porDeterminar: true,
+        descripcionCliente: descripcion,
+      ));
+    final archivos = _archivosAlineados()
+      ..add(ArchivosLineaVenta(
+        evidencias: List<XFile>.from(_evidenciasTmp),
+        audios: List<PlatformFile>.from(_audiosTmp),
+      ));
+    widget.onLineasActualizadas(nuevaLista, archivos);
+
+    setState(() {
+      _descripcionClienteController.clear();
+      _cantidadController.clear();
+      _evidenciasTmp.clear();
+      _audiosTmp.clear();
+    });
+  }
+
+  Future<void> _adjuntarAudio() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['mp3', 'm4a', 'wav', 'aac', 'ogg'],
+      allowMultiple: true,
+    );
+    if (result != null && result.files.isNotEmpty) {
+      setState(() => _audiosTmp.addAll(result.files));
+    }
+  }
+
+  void _quitarLinea(int index) {
+    final nuevaLista = List<LineaRepuestoVentaEntity>.from(widget.lineas)..removeAt(index);
+    widget.onLineasActualizadas(nuevaLista, _archivosAlineados()..removeAt(index));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionTitleWidget(title: '2. Datos del Repuesto'),
+
+        SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(value: false, icon: Icon(Icons.inventory_2_outlined), label: Text('Del inventario')),
+            ButtonSegment(value: true, icon: Icon(Icons.engineering), label: Text('Por determinar (asistencia técnica)')),
+          ],
+          selected: {_modoPorDeterminar},
+          onSelectionChanged: (sel) => setState(() {
+            _modoPorDeterminar = sel.first;
+            _repuestoSeleccionado = null;
+          }),
+        ),
+        const SizedBox(height: 16),
+
+        if (_modoPorDeterminar) ..._formularioPorDeterminar() else ...[
+        BlocBuilder<InventarioBloc, InventarioState>(
+          builder: (context, state) {
+            final items = state is InventarioLoaded ? state.items : const <ItemInventarioEntity>[];
+            final cargando = state is InventarioLoading;
+
+            return Autocomplete<ItemInventarioEntity>(
+              displayStringForOption: (i) => '${i.codigo} - ${i.descripcion}',
+              optionsBuilder: (TextEditingValue textEditingValue) {
+                if (textEditingValue.text.isEmpty) return const Iterable<ItemInventarioEntity>.empty();
+                final query = textEditingValue.text.toLowerCase();
+                return items
+                    .where((item) =>
+                        item.codigo.toLowerCase().contains(query) ||
+                        item.descripcion.toLowerCase().contains(query))
+                    .take(20);
+              },
+              onSelected: (item) => setState(() => _repuestoSeleccionado = item),
+              fieldViewBuilder: (context, internalController, focusNode, onFieldSubmitted) {
+                return TextFormField(
+                  controller: internalController,
+                  focusNode: focusNode,
+                  decoration: InputDecoration(
+                    labelText: cargando ? 'Cargando inventario...' : 'Buscar repuesto por nombre o código',
+                    prefixIcon: const Icon(Icons.search),
+                    filled: true,
+                    fillColor: Colors.grey[50],
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
+                  onChanged: (val) {
+                    if (_repuestoSeleccionado != null) setState(() => _repuestoSeleccionado = null);
+                  },
+                );
+              },
+            );
+          },
+        ),
+
+        if (_repuestoSeleccionado != null) ...[
+          const SizedBox(height: 8),
+          _tarjetaStockInfo(_repuestoSeleccionado!),
+        ],
+
+        const SizedBox(height: 16),
+
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _cantidadController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Cantidad',
+                  prefixIcon: const Icon(Icons.numbers),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            ElevatedButton.icon(
+              onPressed: _agregarLinea,
+              icon: const Icon(Icons.add),
+              label: const Text('Agregar'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF005A9C),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+        ],
+
+        if (widget.lineas.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text('Repuestos agregados (${widget.lineas.length})',
+              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+          const SizedBox(height: 8),
+          for (int i = 0; i < widget.lineas.length; i++) _tarjetaLineaAgregada(i, widget.lineas[i]),
+        ],
+      ],
+    );
+  }
+
+  Widget _tarjetaStockInfo(ItemInventarioEntity item) {
+    final tieneStock = item.stockDisponible > 0;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: tieneStock ? const Color(0xFFE8F5E9) : const Color(0xFFFFF3E0),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: tieneStock ? Colors.green.shade200 : Colors.orange.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(tieneStock ? Icons.check_circle_outline : Icons.info_outline,
+              size: 18, color: tieneStock ? Colors.green.shade700 : Colors.orange.shade700),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${item.stockDisponible.toStringAsFixed(0)} ${item.unidad} disponibles'
+              '${item.ubicacion != null && item.ubicacion!.isNotEmpty ? ' · ${item.ubicacion}' : ''}',
+              style: TextStyle(fontSize: 12, color: tieneStock ? Colors.green.shade900 : Colors.orange.shade900),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tarjetaLineaAgregada(int index, LineaRepuestoVentaEntity linea) {
+    final cantidadTexto =
+        linea.cantidad % 1 == 0 ? linea.cantidad.toStringAsFixed(0) : linea.cantidad.toStringAsFixed(2);
+    if (linea.porDeterminar) {
+      final archivos = index < widget.archivosPorLinea.length ? widget.archivosPorLinea[index] : const ArchivosLineaVenta();
+      return Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        elevation: 0,
+        color: const Color(0xFFFFF3E0),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: Colors.orange.shade200)),
+        child: ListTile(
+          dense: true,
+          leading: Icon(Icons.engineering, color: Colors.orange.shade800),
+          title: Text(linea.descripcionCliente, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          subtitle: Text(
+            'POR DETERMINAR · Cantidad: $cantidadTexto · '
+            '${archivos.evidencias.length} foto(s)/video(s) · ${archivos.audios.length} nota(s) de voz',
+            style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
+          ),
+          trailing: IconButton(
+            icon: const Icon(Icons.close, color: Colors.redAccent, size: 20),
+            onPressed: () => _quitarLinea(index),
+          ),
+        ),
+      );
+    }
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: Colors.grey.shade300)),
+      child: ListTile(
+        dense: true,
+        title: Text(linea.descripcion, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+        subtitle: Text('${linea.codigo} · Cantidad: $cantidadTexto ${linea.unidad}', style: const TextStyle(fontSize: 12)),
+        trailing: IconButton(
+          icon: const Icon(Icons.close, color: Colors.redAccent, size: 20),
+          onPressed: () => _quitarLinea(index),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _formularioPorDeterminar() {
+    final decoracion = InputDecoration(
+      filled: true,
+      fillColor: Colors.grey[50],
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+    );
+    return [
+      Text(
+        'El técnico definirá el repuesto en Evaluación. Describa lo que pide el cliente y adjunte evidencia.',
+        style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
+      ),
+      const SizedBox(height: 12),
+      TextFormField(
+        controller: _descripcionClienteController,
+        maxLines: 2,
+        decoration: decoracion.copyWith(
+          labelText: 'Descripción del cliente (qué repuesto necesita)',
+          prefixIcon: const Icon(Icons.description_outlined),
+        ),
+      ),
+      const SizedBox(height: 12),
+      TextFormField(
+        controller: _cantidadController,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: decoracion.copyWith(labelText: 'Cantidad', prefixIcon: const Icon(Icons.numbers)),
+      ),
+      const SizedBox(height: 12),
+      CameraManagerWidget(
+        archivosEvidencia: _evidenciasTmp,
+        onArchivosActualizados: (archivos) => setState(() {
+          _evidenciasTmp
+            ..clear()
+            ..addAll(archivos);
+        }),
+      ),
+      const SizedBox(height: 12),
+      OutlinedButton.icon(
+        onPressed: _adjuntarAudio,
+        icon: const Icon(Icons.mic_none_outlined, color: Colors.teal),
+        label: Text('Adjuntar nota de voz (${_audiosTmp.length})', style: const TextStyle(color: Colors.teal)),
+      ),
+      for (int i = 0; i < _audiosTmp.length; i++)
+        ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.audiotrack, color: Colors.teal),
+          title: Text(_audiosTmp[i].name, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
+          trailing: IconButton(
+            icon: const Icon(Icons.close, color: Colors.redAccent, size: 20),
+            onPressed: () => setState(() => _audiosTmp.removeAt(i)),
+          ),
+        ),
+      const SizedBox(height: 12),
+      ElevatedButton.icon(
+        onPressed: _agregarPorDeterminar,
+        icon: const Icon(Icons.add),
+        label: const Text('Agregar repuesto por determinar'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.orange.shade800,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+    ];
+  }
+}

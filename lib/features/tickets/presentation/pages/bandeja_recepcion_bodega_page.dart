@@ -138,8 +138,9 @@ class _BandejaRecepcionBodegaPageState extends State<BandejaRecepcionBodegaPage>
           }).toList();
 
           final completadas = todasOrdenes.where((item) {
-            final esCompletada =
-                item.orden.estado != EstadoOrdenRecepcion.pendienteRecoger;
+            // Las anuladas no se muestran al técnico.
+            final esCompletada = item.orden.estado != EstadoOrdenRecepcion.pendienteRecoger &&
+                !item.orden.estaAnulada;
             if (!esCompletada) return false;
             if (esSupervisorOAdmin) return true;
             return _coincideTecnico(item.orden, uidUsuario, nombreUsuario);

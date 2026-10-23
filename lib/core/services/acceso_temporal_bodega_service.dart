@@ -1,6 +1,11 @@
 // lib/core/services/acceso_temporal_bodega_service.dart
 
 import 'dart:math';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../features/tickets/data/models/evento_auditoria_model.dart';
+import '../../features/tickets/data/models/orden_recepcion_repuestos_model.dart';
+import '../enum/proceso_auditoria.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../features/tickets/data/models/token_recepcion_externa_model.dart';
 import '../../features/tickets/data/models/ticket_model.dart';
@@ -9,9 +14,46 @@ import '../../features/tickets/domain/entities/evento_auditoria_entity.dart';
 
 class AccesoTemporalBodegaService {
   final FirebaseFirestore _firestore;
+  final FirebaseStorage? _storage;
 
-  AccesoTemporalBodegaService({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+  AccesoTemporalBodegaService({FirebaseFirestore? firestore, FirebaseStorage? storage})
+      : _firestore = firestore ?? FirebaseFirestore.instance,
+        _storage = storage;
+
+  /// 📸 Sube una foto de evidencia del retiro del técnico externo (sin
+  /// sesión). La regla de Storage solo permite crear imágenes en
+  /// tickets/{ticket}/retiros_externos/{token}/ mientras el token exista,
+  /// sea de ese ticket y no se haya usado. Devuelve la URL de descarga.
+  Future<String> subirFotoRetiroExterno({
+    required String token,
+    required String ticketId,
+    required String tipo, // 'hoja' | 'materiales'
+    required XFile foto,
+  }) async {
+    final bytes = await foto.readAsBytes();
+    final nombre = foto.name.isNotEmpty ? foto.name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_') : 'foto.jpg';
+    final ref = (_storage ?? FirebaseStorage.instance)
+        .ref('tickets/$ticketId/retiros_externos/$token/${tipo}_${DateTime.now().microsecondsSinceEpoch}_$nombre');
+    await ref.putData(bytes, SettableMetadata(contentType: tipoImagen(foto.mimeType, nombre)));
+    return ref.getDownloadURL();
+  }
+
+  /// Tipo de imagen para Storage. En la web el selector a veces entrega el
+  /// tipo vacío; la regla exige `image/...`, así que se deduce por la
+  /// extensión y, si no, se usa image/jpeg.
+  static String tipoImagen(String? mimeType, String nombreArchivo) {
+    final mime = mimeType?.trim() ?? '';
+    if (mime.startsWith('image/')) return mime;
+    final ext = nombreArchivo.contains('.') ? nombreArchivo.split('.').last.toLowerCase() : '';
+    return switch (ext) {
+      'png' => 'image/png',
+      'webp' => 'image/webp',
+      'gif' => 'image/gif',
+      'heic' => 'image/heic',
+      'heif' => 'image/heif',
+      _ => 'image/jpeg',
+    };
+  }
 
   CollectionReference<Map<String, dynamic>> get _tokensCol =>
       _firestore.collection('tokens_recepcion_externa');
@@ -74,7 +116,13 @@ class AccesoTemporalBodegaService {
     required List<ItemRecepcionRepuestoEntity> itemsValidados,
     required String nombreTecnico,
     String? notas,
+    // 📸 Evidencia obligatoria del retiro (URLs ya subidas).
+    required List<String> urlsHojaFirmada,
+    required List<String> urlsFotosMateriales,
   }) async {
+    if (urlsHojaFirmada.isEmpty || urlsFotosMateriales.isEmpty) {
+      throw Exception('Suba la foto de la hoja de materiales firmada y la de los materiales retirados.');
+    }
     final ticketRef = _firestore.collection('tickets').doc(ticketId);
     final tokenRef = _tokensCol.doc(token);
 
@@ -96,6 +144,13 @@ class AccesoTemporalBodegaService {
       }
 
       final ticketModel = TicketModel.fromJson(ticketSnap.data()!);
+
+      // 🚫 Una orden anulada ya no se puede confirmar.
+      for (final ord in ticketModel.ordenesRecepcion) {
+        if (ord.id == ordenId && ord.estaAnulada) {
+          throw Exception('Esta orden de retiro fue anulada por el supervisor. Solicite un nuevo enlace.');
+        }
+      }
 
       // 3. Validar integridad de cantidades y determinar si la orden es total o parcial
       for (final item in itemsValidados) {
@@ -126,6 +181,8 @@ class AccesoTemporalBodegaService {
             estado: estadoFinal,
             fechaRecepcion: ahora,
             items: itemsValidados,
+            urlsHojaFirmada: [...ord.urlsHojaFirmada, ...urlsHojaFirmada],
+            urlsFotosMateriales: [...ord.urlsFotosMateriales, ...urlsFotosMateriales],
           );
         }
         return ord;
@@ -136,10 +193,13 @@ class AccesoTemporalBodegaService {
           .map((i) => '${i.codigo}: ${i.cantidadRecibidaTecnico}/${i.cantidadDespachadaBodega} ${i.unidad}')
           .join(', ');
       final eventoLog = EventoAuditoriaEntity(
-        accion: 'TALLER: REPUESTOS RETIRADOS EN BODEGA POR TÉCNICO EXTERNO $nombreTecnico VÍA ENLACE TEMPORAL [$ordenId]. ESTADO: ${esTotal ? "TOTAL 100%" : "PARCIAL"}. DETALLE: ($detalleItems)',
+        accion: 'TALLER: REPUESTOS RETIRADOS EN BODEGA POR TÉCNICO EXTERNO $nombreTecnico VÍA ENLACE TEMPORAL [$ordenId]. ESTADO: ${esTotal ? "TOTAL 100%" : "PARCIAL"}. DETALLE: ($detalleItems). '
+            'EVIDENCIA: ${urlsHojaFirmada.length} foto(s) de hoja firmada y ${urlsFotosMateriales.length} de materiales.',
         usuarioNombre: nombreTecnico,
         usuarioRol: 'TECNICO_EXTERNO',
         timestamp: ahora,
+        proceso: ProcesoAuditoria.taller,
+        hito: HitoProceso.avance,
       );
 
       final historialActualizado = [...ticketModel.historialEventos, eventoLog];
@@ -153,37 +213,36 @@ class AccesoTemporalBodegaService {
 
       // 7. Guardar en el ticket
       transaction.update(ticketRef, {
-        'ordenesRecepcion': ordenesActualizadas.map((e) {
-          return {
-            'id': e.id,
-            'fechaAsignacion': Timestamp.fromDate(e.fechaAsignacion),
-            'tecnicoId': e.tecnicoId,
-            'tecnicoNombre': e.tecnicoNombre,
-            'supervisorAsigna': e.supervisorAsigna,
-            'fechaRecepcion': e.fechaRecepcion != null ? Timestamp.fromDate(e.fechaRecepcion!) : null,
-            'estado': e.estado.name,
-            'items': e.items.map((i) => {
-              'codigo': i.codigo,
-              'descripcion': i.descripcion,
-              'cantidadDespachadaBodega': i.cantidadDespachadaBodega,
-              'cantidadRecibidaTecnico': i.cantidadRecibidaTecnico,
-              'unidad': i.unidad,
-              'validado': i.validado,
-            }).toList(),
-          };
-        }).toList(),
-        'historialEventos': historialActualizado.map((e) => {
-          'accion': e.accion,
-          'usuarioNombre': e.usuarioNombre,
-          'usuarioRol': e.usuarioRol,
-          'timestamp': Timestamp.fromDate(e.timestamp),
-        }).toList(),
+        // Con el modelo completo: antes se armaban a mano y se perdían
+        // observacion y la certificación del supervisor de TODAS las órdenes.
+        'ordenesRecepcion': ordenesActualizadas
+            .map((e) => OrdenRecepcionRepuestosModel.fromEntity(e).toJson())
+            .toList(),
+        // Se serializa con el modelo para conservar TODOS los campos de cada
+        // evento (incluidas las etiquetas de proceso/hito/habilita).
+        'historialEventos': historialActualizado
+            .map((e) => EventoAuditoriaModel.fromEntity(e).toJson())
+            .toList(),
         'fechaUltimaModificacion': FieldValue.serverTimestamp(),
       });
     });
   }
 
   /// Busca un token no utilizado y no expirado para una orden específica
+  /// 🚫 Quema los enlaces aún sin usar de una orden (al anularla), para que
+  /// el técnico externo ya no pueda confirmar ni subir fotos con ellos.
+  Future<void> quemarTokensDeOrden(String ordenId, {String nota = 'ORDEN ANULADA'}) async {
+    final query = await _tokensCol.where('ordenId', isEqualTo: ordenId).get();
+    for (final doc in query.docs) {
+      if (doc.data()['usado'] == true) continue;
+      await doc.reference.update({
+        'usado': true,
+        'fechaUso': FieldValue.serverTimestamp(),
+        'notasUso': nota,
+      });
+    }
+  }
+
   Future<TokenRecepcionExternaModel?> obtenerTokenValidoParaOrden(String ordenId) async {
     final query = await _tokensCol.where('ordenId', isEqualTo: ordenId).get();
     for (final doc in query.docs) {

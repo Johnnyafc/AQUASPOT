@@ -14,6 +14,12 @@ import 'package:aquaspot_postventa/features/tickets/domain/usecases/escuchar_est
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_documento_comercial_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_documento_evaluacion_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_orden_compra_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/finalizar_evaluacion_venta_repuesto_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/registrar_cotizacion_compras_venta_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/guardar_repuestos_venta_comercial_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/confirmar_aceptacion_cliente_venta_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/registrar_codigos_creados_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/cerrar_entrega_venta_usecase.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -186,6 +192,12 @@ Future<void> init() async {
 
   sl.registerLazySingleton(() => SubirOrdenVentaUseCase(sl()));
 sl.registerLazySingleton(() => SubirOrdenCompraUseCase(sl()));
+  sl.registerLazySingleton(() => FinalizarEvaluacionVentaRepuestoUseCase(sl()));
+  sl.registerLazySingleton(() => RegistrarCotizacionComprasVentaUseCase(sl()));
+  sl.registerLazySingleton(() => GuardarRepuestosVentaComercialUseCase(sl()));
+  sl.registerLazySingleton(() => ConfirmarAceptacionClienteVentaUseCase(sl()));
+  sl.registerLazySingleton(() => RegistrarCodigosCreadosUseCase(sl()));
+  sl.registerLazySingleton(() => CerrarEntregaVentaUseCase(sl()));
 sl.registerLazySingleton(() => EscucharEstadoExcelUseCase(sl()));
 
   // ===========================================================================
@@ -205,6 +217,12 @@ sl.registerLazySingleton(() => EscucharEstadoExcelUseCase(sl()));
         subirDocumentoComercialUseCase: sl(),
         subirOrdenVentaUseCase: sl(), 
         subirOrdenCompraUseCase: sl(),
+        finalizarEvaluacionVentaRepuesto: sl(),
+        registrarCotizacionComprasVenta: sl(),
+        guardarRepuestosVentaComercial: sl(),
+        confirmarAceptacionClienteVenta: sl(),
+        registrarCodigosCreados: sl(),
+        cerrarEntregaVenta: sl(),
         ticketRepository: sl(),
         
       ));

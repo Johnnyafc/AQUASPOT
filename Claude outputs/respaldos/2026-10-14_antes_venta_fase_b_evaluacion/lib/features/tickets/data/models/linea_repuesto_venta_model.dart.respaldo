@@ -1,0 +1,64 @@
+import '../../domain/entities/linea_repuesto_venta_entity.dart';
+
+class LineaRepuestoVentaModel extends LineaRepuestoVentaEntity {
+  const LineaRepuestoVentaModel({
+    required super.codigo,
+    required super.descripcion,
+    required super.unidad,
+    required super.cantidad,
+    super.stockDisponibleAlEvaluar,
+    super.porDeterminar,
+    super.descripcionCliente,
+    super.urlsEvidencia,
+    super.urlsAudios,
+    super.existeEnSistema,
+  });
+
+  static List<String> _lista(dynamic v) => (v as List?)?.map((e) => e.toString()).toList() ?? const [];
+
+  factory LineaRepuestoVentaModel.fromJson(Map<String, dynamic> json) {
+    return LineaRepuestoVentaModel(
+      codigo: json['codigo']?.toString() ?? '',
+      descripcion: json['descripcion']?.toString() ?? '',
+      unidad: json['unidad']?.toString() ?? '',
+      cantidad: (json['cantidad'] as num?)?.toDouble() ?? 0,
+      stockDisponibleAlEvaluar: (json['stockDisponibleAlEvaluar'] as num?)?.toDouble(),
+      // Campos nuevos: las líneas antiguas no los tienen (valores por defecto).
+      porDeterminar: json['porDeterminar'] as bool? ?? false,
+      descripcionCliente: json['descripcionCliente']?.toString() ?? '',
+      urlsEvidencia: _lista(json['urlsEvidencia']),
+      urlsAudios: _lista(json['urlsAudios']),
+      existeEnSistema: json['existeEnSistema'] as bool? ?? true,
+    );
+  }
+
+  factory LineaRepuestoVentaModel.fromEntity(LineaRepuestoVentaEntity entity) {
+    return LineaRepuestoVentaModel(
+      codigo: entity.codigo,
+      descripcion: entity.descripcion,
+      unidad: entity.unidad,
+      cantidad: entity.cantidad,
+      stockDisponibleAlEvaluar: entity.stockDisponibleAlEvaluar,
+      porDeterminar: entity.porDeterminar,
+      descripcionCliente: entity.descripcionCliente,
+      urlsEvidencia: entity.urlsEvidencia,
+      urlsAudios: entity.urlsAudios,
+      existeEnSistema: entity.existeEnSistema,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'codigo': codigo,
+      'descripcion': descripcion,
+      'unidad': unidad,
+      'cantidad': cantidad,
+      'stockDisponibleAlEvaluar': stockDisponibleAlEvaluar,
+      'porDeterminar': porDeterminar,
+      'descripcionCliente': descripcionCliente,
+      'urlsEvidencia': urlsEvidencia,
+      'urlsAudios': urlsAudios,
+      'existeEnSistema': existeEnSistema,
+    };
+  }
+}

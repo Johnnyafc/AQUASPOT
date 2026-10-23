@@ -1,7 +1,9 @@
+import '../../domain/entities/cambio_material_entity.dart';
 import 'tiempos_operativos_model.dart';
 import 'item_despacho_bodega_model.dart';
 import 'registro_despacho_model.dart';
 import 'orden_recepcion_repuestos_model.dart';
+import 'linea_repuesto_venta_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:aquaspot_postventa/features/tickets/data/models/GestionComprasModel.dart';
 import 'package:aquaspot_postventa/features/tickets/data/models/evidencia_trabajo_model.dart';
@@ -67,12 +69,31 @@ class TicketModel extends TicketEntity {
     super.tiemposOperativos,
     super.tecnicosAsignados = const [],
     super.diagnosticoFallas = const [],
+    super.rondaDiagnosticoFallas = 0,
     super.urlInformeTecnico,
     super.ordenesRecepcion = const [],
     super.materialesValidadosEnTaller = false,
     super.supervisorValidoMateriales,
     super.fechaValidacionMaterialesTaller,
+    super.medioContacto,
+    super.lineasRepuestoVenta = const [],
+    super.necesitaAsistenciaTecnica = false,
+    super.urlsAudiosAsistencia = const [],
+    super.urlsCotizacionCompras = const [],
+    super.inconsistenciasRevisadas = const [],
+    super.estadoDespacho,
+    super.pickingIniciadoPor,
+    super.pickingIniciadoEn,
+    super.pickingFinalizadoPor,
+    super.pickingFinalizadoEn,
+    super.historialCambiosMateriales = const [],
   });
+
+  static DateTime? _fechaOpcional(dynamic v) {
+    if (v is Timestamp) return v.toDate();
+    if (v is String) return DateTime.tryParse(v);
+    return null;
+  }
 
   factory TicketModel.fromJson(Map<String, dynamic> json) {
     return TicketModel(
@@ -196,6 +217,30 @@ class TicketModel extends TicketEntity {
               ? (json['fechaValidacionMaterialesTaller'] as Timestamp).toDate()
               : DateTime.tryParse(json['fechaValidacionMaterialesTaller'].toString()))
           : null,
+      medioContacto: MedioContacto.values.cast<MedioContacto?>().firstWhere(
+        (e) => e?.name == json['medioContacto'],
+        orElse: () => null,
+      ),
+      lineasRepuestoVenta: json['lineasRepuestoVenta'] != null
+          ? (json['lineasRepuestoVenta'] as List)
+              .map((e) => LineaRepuestoVentaModel.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : const [],
+      necesitaAsistenciaTecnica: json['necesitaAsistenciaTecnica'] as bool? ?? false,
+      urlsAudiosAsistencia: (json['urlsAudiosAsistencia'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      urlsCotizacionCompras: (json['urlsCotizacionCompras'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      inconsistenciasRevisadas: (json['inconsistenciasRevisadas'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      estadoDespacho: json['estadoDespacho'] as String?,
+      pickingIniciadoPor: json['pickingIniciadoPor'] as String?,
+      pickingIniciadoEn: _fechaOpcional(json['pickingIniciadoEn']),
+      pickingFinalizadoPor: json['pickingFinalizadoPor'] as String?,
+      pickingFinalizadoEn: _fechaOpcional(json['pickingFinalizadoEn']),
+      historialCambiosMateriales: (json['historialCambiosMateriales'] as List?)
+              ?.map(CambioMaterialEntity.fromJson)
+              .whereType<CambioMaterialEntity>()
+              .toList() ??
+          const [],
+      rondaDiagnosticoFallas: (json['rondaDiagnosticoFallas'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -267,11 +312,24 @@ class TicketModel extends TicketEntity {
           : null,
       tecnicosAsignados: entity.tecnicosAsignados,
       diagnosticoFallas: entity.diagnosticoFallas,
+      rondaDiagnosticoFallas: entity.rondaDiagnosticoFallas,
       urlInformeTecnico: entity.urlInformeTecnico,
       ordenesRecepcion: entity.ordenesRecepcion,
       materialesValidadosEnTaller: entity.materialesValidadosEnTaller,
       supervisorValidoMateriales: entity.supervisorValidoMateriales,
       fechaValidacionMaterialesTaller: entity.fechaValidacionMaterialesTaller,
+      medioContacto: entity.medioContacto,
+      lineasRepuestoVenta: entity.lineasRepuestoVenta,
+      necesitaAsistenciaTecnica: entity.necesitaAsistenciaTecnica,
+      urlsAudiosAsistencia: entity.urlsAudiosAsistencia,
+      urlsCotizacionCompras: entity.urlsCotizacionCompras,
+      inconsistenciasRevisadas: entity.inconsistenciasRevisadas,
+      estadoDespacho: entity.estadoDespacho,
+      pickingIniciadoPor: entity.pickingIniciadoPor,
+      pickingIniciadoEn: entity.pickingIniciadoEn,
+      pickingFinalizadoPor: entity.pickingFinalizadoPor,
+      pickingFinalizadoEn: entity.pickingFinalizadoEn,
+      historialCambiosMateriales: entity.historialCambiosMateriales,
     );
 
   }
@@ -356,6 +414,9 @@ class TicketModel extends TicketEntity {
         if (e is DiagnosticoFallaModel) return e.toJson();
         return DiagnosticoFallaModel.fromEntity(e).toJson();
       }).toList(),
+      // Solo se escribe si ya tiene una ronda: así una copia vieja del
+      // ticket (ronda 0) nunca borra el sello de revisión del servidor.
+      if (rondaDiagnosticoFallas > 0) 'rondaDiagnosticoFallas': rondaDiagnosticoFallas,
       'urlInformeTecnico': urlInformeTecnico,
       'ordenesRecepcion': ordenesRecepcion.map((e) {
         if (e is OrdenRecepcionRepuestosModel) return e.toJson();
@@ -366,6 +427,20 @@ class TicketModel extends TicketEntity {
       'fechaValidacionMaterialesTaller': fechaValidacionMaterialesTaller != null
           ? Timestamp.fromDate(fechaValidacionMaterialesTaller!)
           : null,
+      'medioContacto': medioContacto?.name,
+      'lineasRepuestoVenta': lineasRepuestoVenta
+          .map((e) => LineaRepuestoVentaModel.fromEntity(e).toJson())
+          .toList(),
+      'necesitaAsistenciaTecnica': necesitaAsistenciaTecnica,
+      'urlsAudiosAsistencia': urlsAudiosAsistencia,
+      'urlsCotizacionCompras': urlsCotizacionCompras,
+      // ⚠️ 'inconsistenciasRevisadas' NO se escribe aquí a propósito: solo
+      // se agrega con arrayUnion, así una copia desactualizada del ticket
+      // nunca borra una marca de "Revisado".
+      // ⚠️ Tampoco historialCambiosMateriales (solo arrayUnion).
+      // ⚠️ Tampoco los campos de picking (estadoDespacho, picking*): solo
+      // los escriben Iniciar/Finalizar picking y el despacho, con
+      // actualizaciones puntuales.
     };
   }
 }

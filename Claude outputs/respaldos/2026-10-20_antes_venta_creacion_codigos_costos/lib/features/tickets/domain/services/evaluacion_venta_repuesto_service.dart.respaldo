@@ -1,0 +1,75 @@
+// lib/features/tickets/domain/services/evaluacion_venta_repuesto_service.dart
+//
+// 🛒 VENTA DE REPUESTO: reglas puras sobre las líneas (sin Flutter ni
+// Firebase). Las usan la creación del requerimiento y la Evaluación de venta.
+//
+// - conStockActual: foto del stock neto (disponible − reservado) de cada
+//   línea que está en el sistema. Las "por determinar" y las que no existen
+//   en el sistema no se tocan.
+// - definirDesdeInventario / definirConCotizacionProveedor: cómo queda una
+//   línea "por determinar" cuando el supervisor la resuelve.
+
+import '../entities/linea_repuesto_venta_entity.dart';
+
+class EvaluacionVentaRepuestoService {
+  /// [stockNetoPorCodigo]: código en MAYÚSCULAS y sin espacios → stock neto.
+  /// Un código que no aparece se toma como stock 0.
+  static List<LineaRepuestoVentaEntity> conStockActual(
+    List<LineaRepuestoVentaEntity> lineas,
+    Map<String, double> stockNetoPorCodigo,
+  ) {
+    return lineas.map((l) {
+      if (l.porDeterminar || !l.existeEnSistema) return l;
+      return l.copyWith(stockDisponibleAlEvaluar: stockNetoPorCodigo[claveCodigo(l.codigo)] ?? 0);
+    }).toList();
+  }
+
+  static String claveCodigo(String codigo) => codigo.toUpperCase().trim();
+
+  /// "¿Enviar cotización?" = No: el repuesto se eligió del inventario.
+  static LineaRepuestoVentaEntity definirDesdeInventario(
+    LineaRepuestoVentaEntity linea, {
+    required String codigo,
+    required String descripcion,
+    required String unidad,
+    required double cantidad,
+    required double stockNeto,
+    required String definidoPor,
+    required DateTime definidoEn,
+  }) {
+    return linea.copyWith(
+      porDeterminar: false,
+      codigo: codigo,
+      descripcion: descripcion,
+      unidad: unidad,
+      cantidad: cantidad,
+      stockDisponibleAlEvaluar: stockNeto,
+      existeEnSistema: true,
+      definidoPor: definidoPor,
+      definidoEn: definidoEn,
+    );
+  }
+
+  /// "¿Enviar cotización?" = Sí: no está en el sistema; trae la cotización
+  /// del proveedor (los enlaces se agregan al subir los archivos).
+  static LineaRepuestoVentaEntity definirConCotizacionProveedor(
+    LineaRepuestoVentaEntity linea, {
+    required String codigoProveedor,
+    required String descripcion,
+    required double cantidad,
+    required String definidoPor,
+    required DateTime definidoEn,
+  }) {
+    return linea.copyWith(
+      porDeterminar: false,
+      codigo: codigoProveedor.trim(),
+      descripcion: descripcion.trim(),
+      unidad: 'UND',
+      cantidad: cantidad,
+      stockDisponibleAlEvaluar: 0,
+      existeEnSistema: false,
+      definidoPor: definidoPor,
+      definidoEn: definidoEn,
+    );
+  }
+}

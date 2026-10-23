@@ -12,10 +12,16 @@ import 'package:file_picker/file_picker.dart' as fp;
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import '../../../../core/enum/segmento_operativo.dart';
 import '../../domain/entities/evaluacion_tecnica_entity.dart';
-import '../../domain/entities/evento_auditoria_entity.dart';
 import '../widgets/copy_icon_button_widget.dart';
 import '../widgets/tarjeta_no_requiere_compras_widget.dart';
 import '../../domain/entities/repuesto_registrado_entity.dart';
+import '../../domain/entities/cambio_material_entity.dart';
+import '../../domain/entities/linea_repuesto_venta_entity.dart';
+import '../../domain/services/edicion_venta_comercial_service.dart';
+import '../../../inventario/domain/entities/item_inventario_entity.dart';
+import '../../../inventario/presentation/bloc/inventario_bloc.dart';
+import '../../../inventario/presentation/bloc/inventario_state.dart';
+import '../widgets/cambios_materiales_widget.dart';
 import '../../../catalogo/domain/entities/item_catalogo_entity.dart';
 import '../../../catalogo/presentation/bloc/catalogo_bloc.dart';
 import '../../../catalogo/presentation/bloc/catalogo_event.dart';
@@ -37,14 +43,27 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
   // 💼 ESTADO DINÁMICO DE LA PROPUESTA COMERCIAL Y MATERIALES DE TALLER
   late List<RepuestoRegistradoEntity> _repuestosComerciales;
   late List<RepuestoRegistradoEntity> _repuestosTaller;
-  // NUEVO: copia del requerimiento de taller al abrir/guardar la pagina,
-  // usada solo para calcular el detalle de auditoria (que se quito/agrego/
-  // cambio) cada vez que comercial guarda. Equipo Caracol unicamente.
+  // 🧾 Copias de las dos listas en el último guardado: de ahí salen los
+  // "Cambios de materiales" (registro aparte de la auditoría).
   late List<RepuestoRegistradoEntity> _repuestosTallerOriginal;
+  late List<RepuestoRegistradoEntity> _repuestosComercialesOriginal;
+  // Copias al abrir la pantalla: total de cambios para el único evento de
+  // auditoría cuando el ticket regresó a Comercial.
+  late final List<RepuestoRegistradoEntity> _tallerAlAbrir;
+  late final List<RepuestoRegistradoEntity> _comercialAlAbrir;
   double? _totalHorasHombre;
   bool _propuestaModificada = false;
 
+  // 🛒 Venta de Repuesto: lista editable por Comercial (agregar, quitar,
+  // cambiar cantidad). Se guarda con "Guardar cambios" antes de finalizar.
+  late List<LineaRepuestoVentaEntity> _lineasVenta;
+  bool _ventaModificada = false;
+  bool _guardandoVenta = false;
+
   bool get _esCaracol => widget.ticket.equipo == TipoEquipo.Caracol;
+
+  /// 💲 Tarifa por hora hombre para el costo de mano de obra (USD).
+  static const int _tarifaHoraHombre = 25;
 
   // Candado de etapa: SOLO aplica a Caracol. Cualquier otro equipo se
   // comporta exactamente igual que antes (siempre editable en esta pantalla).
@@ -64,8 +83,12 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
         ? List<RepuestoRegistradoEntity>.from(evaluacion.repuestosTaller)
         : [];
     _repuestosTallerOriginal = List<RepuestoRegistradoEntity>.from(_repuestosTaller);
+    _repuestosComercialesOriginal = List<RepuestoRegistradoEntity>.from(_repuestosComerciales);
+    _tallerAlAbrir = List<RepuestoRegistradoEntity>.unmodifiable(_repuestosTaller);
+    _comercialAlAbrir = List<RepuestoRegistradoEntity>.unmodifiable(_repuestosComerciales);
     _totalHorasHombre = evaluacion?.totalHorasHombre ??
         evaluacion?.actividades.fold<double>(0.0, (acc, a) => acc + a.horasHombre);
+    _lineasVenta = List<LineaRepuestoVentaEntity>.from(widget.ticket.lineasRepuestoVenta);
 
     // Precargar catálogo del equipo correspondiente para autocompletado rápido
     final equipoStr = widget.ticket.equipo.name.toLowerCase();
@@ -546,42 +569,55 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
     );
   }
 
-  // NUEVO: arma un resumen legible de lo que cambio en el requerimiento
-  // de taller (quito/agrego/cambio cantidad) comparando contra la copia
-  // capturada al abrir la pagina o en el ultimo guardado. Devuelve null si
-  // no hubo cambios reales en esa lista.
-  String? _describirCambiosRequerimientoTaller() {
-    String claveDe(RepuestoRegistradoEntity r) =>
-        r.codigo.trim().isNotEmpty ? r.codigo.trim().toUpperCase() : r.descripcion.trim().toUpperCase();
-    String cantidadStr(double c) => (c % 1 == 0) ? c.toInt().toString() : c.toString();
+  /// El ticket ya fue cotizado antes y regresó a Comercial.
+  bool get _esRegresoAComercial => widget.ticket.proforma != null;
 
-    final original = {for (final r in _repuestosTallerOriginal) claveDe(r): r};
-    final actual = {for (final r in _repuestosTaller) claveDe(r): r};
+  /// 🛒 Venta de Repuesto: sin apartado Excel; muestra los repuestos a
+  /// cotizar y las cotizaciones que subió Compras.
+  bool get _esVentaRepuesto => widget.ticket.tipoRequerimiento == TipoRequerimiento.ventaRepuesto;
 
-    final quitados = <String>[];
-    final agregados = <String>[];
-    final cambiados = <String>[];
+  ({String nombre, String rol}) _usuarioActual() {
+    final authState = context.read<AuthBloc>().state;
+    if (authState is Authenticated) {
+      return (nombre: authState.usuario.nombre, rol: authState.usuario.rol.name.toUpperCase());
+    }
+    return (nombre: 'DESCONOCIDO', rol: 'SIN_ROL');
+  }
 
-    original.forEach((clave, r) {
-      if (!actual.containsKey(clave)) {
-        quitados.add('${r.descripcion} (${cantidadStr(r.cantidad)} ${r.unidad})');
-      }
-    });
-    actual.forEach((clave, r) {
-      if (!original.containsKey(clave)) {
-        agregados.add('${r.descripcion} (${cantidadStr(r.cantidad)} ${r.unidad})');
-      } else if (original[clave]!.cantidad != r.cantidad) {
-        cambiados.add('${r.descripcion} (${cantidadStr(original[clave]!.cantidad)} -> ${cantidadStr(r.cantidad)})');
-      }
-    });
+  /// 🧾 Cambios de materiales (taller y comerciales) respecto de las bases dadas.
+  List<CambioMaterialEntity> _cambiosDesde(
+    List<RepuestoRegistradoEntity> tallerBase,
+    List<RepuestoRegistradoEntity> comercialBase,
+  ) {
+    final u = _usuarioActual();
+    final ahora = DateTime.now();
+    final momento =
+        _esRegresoAComercial ? CambioMaterialEntity.regresoComercial : CambioMaterialEntity.primeraCotizacion;
+    return [
+      ...CambioMaterialEntity.diferencias(
+        antes: tallerBase,
+        despues: _repuestosTaller,
+        lista: CambioMaterialEntity.listaTaller,
+        momento: momento,
+        usuarioNombre: u.nombre,
+        usuarioRol: u.rol,
+        fecha: ahora,
+      ),
+      ...CambioMaterialEntity.diferencias(
+        antes: comercialBase,
+        despues: _repuestosComerciales,
+        lista: CambioMaterialEntity.listaComercial,
+        momento: momento,
+        usuarioNombre: u.nombre,
+        usuarioRol: u.rol,
+        fecha: ahora,
+      ),
+    ];
+  }
 
-    if (quitados.isEmpty && agregados.isEmpty && cambiados.isEmpty) return null;
-
-    final partes = <String>[];
-    if (quitados.isNotEmpty) partes.add('Quitó: ${quitados.join(", ")}');
-    if (agregados.isNotEmpty) partes.add('Agregó: ${agregados.join(", ")}');
-    if (cambiados.isNotEmpty) partes.add('Cambió cantidad: ${cambiados.join(", ")}');
-    return partes.join(' | ');
+  void _reiniciarBasesDeComparacion() {
+    _repuestosTallerOriginal = List<RepuestoRegistradoEntity>.from(_repuestosTaller);
+    _repuestosComercialesOriginal = List<RepuestoRegistradoEntity>.from(_repuestosComerciales);
   }
 
   void _guardarCambiosPropuesta() {
@@ -591,27 +627,9 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
           observacion: '',
         );
 
-    // NUEVO: auditoria del requerimiento de taller, solo para Caracol y
-    // solo si de verdad hubo un cambio en esa lista especifica.
-    EventoAuditoriaEntity? eventoAuditoria;
-    if (_esCaracol) {
-      final descripcionCambios = _describirCambiosRequerimientoTaller();
-      if (descripcionCambios != null) {
-        final authState = context.read<AuthBloc>().state;
-        String operador = 'DESCONOCIDO';
-        String rol = 'SIN_ROL';
-        if (authState is Authenticated) {
-          operador = authState.usuario.nombre;
-          rol = authState.usuario.rol.name.toUpperCase();
-        }
-        eventoAuditoria = EventoAuditoriaEntity(
-          accion: 'COMERCIAL MODIFICÓ REQUERIMIENTO (Taller): $descripcionCambios',
-          usuarioNombre: operador,
-          usuarioRol: rol,
-          timestamp: DateTime.now(),
-        );
-      }
-    }
+    // 🧾 Los cambios de materiales van a su registro aparte; la auditoría
+    // real no se toca al guardar.
+    final cambios = _cambiosDesde(_repuestosTallerOriginal, _repuestosComercialesOriginal);
 
     final ticketActualizado = widget.ticket.copyWith(
       evaluacionTecnica: evaluacionBase.copyWith(
@@ -619,17 +637,14 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
         repuestosTaller: _repuestosTaller,
         totalHorasHombre: _totalHorasHombre,
       ),
-      historialEventos: eventoAuditoria != null
-          ? [...widget.ticket.historialEventos, eventoAuditoria]
-          : widget.ticket.historialEventos,
     );
 
     context.read<TicketBloc>().add(
-      ActualizarEvaluacionEvent(ticket: ticketActualizado, eventoAuditoria: eventoAuditoria),
+      ActualizarEvaluacionEvent(ticket: ticketActualizado, cambiosMateriales: cambios),
     );
 
     // Reiniciamos la base de comparacion para el proximo guardado.
-    _repuestosTallerOriginal = List<RepuestoRegistradoEntity>.from(_repuestosTaller);
+    _reiniciarBasesDeComparacion();
 
     setState(() {
       _propuestaModificada = false;
@@ -668,7 +683,16 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
         repuestosTaller: _repuestosTaller,
         totalHorasHombre: _totalHorasHombre,
       ),
+      // 🛒 Venta: la lista ya guardada por Comercial, no la que se abrió.
+      lineasRepuestoVenta: _esVentaRepuesto ? _lineasVenta : null,
     );
+
+    // 🧾 Cambios aún no guardados + total desde que se abrió (solo si el
+    // ticket regresó a Comercial: único evento de auditoría).
+    final cambiosPendientes = _cambiosDesde(_repuestosTallerOriginal, _repuestosComercialesOriginal);
+    final cambiosTrasRegreso =
+        _esRegresoAComercial ? _cambiosDesde(_tallerAlAbrir, _comercialAlAbrir).length : null;
+    _reiniciarBasesDeComparacion();
 
     context.read<TicketBloc>().add(
       ProcesarCotizacionEvent(
@@ -678,6 +702,8 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
         observacion: _observacionController.text.trim(),
         nombreUsuario: operador,
         rolUsuario: rol,
+        cambiosMateriales: cambiosPendientes,
+        cambiosTrasRegreso: cambiosTrasRegreso,
       ),
     );
   }
@@ -700,14 +726,48 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Datos de Salida', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
+          Row(
+            children: [
+              const Text('Datos de Salida', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
+              if (_esVentaRepuesto) ...[
+                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.teal.shade600),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.shopping_cart, size: 14, color: Colors.teal.shade800),
+                      const SizedBox(width: 4),
+                      Text('VENTA DE REPUESTO', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.teal.shade900)),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
           const Divider(height: 24, thickness: 1),
           
           _construirFilaDato(context, 'Ticket:', t.id),
-          _construirFilaDato(context, 'Numero de serie:', numSerie),
-          _construirFilaDato(context, 'Marca:', marca),
-          _construirFilaDato(context, 'Equipo:', t.equipo.name.toUpperCase()),
-          _construirFilaDato(context, 'Cliente:', t.clienteId.toUpperCase()),
+          // 🛒 Venta de Repuesto: sin serie/marca; "Repuesto de" + datos de contacto.
+          if (_esVentaRepuesto) ...[
+            _construirFilaDato(context, 'Repuesto de:', t.equipo.name.toUpperCase()),
+            _construirFilaDato(context, 'Cliente:', t.clienteId.toUpperCase()),
+            _construirFilaDato(context, 'Contacto:', t.nombreContacto),
+            _construirFilaDato(context, 'Teléfono:', t.telefonoContacto),
+            _construirFilaDato(context, 'Correo:', t.emailContacto),
+            if (t.medioContacto != null)
+              _construirFilaDato(context, 'Medio de contacto:', t.medioContacto!.name.toUpperCase()),
+          ] else ...[
+            _construirFilaDato(context, 'Numero de serie:', numSerie),
+            _construirFilaDato(context, 'Marca:', marca),
+            _construirFilaDato(context, 'Equipo:', t.equipo.name.toUpperCase()),
+            _construirFilaDato(context, 'Cliente:', t.clienteId.toUpperCase()),
+          ],
           _construirFilaDato(context, 'Camaronera:', t.campamento.toLowerCase()),
           const SizedBox(height: 4),
           Row(
@@ -862,6 +922,12 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
               // 📊 PANEL DE TELEMETRÍA (NUEVO REQUERIMIENTO)
               // ==========================================
               _buildPanelTelemetriaBase(context),
+
+              // 🛒 VENTA DE REPUESTO: repuestos a cotizar + cotizaciones de Compras
+              if (_esVentaRepuesto) ...[
+                _buildPanelRepuestosVenta(),
+                _buildPanelCotizacionesCompras(),
+              ],
 
               // ==========================================
               // 🔍 PANEL DE DIAGNÓSTICO TÉCNICO (Solo Lectura)
@@ -1052,10 +1118,11 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
                         ),
                       )),
 
+                      // 📊 SECCIÓN EXCEL (no aplica a Venta de Repuesto)
+                      if (!_esVentaRepuesto) ...[
                       const SizedBox(height: 16), 
                       const Divider(), 
                       
-                      // 📊 SECCIÓN EXCEL
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -1078,6 +1145,7 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
                           onPressed: () => _eliminarArchivo(_excelsSeleccionados, file),
                         ),
                       )),
+                      ],
                       
                     ],
                   ),
@@ -1095,6 +1163,17 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
                   prefixIcon: Icon(Icons.comment),
                 ),
               ),
+              const SizedBox(height: 16),
+
+              // 🧾 CAMBIOS DE MATERIALES (registro aparte de la auditoría)
+              BlocBuilder<TicketBloc, TicketState>(
+                builder: (context, state) {
+                  final vivo = state.historial.where((t) => t.id == widget.ticket.id).firstOrNull ??
+                      (state.currentTicket?.id == widget.ticket.id ? state.currentTicket : null) ??
+                      widget.ticket;
+                  return CambiosMaterialesWidget(cambios: vivo.historialCambiosMateriales);
+                },
+              ),
               const SizedBox(height: 30),
               
               // BOTÓN ACTUADOR
@@ -1104,7 +1183,8 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
                     return const Center(child: CircularProgressIndicator());
                   }
                   return ElevatedButton.icon(
-                    onPressed: _finalizarCotizacion,
+                    // 🛒 Venta: bloqueado hasta guardar los repuestos editados.
+                    onPressed: _esVentaRepuesto && _ventaModificada ? null : _finalizarCotizacion,
                     icon: const Icon(Icons.check_circle),
                     label: const Text('FINALIZAR Y ENVIAR COTIZACIÓN', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(
@@ -1117,6 +1197,433 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  // ==========================================
+  // 🛒 VENTA DE REPUESTO: REPUESTOS A COTIZAR
+  // ==========================================
+  String _fmtCantidad(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+
+  Widget _buildPanelRepuestosVenta() {
+    final lineas = _lineasVenta;
+    final sinStock = lineas.where((l) => !l.tieneStockSuficiente).length;
+
+    return BlocListener<TicketBloc, TicketState>(
+      listener: (context, state) {
+        if (!_guardandoVenta) return;
+        if (state.status == TicketStatus.operationSuccess) {
+          setState(() {
+            _guardandoVenta = false;
+            _ventaModificada = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.green));
+        } else if (state.status == TicketStatus.error) {
+          setState(() => _guardandoVenta = false);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.red));
+        }
+      },
+      child: Card(
+        elevation: 2,
+        margin: const EdgeInsets.only(bottom: 20),
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(color: Colors.green.shade600, width: 1.5),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.inventory_2, color: Colors.green.shade800, size: 26),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Repuestos a cotizar',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green.shade900),
+                    ),
+                  ),
+                  if (lineas.isNotEmpty)
+                    TextButton.icon(
+                      icon: const Icon(Icons.copy, size: 15),
+                      label: const Text('Copiar todos los códigos', style: TextStyle(fontSize: 12)),
+                      onPressed: () async {
+                        await Clipboard.setData(ClipboardData(text: lineas.map((l) => l.codigo).join('\n')));
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Códigos copiados al portapapeles.'), duration: Duration(seconds: 2)),
+                        );
+                      },
+                    ),
+                  TextButton.icon(
+                    icon: const Icon(Icons.add_circle_outline, size: 18),
+                    label: const Text('Agregar repuesto', style: TextStyle(fontSize: 12)),
+                    onPressed: _guardandoVenta ? null : _agregarRepuestoVenta,
+                  ),
+                ],
+              ),
+              if (sinStock > 0)
+                Text(
+                  '$sinStock repuesto(s) sin stock suficiente (en rojo).',
+                  style: TextStyle(fontSize: 12, color: Colors.red.shade700),
+                ),
+              if (_ventaModificada) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.amber.shade400),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 20, color: Colors.amber.shade900),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Modificaste repuestos. Guarda los cambios antes de enviar la cotización.',
+                          style: TextStyle(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green.shade700,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        icon: _guardandoVenta
+                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.save, size: 14),
+                        label: const Text('Guardar cambios'),
+                        onPressed: _guardandoVenta ? null : _guardarRepuestosVenta,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const Divider(height: 20),
+              if (lineas.isEmpty)
+                const Text('Sin repuestos registrados.', style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
+              for (int i = 0; i < lineas.length; i++) _filaRepuestoVenta(i, lineas[i]),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _filaRepuestoVenta(int index, LineaRepuestoVentaEntity l) {
+    final falta = !l.tieneStockSuficiente;
+    final color = falta ? Colors.red.shade700 : Colors.black87;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(falta ? Icons.error_outline : Icons.check_circle_outline,
+              color: falta ? Colors.red.shade700 : Colors.green.shade700, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: SelectableText(
+                        l.codigo,
+                        style: TextStyle(fontWeight: FontWeight.bold, color: color),
+                      ),
+                    ),
+                    CopyIconButtonWidget(etiqueta: 'Código', valor: l.codigo),
+                  ],
+                ),
+                Text(l.descripcionVisible, style: TextStyle(color: color)),
+                Text(
+                  'Cantidad: ${_fmtCantidad(l.cantidad)} ${l.unidad} • Stock: ${_fmtCantidad(l.stockDisponibleAlEvaluar ?? 0)}'
+                  '${falta ? ' • Faltan: ${_fmtCantidad(l.cantidadFaltante)}' : ''}',
+                  style: TextStyle(fontSize: 12, color: falta ? Colors.red.shade700 : Colors.grey.shade700),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Cambiar cantidad',
+            icon: const Icon(Icons.edit, size: 18),
+            color: Colors.blueGrey,
+            onPressed: _guardandoVenta ? null : () => _cambiarCantidadVenta(index),
+          ),
+          IconButton(
+            tooltip: 'Quitar repuesto',
+            icon: const Icon(Icons.delete_outline, size: 18),
+            color: Colors.redAccent,
+            onPressed: _guardandoVenta ? null : () => _quitarRepuestoVenta(index),
+          ),
+        ],
+      ),
+    );
+  }
+
+  double? _leerCantidad(String texto) => double.tryParse(texto.trim().replaceAll(',', '.'));
+
+  Future<void> _cambiarCantidadVenta(int index) async {
+    final l = _lineasVenta[index];
+    final controller = TextEditingController(text: _fmtCantidad(l.cantidad));
+    final nueva = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cambiar cantidad'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${l.codigo} — ${l.descripcionVisible}', style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(labelText: 'Cantidad (${l.unidad})', border: const OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () {
+              final c = _leerCantidad(controller.text);
+              if (c == null || c <= 0) return;
+              Navigator.pop(ctx, c);
+            },
+            child: const Text('Aceptar'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (nueva == null || nueva == l.cantidad) return;
+    setState(() {
+      _lineasVenta[index] = l.copyWith(cantidad: nueva);
+      _ventaModificada = true;
+    });
+  }
+
+  Future<void> _quitarRepuestoVenta(int index) async {
+    final l = _lineasVenta[index];
+    if (_lineasVenta.length == 1) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Debe quedar al menos un repuesto en la venta.'),
+        backgroundColor: Colors.orange,
+      ));
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Quitar repuesto?'),
+        content: Text('${l.codigo} — ${l.descripcionVisible} × ${_fmtCantidad(l.cantidad)}'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Quitar')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() {
+      _lineasVenta.removeAt(index);
+      _ventaModificada = true;
+    });
+  }
+
+  Future<void> _agregarRepuestoVenta() async {
+    final cantidadController = TextEditingController(text: '1');
+    ItemInventarioEntity? seleccionado;
+    final nueva = await showDialog<LineaRepuestoVentaEntity>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Agregar repuesto'),
+          content: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                BlocBuilder<InventarioBloc, InventarioState>(
+                  builder: (context, state) {
+                    final items = state is InventarioLoaded ? state.items : const <ItemInventarioEntity>[];
+                    return Autocomplete<ItemInventarioEntity>(
+                      displayStringForOption: (i) => '${i.codigo} - ${i.descripcion}',
+                      optionsBuilder: (value) {
+                        if (value.text.isEmpty) return const Iterable<ItemInventarioEntity>.empty();
+                        final q = value.text.toLowerCase();
+                        return items
+                            .where((i) => i.codigo.toLowerCase().contains(q) || i.descripcion.toLowerCase().contains(q))
+                            .take(20);
+                      },
+                      onSelected: (item) => setLocal(() => seleccionado = item),
+                      fieldViewBuilder: (context, controller, focusNode, _) => TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          labelText: state is InventarioLoading ? 'Cargando inventario...' : 'Buscar en el sistema por código o nombre',
+                          prefixIcon: const Icon(Icons.search),
+                          border: const OutlineInputBorder(),
+                        ),
+                        onChanged: (_) {
+                          if (seleccionado != null) setLocal(() => seleccionado = null);
+                        },
+                      ),
+                    );
+                  },
+                ),
+                if (seleccionado != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Stock neto: ${_fmtCantidad(seleccionado!.stockNetoDisponible)} ${seleccionado!.unidad}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: seleccionado!.stockNetoDisponible > 0 ? Colors.green.shade800 : Colors.red.shade700,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: cantidadController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Cantidad', border: OutlineInputBorder()),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            ElevatedButton(
+              onPressed: seleccionado == null
+                  ? null
+                  : () {
+                      final c = _leerCantidad(cantidadController.text);
+                      if (c == null || c <= 0) return;
+                      final item = seleccionado!;
+                      Navigator.pop(
+                        ctx,
+                        EdicionVentaComercialService.nuevaLineaDesdeInventario(
+                          codigo: item.codigo,
+                          descripcion: item.descripcion,
+                          unidad: item.unidad,
+                          cantidad: c,
+                          stockNeto: item.stockNetoDisponible,
+                        ),
+                      );
+                    },
+              child: const Text('Agregar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    cantidadController.dispose();
+    if (nueva == null || !mounted) return;
+    final yaEsta = _lineasVenta.any((l) => l.codigo.trim().toUpperCase() == nueva.codigo.trim().toUpperCase());
+    if (yaEsta) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Ese repuesto ya está en la lista: cambie su cantidad con ✏️.'),
+        backgroundColor: Colors.orange,
+      ));
+      return;
+    }
+    setState(() {
+      _lineasVenta.add(nueva);
+      _ventaModificada = true;
+    });
+  }
+
+  void _guardarRepuestosVenta() {
+    final u = _usuarioActual();
+    setState(() => _guardandoVenta = true);
+    context.read<TicketBloc>().add(GuardarRepuestosVentaComercialEvent(
+          ticketId: widget.ticket.id,
+          lineas: List<LineaRepuestoVentaEntity>.from(_lineasVenta),
+          nombreUsuario: u.nombre,
+          rolUsuario: u.rol,
+        ));
+  }
+
+  // ==========================================
+  // 🛒 VENTA DE REPUESTO: COTIZACIONES (Compras + proveedor por repuesto)
+  // ==========================================
+  Widget _buildPanelCotizacionesCompras() {
+    final urls = widget.ticket.urlsCotizacionCompras;
+    final conProveedor =
+        widget.ticket.lineasRepuestoVenta.where((l) => l.urlsCotizacionProveedor.isNotEmpty).toList();
+
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.only(bottom: 20),
+      color: Colors.blueGrey.shade50,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: Colors.blueGrey.shade200, width: 1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.description, color: Colors.blueGrey),
+                SizedBox(width: 8),
+                Text('Cotizaciones', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blueGrey)),
+              ],
+            ),
+            const Divider(),
+            const Text('De Compras', style: TextStyle(fontWeight: FontWeight.w600)),
+            if (urls.isEmpty)
+              const Text(
+                'Compras no adjuntó cotizaciones (todos los repuestos tenían stock).',
+                style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+              ),
+            ...urls.asMap().entries.map((e) {
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.attach_file, color: Colors.blueGrey),
+                title: Text(
+                  'Ver cotización de Compras ${e.key + 1}',
+                  style: const TextStyle(decoration: TextDecoration.underline, color: Colors.blue),
+                ),
+                trailing: const Icon(Icons.open_in_new, size: 20),
+                onTap: () => _abrirEnlaceTecnico(e.value),
+              );
+            }),
+            if (conProveedor.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Text('Del proveedor (Evaluación técnica)', style: TextStyle(fontWeight: FontWeight.w600)),
+              for (final l in conProveedor)
+                ...l.urlsCotizacionProveedor.asMap().entries.map((e) => ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.storefront, color: Colors.blueGrey),
+                      title: Text(
+                        'Cotización ${e.key + 1} — ${l.codigo.isNotEmpty ? '${l.codigo} · ' : ''}${l.descripcionVisible}',
+                        style: const TextStyle(decoration: TextDecoration.underline, color: Colors.blue),
+                      ),
+                      trailing: const Icon(Icons.open_in_new, size: 20),
+                      onTap: () => _abrirEnlaceTecnico(e.value),
+                    )),
+            ],
+          ],
         ),
       ),
     );
@@ -1183,6 +1690,24 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
                           Icon(Icons.edit, size: 13, color: Colors.green.shade800),
                         ],
                       ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // 💲 Costo de mano de obra = Total HH × $25 por hora (se
+                // recalcula al editar las horas).
+                Tooltip(
+                  message: 'Costo de mano de obra: ${totalHH.toStringAsFixed(1)} HH × \$$_tarifaHoraHombre',
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.blue.shade600),
+                    ),
+                    child: Text(
+                      'Costo M.O.: \$${(totalHH * _tarifaHoraHombre).toStringAsFixed(2)}',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900, fontSize: 13),
                     ),
                   ),
                 ),

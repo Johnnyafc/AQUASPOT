@@ -1,0 +1,478 @@
+// lib/features/tickets/data/repositories/ticket_repository_impl.dart
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:dartz/dartz.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../../../core/errors/exceptions.dart';
+import '../../../../core/errors/failures.dart';
+import '../../../../core/network/network_info.dart';
+import '../../domain/entities/cliente_entity.dart';
+import '../../domain/entities/ticket_entity.dart';
+import '../../domain/repositories/ticket_repository.dart';
+import '../datasources/webhook_remote_datasource.dart';
+import '../models/ticket_model.dart';
+import '../models/evento_auditoria_model.dart';
+import '../models/linea_repuesto_venta_model.dart';
+import '../../domain/entities/cambio_venta_repuesto.dart';
+import '../datasources/storage_remote_datasource.dart';
+import '../../../../core/enum/segmento_operativo.dart';
+import '../../../../core/services/pdf_service.dart';
+import '../datasources/ticket_remote_datasource.dart';
+import 'dart:typed_data';
+
+
+class TicketRepositoryImpl implements ITicketRepository {
+  final TicketRemoteDataSource firebaseDataSource;
+  final WebhookRemoteDataSource webhookDataSource;
+  final StorageRemoteDataSource storageDataSource;
+  final NetworkInfo networkInfo;
+  final PdfService pdfService;
+
+TicketRepositoryImpl({
+    required this.firebaseDataSource,
+    required this.webhookDataSource,
+    required this.storageDataSource,
+    required this.networkInfo, // ⚙️ Lo agregamos al constructor
+    required this.pdfService,
+  });
+
+  // --- Subrutina de Conversión Universal ---
+ TicketModel _entityToModel(TicketEntity entity) {
+    // Usamos el Factory constructor que ya tenemos en el modelo
+    // Esto garantiza que todas las variables (incluyendo las nuevas) se mapeen correctamente.
+    return TicketModel.fromEntity(entity);
+  }
+  // --- Operaciones CRUD ---
+
+
+@override
+  Stream<String?> escucharEstadoProcesamientoExcel(String ticketId) {
+    return FirebaseFirestore.instance
+        .collection('tickets')
+        .doc(ticketId)
+        .snapshots()
+        .map((snapshot) {
+          if (!snapshot.exists || snapshot.data() == null) return null;
+          // Extraemos estrictamente la variable de estado inyectada por el motor Node.js
+          return snapshot.data()!['estadoProcesamientoExcel'] as String?;
+        });
+  }
+
+@override
+Future<Either<Failure, void>> anularTicket(String ticketId, Map<String, dynamic> data) async {
+  try {
+    await firebaseDataSource.anularTicket(ticketId, data);
+    return const Right(null); // Retornamos éxito (vacío porque solo actualizamos)
+  } on ServerException catch (e) {
+    return Left(ServerFailure(e.message));
+  } catch (e) {
+    return Left(ServerFailure('Error inesperado: $e'));
+  }
+}
+
+@override
+  Future<Either<Failure, String>> subirDocumentoComercial(
+      String ticketId, PlatformFile archivo, String tipoDocumento) async {
+    try {
+      // 🔌 Pasamos la señal hacia la capa de datos externa
+      final url = await firebaseDataSource.subirDocumentoComercial(ticketId, archivo, tipoDocumento);
+      return Right(url);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure('Fallo catastrófico en la válvula de subida comercial: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, List<ClienteEntity>>> obtenerClientes() async {
+    if (await networkInfo.isConnected) {
+      try {
+        final modelos = await firebaseDataSource.obtenerClientes();
+        return Right(modelos.cast<ClienteEntity>()); 
+      } on ServerException {
+        return const Left(ServerFailure('Error al leer la matriz de clientes desde el servidor.'));
+      }
+    } else {
+      return const Left(NetworkFailure('Sin conexión a internet en el campamento.'));
+    }
+  }
+
+  // En lib/features/tickets/data/repositories/ticket_repository_impl.dart
+  
+  @override
+  Future<Either<Failure, String>> subirArchivoDocumental(PlatformFile archivo, String ticketId, String subcarpeta) async {
+    try {
+      final url = await firebaseDataSource.subirArchivoDocumental(archivo, ticketId, subcarpeta);
+      return Right(url);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+
+@override
+  Future<Either<Failure, Uint8List>> generarActaPdf({
+    required TicketEntity ticket,
+    required String tipoRequerimiento,
+    required String descripcion,
+    required List<XFile> evidencias, // Mantenemos la tubería en File (dart:io)
+  }) async {
+    try {
+      // Delegamos toda la lógica gráfica a tu clase especializada
+      final Uint8List pdfBytes = await pdfService.generateActaRecepcion(
+        ticket: ticket,
+        tipoRequerimiento: tipoRequerimiento,
+        evidencias: evidencias,
+      );
+
+      // Control de calidad post-fabricación
+      if (pdfBytes.isEmpty) {
+         return Left(ServerFailure('Falla mecánica: El servicio PDF devolvió un flujo de bytes vacío.'));
+      }
+
+      // Despacho exitoso hacia el UseCase -> BLoC
+      return Right(pdfBytes);
+
+    } catch (e) {
+      // Cualquier excepción de memoria, formato corrupto o fallo de la librería 'pdf' queda atrapada aquí.
+      return Left(ServerFailure('Colapso en el renderizado del PDF: ${e.toString()}'));
+    }
+  }
+
+
+
+@override
+// 🔧 CABLEADO CORREGIDO: Sin llaves {}, sin el '?' y con el nombre estándar
+Future<Either<Failure, List<TicketEntity>>> obtenerTickets(SegmentoOperativo segmento) async {
+  try {
+    // 🔌 Conexión directa y sólida al DataSource
+    final modelos = await firebaseDataSource.obtenerTickets(segmento);
+    // FIX: sin este .cast<TicketEntity>() la lista sigue siendo, en tiempo
+    // de ejecucion, una List<TicketModel> real (aunque el campo se declare
+    // como List<TicketEntity>). Eso hace que cualquier .firstWhere(orElse:
+    // () => algunTicketEntity) sobre state.tickets/state.historial explote
+    // en runtime con un TypeError de covarianza en cuanto ese 'orElse' se
+    // invoca de verdad. Mismo patron que ya se usaba para obtenerClientes.
+    return Right(modelos.cast<TicketEntity>());
+  } on ServerException catch (e) {
+    return Left(ServerFailure(e.message));
+  } catch (e) {
+    return Left(ServerFailure('Error inesperado al leer el historial SCADA: $e'));
+  }
+}
+
+  @override
+  Future<Either<Failure, String>> subirActaPdfStorage(String ticketId, Uint8List pdfBytes) async {
+    try {
+      // remoteDataSource es la instancia que ya tienes inyectada en tu clase
+      final url = await firebaseDataSource.subirActaPdfStorage(ticketId, pdfBytes);
+      return Right(url);
+    } catch (e) {
+      return Left(ServerFailure("Hubo un error en subir el pdf"));
+    }
+  }
+
+
+  @override
+  Future<Either<Failure, String>> subirEvidencia(XFile file, String ticketId) async {
+    // 1. Verificación de enlace de red (telemetría)
+    if (await networkInfo.isConnected) {
+      try {
+        // 2. Disparamos la subida a través del DataSource
+        final urlDescarga = await storageDataSource.subirEvidencia(file, ticketId);
+        return Right(urlDescarga); // Éxito: Retornamos la URL
+      } on ServerException catch (e) {
+        // Fallo en Firebase
+        return Left(ServerFailure(e.message ?? 'Error en la transmisión de datos al bucket.'));
+      } catch (e) {
+        // Fallo crítico no esperado
+        return Left(ServerFailure('Fallo catastrófico del sistema de archivos: $e'));
+      }
+    } else {
+      // Sin internet (Campamento off-grid)
+      return const Left(NetworkFailure('Operación abortada: No hay conexión a internet para subir archivos pesados.'));
+    }
+  }
+
+  // En TicketRepositoryImpl
+@override
+Future<Either<Failure, String>> subirOrdenVenta(XFile file, String ticketId) async {
+  try {
+    final url = await firebaseDataSource.subirOrdenVenta(file, ticketId);
+    return Right(url);
+  } catch (e) {
+    return Left(ServerFailure(e.toString()));
+  }
+}
+
+@override
+Future<Either<Failure, String>> subirOrdenCompra(XFile file, String ticketId) async {
+  try {
+    final url = await firebaseDataSource.subirOrdenCompra(file, ticketId);
+    return Right(url);
+  } catch (e) {
+    return Left(ServerFailure(e.toString()));
+  }
+}
+
+
+  @override
+  Future<Either<Failure, TicketEntity>> crearTicket(TicketEntity ticket) async {
+    if (await networkInfo.isConnected) {
+      try {
+        final ticketModel = _entityToModel(ticket);
+        final resultado = await firebaseDataSource.crearTicket(ticketModel);
+        return Right(resultado);
+      } catch (e) { 
+        print("🚨 ERROR CRUDO EN REPOSITORIO (CREAR): ${e.toString()}");
+        return Left(ServerFailure(e.toString()));
+      }
+    } else {
+      return const Left(NetworkFailure('Operación abortada: No hay señal de red.'));
+    }
+  }
+
+  // ✅ CANAL UNIFICADO PARA TODAS LAS ACTUALIZACIONES (Evaluación, Recepción, etc.)
+  @override
+  Future<Either<Failure, TicketEntity>> actualizarTicket(TicketEntity ticket) async {
+    if (await networkInfo.isConnected) {
+      try {
+        final ticketModel = _entityToModel(ticket);
+        final resultado = await firebaseDataSource.actualizarTicket(ticketModel);
+        return Right(resultado);
+      } catch (e) {
+        print("🚨 ERROR CRUDO EN REPOSITORIO (ACTUALIZAR): ${e.toString()}");
+        return Left(ServerFailure('Fallo de sincronización: No se pudo actualizar el estado del equipo. Error: $e'));
+      }
+    } else {
+      return const Left(NetworkFailure('Operación abortada: No hay señal de red.'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, TicketEntity>> actualizarCampos(String ticketId, Map<String, dynamic> campos) async {
+    if (await networkInfo.isConnected) {
+      try {
+        final resultado = await firebaseDataSource.actualizarCampos(ticketId, campos);
+        return Right(resultado);
+      } catch (e) {
+        print("🚨 ERROR CRUDO EN REPOSITORIO (ACTUALIZAR CAMPOS): ${e.toString()}");
+        return Left(ServerFailure('Fallo de sincronizacion parcial: $e'));
+      }
+    } else {
+      return const Left(NetworkFailure('Operacion abortada: No hay senal de red.'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> actualizarCamposConGuardaEstado({
+    required String ticketId,
+    required Map<String, dynamic> campos,
+    required List<String> estadosPermitidos,
+  }) async {
+    if (await networkInfo.isConnected) {
+      try {
+        await firebaseDataSource.actualizarCamposConGuardaEstado(
+          ticketId: ticketId,
+          campos: campos,
+          estadosPermitidos: estadosPermitidos,
+        );
+        return const Right(null);
+      } catch (e) {
+        print("🚨 ERROR CRUDO EN REPOSITORIO (GUARDA DE ESTADO): ${e.toString()}");
+        return Left(ServerFailure('No se pudo guardar el requerimiento: $e'));
+      }
+    } else {
+      return const Left(NetworkFailure('Operacion abortada: No hay senal de red.'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, TicketEntity>> actualizarCamposConGuardaValidacionSimpleBodega({
+    required String ticketId,
+    required Map<String, dynamic> campos,
+  }) async {
+    if (await networkInfo.isConnected) {
+      try {
+        final resultado = await firebaseDataSource.actualizarCamposConGuardaValidacionSimpleBodega(
+          ticketId: ticketId,
+          campos: campos,
+        );
+        return Right(resultado);
+      } catch (e) {
+        print("🚨 ERROR CRUDO EN REPOSITORIO (VALIDACION SIMPLE BODEGA): ${e.toString()}");
+        return Left(ServerFailure(e is ServerException ? e.message : 'No se pudo validar el despacho: $e'));
+      }
+    } else {
+      return const Left(NetworkFailure('Operacion abortada: No hay senal de red.'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> guardarEvidenciasDespachoConDescuentoStock({
+    required String ticketId,
+    required String despachoId,
+    required Map<String, dynamic> campos,
+    required List<Map<String, dynamic>> itemsADescontar,
+    required bool liberarReserva,
+  }) async {
+    if (await networkInfo.isConnected) {
+      try {
+        await firebaseDataSource.guardarEvidenciasDespachoConDescuentoStock(
+          ticketId: ticketId,
+          despachoId: despachoId,
+          campos: campos,
+          itemsADescontar: itemsADescontar,
+          liberarReserva: liberarReserva,
+        );
+        return const Right(null);
+      } catch (e) {
+        print("🚨 ERROR CRUDO EN REPOSITORIO (DESCUENTO DE STOCK): ${e.toString()}");
+        return Left(ServerFailure('No se pudo guardar la evidencia con descuento de stock: $e'));
+      }
+    } else {
+      return const Left(NetworkFailure('Operacion abortada: No hay senal de red.'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> guardarEvaluacionTecnicaConReservaStock({
+    required TicketEntity ticket,
+    required List<Map<String, dynamic>> itemsAReservar,
+  }) async {
+    if (await networkInfo.isConnected) {
+      try {
+        final ticketModel = _entityToModel(ticket);
+        await firebaseDataSource.guardarEvaluacionTecnicaConReservaStock(
+          ticket: ticketModel,
+          itemsAReservar: itemsAReservar,
+        );
+        return const Right(null);
+      } catch (e) {
+        print("🚨 ERROR CRUDO EN REPOSITORIO (RESERVA EVALUACION TECNICA): ${e.toString()}");
+        return Left(ServerFailure('No se pudo guardar la evaluacion tecnica con reserva de stock: $e'));
+      }
+    } else {
+      return const Left(NetworkFailure('Operacion abortada: No hay senal de red.'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, TicketEntity>> actualizarVentaRepuestoEnTransaccion({
+    required String ticketId,
+    required CambioVentaRepuesto Function(TicketEntity actual) aplicar,
+  }) async {
+    if (!await networkInfo.isConnected) {
+      return const Left(NetworkFailure('Sin conexión a internet.'));
+    }
+    try {
+      final guardado = await firebaseDataSource.actualizarEnTransaccion(
+        ticketId: ticketId,
+        // Firestore solo en data: modelos a JSON y auditoría/enlaces con arrayUnion.
+        calcular: (actual) {
+          final cambio = aplicar(actual);
+          final campos = <String, dynamic>{
+            'lineasRepuestoVenta': cambio.lineas.map((l) => LineaRepuestoVentaModel.fromEntity(l).toJson()).toList(),
+            if (cambio.estadoNuevo != null) 'estadoActual': cambio.estadoNuevo!.name,
+            if (cambio.evento != null)
+              'historialEventos': FieldValue.arrayUnion([EventoAuditoriaModel.fromEntity(cambio.evento!).toJson()]),
+            if (cambio.cambiosMateriales.isNotEmpty)
+              'historialCambiosMateriales': FieldValue.arrayUnion(cambio.cambiosMateriales.map((c) => c.toJson()).toList()),
+            if (cambio.urlsCotizacionComprasNuevas.isNotEmpty)
+              'urlsCotizacionCompras': FieldValue.arrayUnion(cambio.urlsCotizacionComprasNuevas),
+          };
+          // Repuestos con código recién creado por Costos → inventario con stock 0.
+          final ahora = Timestamp.now();
+          final inventarioNuevos = [
+            for (final r in cambio.inventarioNuevos)
+              {
+                'codigo': r.codigo,
+                'descripcion': r.descripcion,
+                'stockDisponible': 0.0,
+                'stockReservado': 0.0,
+                'unidad': r.unidad,
+                'ubicacion': null,
+                'fechaActualizacion': ahora,
+              },
+          ];
+          return (campos: campos, inventarioNuevos: inventarioNuevos);
+        },
+      );
+      return Right(guardado);
+    } on CambioVentaRechazado catch (e) {
+      return Left(ValidationFailure(e.mensaje));
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure('No se pudo guardar el requerimiento: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> actualizarCamposConGuardaEstadoYAjusteReserva({
+    required String ticketId,
+    required Map<String, dynamic> campos,
+    required List<String> estadosPermitidos,
+    required List<Map<String, dynamic>> repuestosTallerNuevos,
+  }) async {
+    if (await networkInfo.isConnected) {
+      try {
+        await firebaseDataSource.actualizarCamposConGuardaEstadoYAjusteReserva(
+          ticketId: ticketId,
+          campos: campos,
+          estadosPermitidos: estadosPermitidos,
+          repuestosTallerNuevos: repuestosTallerNuevos,
+        );
+        return const Right(null);
+      } catch (e) {
+        print("🚨 ERROR CRUDO EN REPOSITORIO (AJUSTE DE RESERVA): ${e.toString()}");
+        return Left(ServerFailure('No se pudo guardar el requerimiento con ajuste de reserva: $e'));
+      }
+    } else {
+      return const Left(NetworkFailure('Operacion abortada: No hay senal de red.'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> anularTicketConLiberacionReserva({
+    required TicketEntity ticket,
+  }) async {
+    if (await networkInfo.isConnected) {
+      try {
+        final ticketModel = _entityToModel(ticket);
+        await firebaseDataSource.anularTicketConLiberacionReserva(ticket: ticketModel);
+        return const Right(null);
+      } catch (e) {
+        print("🚨 ERROR CRUDO EN REPOSITORIO (ANULACION CON LIBERACION DE RESERVA): ${e.toString()}");
+        return Left(ServerFailure('No se pudo anular el ticket con liberacion de reserva: $e'));
+      }
+    } else {
+      return const Left(NetworkFailure('Operacion abortada: No hay senal de red.'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, TicketEntity>> notificarYGenerarActa(TicketEntity ticket) async {
+    if (await networkInfo.isConnected) {
+      try {
+        final ticketModel = _entityToModel(ticket);
+        
+        // 1. Guardar el estado final en Firebase
+        final ticketActualizado = await firebaseDataSource.actualizarTicket(ticketModel);
+        
+        // 2. Disparar el Webhook a Python para generar el PDF
+        await webhookDataSource.notificarBackendPython(ticketActualizado);
+
+        return Right(ticketActualizado);
+      } on ServerException {
+        return const Left(ServerFailure('Error en la consolidación del acta. Verifique los servicios.'));
+      }
+    } else {
+      return const Left(NetworkFailure('Operación abortada: No hay señal de red.'));
+    }
+  } 
+  }

@@ -12,6 +12,9 @@ import '../../domain/entities/ticket_entity.dart';
 import '../../domain/repositories/ticket_repository.dart';
 import '../datasources/webhook_remote_datasource.dart';
 import '../models/ticket_model.dart';
+import '../models/evento_auditoria_model.dart';
+import '../models/linea_repuesto_venta_model.dart';
+import '../../domain/entities/cambio_venta_repuesto.dart';
 import '../datasources/storage_remote_datasource.dart';
 import '../../../../core/enum/segmento_operativo.dart';
 import '../../../../core/services/pdf_service.dart';
@@ -289,6 +292,27 @@ Future<Either<Failure, String>> subirOrdenCompra(XFile file, String ticketId) as
   }
 
   @override
+  Future<Either<Failure, TicketEntity>> actualizarCamposConGuardaValidacionSimpleBodega({
+    required String ticketId,
+    required Map<String, dynamic> campos,
+  }) async {
+    if (await networkInfo.isConnected) {
+      try {
+        final resultado = await firebaseDataSource.actualizarCamposConGuardaValidacionSimpleBodega(
+          ticketId: ticketId,
+          campos: campos,
+        );
+        return Right(resultado);
+      } catch (e) {
+        print("🚨 ERROR CRUDO EN REPOSITORIO (VALIDACION SIMPLE BODEGA): ${e.toString()}");
+        return Left(ServerFailure(e is ServerException ? e.message : 'No se pudo validar el despacho: $e'));
+      }
+    } else {
+      return const Left(NetworkFailure('Operacion abortada: No hay senal de red.'));
+    }
+  }
+
+  @override
   Future<Either<Failure, void>> guardarEvidenciasDespachoConDescuentoStock({
     required String ticketId,
     required String despachoId,
@@ -334,6 +358,60 @@ Future<Either<Failure, String>> subirOrdenCompra(XFile file, String ticketId) as
       }
     } else {
       return const Left(NetworkFailure('Operacion abortada: No hay senal de red.'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, TicketEntity>> actualizarVentaRepuestoEnTransaccion({
+    required String ticketId,
+    required CambioVentaRepuesto Function(TicketEntity actual) aplicar,
+  }) async {
+    if (!await networkInfo.isConnected) {
+      return const Left(NetworkFailure('Sin conexión a internet.'));
+    }
+    try {
+      final guardado = await firebaseDataSource.actualizarEnTransaccion(
+        ticketId: ticketId,
+        // Firestore solo en data: modelos a JSON y auditoría/enlaces con arrayUnion.
+        calcular: (actual) {
+          final cambio = aplicar(actual);
+          final campos = <String, dynamic>{
+            if (cambio.lineas != null)
+              'lineasRepuestoVenta': cambio.lineas!.map((l) => LineaRepuestoVentaModel.fromEntity(l).toJson()).toList(),
+            if (cambio.urlGuiaRemision != null) 'urlGuiaRemision': cambio.urlGuiaRemision,
+            if (cambio.urlFactura != null) 'urlFactura': cambio.urlFactura,
+            if (cambio.estadoNuevo != null) 'estadoActual': cambio.estadoNuevo!.name,
+            if (cambio.evento != null)
+              'historialEventos': FieldValue.arrayUnion([EventoAuditoriaModel.fromEntity(cambio.evento!).toJson()]),
+            if (cambio.cambiosMateriales.isNotEmpty)
+              'historialCambiosMateriales': FieldValue.arrayUnion(cambio.cambiosMateriales.map((c) => c.toJson()).toList()),
+            if (cambio.urlsCotizacionComprasNuevas.isNotEmpty)
+              'urlsCotizacionCompras': FieldValue.arrayUnion(cambio.urlsCotizacionComprasNuevas),
+          };
+          // Repuestos con código recién creado por Costos → inventario con stock 0.
+          final ahora = Timestamp.now();
+          final inventarioNuevos = [
+            for (final r in cambio.inventarioNuevos)
+              {
+                'codigo': r.codigo,
+                'descripcion': r.descripcion,
+                'stockDisponible': 0.0,
+                'stockReservado': 0.0,
+                'unidad': r.unidad,
+                'ubicacion': null,
+                'fechaActualizacion': ahora,
+              },
+          ];
+          return (campos: campos, inventarioNuevos: inventarioNuevos);
+        },
+      );
+      return Right(guardado);
+    } on CambioVentaRechazado catch (e) {
+      return Left(ValidationFailure(e.mensaje));
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure('No se pudo guardar el requerimiento: $e'));
     }
   }
 

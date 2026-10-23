@@ -6,6 +6,7 @@ enum EstadoOrdenRecepcion {
   pendienteRecoger,
   recibidoTotal,
   recibidoParcial,
+  anulada, // la anuló el supervisor (con motivo); su picking vuelve a estar listo
 }
 
 class ItemRecepcionRepuestoEntity extends Equatable {
@@ -83,6 +84,20 @@ class OrdenRecepcionRepuestosEntity extends Equatable {
   final DateTime? fechaValidadoSupervisor;
   final String? supervisorValida;
 
+  // 📸 Evidencia del retiro (obligatoria desde el picking; los retiros
+  // anteriores no la tienen y quedan eximidos).
+  final List<String> urlsHojaFirmada; // hoja de materiales de Bodega, firmada
+  final List<String> urlsFotosMateriales; // materiales que retira el técnico
+
+  // 📦 Picking que retira esta orden (cada retiro = un picking). null en
+  // órdenes anteriores a este cambio.
+  final String? pickingId;
+
+  // 🚫 Anulación (solo órdenes pendientes de retiro).
+  final String? motivoAnulacion;
+  final String? anuladaPor;
+  final DateTime? fechaAnulacion;
+
   const OrdenRecepcionRepuestosEntity({
     required this.id,
     required this.ticketId,
@@ -97,6 +112,12 @@ class OrdenRecepcionRepuestosEntity extends Equatable {
     this.validadoSupervisor = false,
     this.fechaValidadoSupervisor,
     this.supervisorValida,
+    this.urlsHojaFirmada = const [],
+    this.urlsFotosMateriales = const [],
+    this.pickingId,
+    this.motivoAnulacion,
+    this.anuladaPor,
+    this.fechaAnulacion,
   });
 
   OrdenRecepcionRepuestosEntity copyWith({
@@ -113,6 +134,12 @@ class OrdenRecepcionRepuestosEntity extends Equatable {
     bool? validadoSupervisor,
     DateTime? fechaValidadoSupervisor,
     String? supervisorValida,
+    List<String>? urlsHojaFirmada,
+    List<String>? urlsFotosMateriales,
+    String? pickingId,
+    String? motivoAnulacion,
+    String? anuladaPor,
+    DateTime? fechaAnulacion,
   }) {
     return OrdenRecepcionRepuestosEntity(
       id: id ?? this.id,
@@ -129,8 +156,18 @@ class OrdenRecepcionRepuestosEntity extends Equatable {
       fechaValidadoSupervisor:
           fechaValidadoSupervisor ?? this.fechaValidadoSupervisor,
       supervisorValida: supervisorValida ?? this.supervisorValida,
+      urlsHojaFirmada: urlsHojaFirmada ?? this.urlsHojaFirmada,
+      urlsFotosMateriales: urlsFotosMateriales ?? this.urlsFotosMateriales,
+      pickingId: pickingId ?? this.pickingId,
+      motivoAnulacion: motivoAnulacion ?? this.motivoAnulacion,
+      anuladaPor: anuladaPor ?? this.anuladaPor,
+      fechaAnulacion: fechaAnulacion ?? this.fechaAnulacion,
     );
   }
+
+  bool get estaAnulada => estado == EstadoOrdenRecepcion.anulada;
+
+  bool get tieneEvidenciaRetiro => urlsHojaFirmada.isNotEmpty && urlsFotosMateriales.isNotEmpty;
 
   bool get estaCompletada =>
       estado == EstadoOrdenRecepcion.recibidoTotal ||
@@ -158,5 +195,11 @@ class OrdenRecepcionRepuestosEntity extends Equatable {
         validadoSupervisor,
         fechaValidadoSupervisor,
         supervisorValida,
+        urlsHojaFirmada,
+        urlsFotosMateriales,
+        pickingId,
+        motivoAnulacion,
+        anuladaPor,
+        fechaAnulacion,
       ];
 }

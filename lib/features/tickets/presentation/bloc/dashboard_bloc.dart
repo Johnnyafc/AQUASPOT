@@ -18,6 +18,7 @@
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/entities/ticket_entity.dart';
+import '../../domain/services/tiempos_por_proceso_service.dart';
 import '../../../../core/enum/ticket_enums.dart';
 import 'dashboard_event.dart';
 import 'dashboard_state.dart';
@@ -53,14 +54,15 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
 const Map<String, String> _estadoLabelsBloc = {
   'creado': 'Creado',
   'enCamino': 'En camino',
-  'recepcionFisica': 'Evaluación técnica',
-  'revisionGarantia': 'Revisión garantía',
-  'comercial': 'Comercial',
-  'cotizado': 'Cotizado',
+  'recepcionFisica': 'Evaluación Técnica',
+  'revisionGarantia': 'Revisión Garantía',
+  'cotizandoRepuesto': 'Cotizando repuesto',
+  'comercial': 'En cotización',
+  'cotizado': 'Proforma enviada',
   'costos': 'Costos',
   'compras': 'Compras',
   'bodega': 'Bodega',
-  'procesoTrabajo': 'Proceso de trabajo',
+  'procesoTrabajo': 'Proceso de Trabajo',
   'validacionFacturacion': 'Revisión de pagos',
   'entrega': 'Entrega',
   'finalizado': 'Finalizado',
@@ -72,11 +74,11 @@ String _nombreEstadoBloc(EstadoTicket e) => _estadoLabelsBloc[e.name] ?? e.name;
 String _bucketEstadoBloc(EstadoTicket estado) {
   switch (estado) {
     case EstadoTicket.finalizado:
-      return 'Cerrado';
+      return 'Finalizado';
     case EstadoTicket.anulado:
       return 'Anulado';
     case EstadoTicket.validacionFacturacion:
-      return 'Validación facturación';
+      return 'Revisión de pagos';
     default:
       return 'En proceso';
   }
@@ -109,33 +111,61 @@ double _redondear2(double v) => double.parse(v.toStringAsFixed(2));
 List<String> _urls(Iterable<String?> fuentes) =>
     fuentes.where((u) => u != null && u.trim().isNotEmpty).map((u) => u!.trim()).toList();
 
+// Tipo de garantía legible; null si no es "Máquina nueva" ni "Servicio"
+// (ej. "pendiente" o "noAplica" en tickets que no son garantía).
+String? _etiquetaTipoGarantiaBloc(String? valor) {
+  switch ((valor ?? '').trim()) {
+    case 'maquinaNueva':
+      return 'Máquina nueva';
+    case 'servicio':
+      return 'Servicio';
+    default:
+      return null;
+  }
+}
+
+// Dictamen de un reclamo de garantía:
+//  - Aprobada:  ingeniería aprobó la garantía (esGarantia).
+//  - Rechazada: tiene la etiqueta de auditoría de la revisión de garantía
+//    "GARANTÍA RECHAZADA - PASA A FACTURACIÓN CLIENTE".
+//  - Sin dictamen: el resto (aún en revisión).
+String? _dictamenGarantiaBloc(TicketEntity t) {
+  if (!t.esReclamoDeGarantia) return null;
+  if (t.esGarantia == true) return 'Aprobada';
+  if (t.historialEventos.any((e) => e.accion.toUpperCase().startsWith('GARANTÍA RECHAZADA'))) return 'Rechazada';
+  return 'Sin dictamen';
+}
+
 ResumenTicketDash _resumirTicketBloc(TicketEntity t) {
   // Ordenamos una copia (nunca mutamos la lista original del ticket).
   final timestamps = t.historialEventos.map((e) => e.timestamp).toList()..sort();
   final DateTime? primero = timestamps.isEmpty ? null : timestamps.first;
   final DateTime? ultimo = timestamps.isEmpty ? null : timestamps.last;
 
-  double horas = 0;
-  if (t.tiemposOperativos != null && t.tiemposOperativos!.leadTimeTotalHoras > 0) {
-    horas = t.tiemposOperativos!.leadTimeTotalHoras;
-  } else if (primero != null && ultimo != null) {
-    horas = ultimo.difference(primero).inMinutes / 60.0;
-  }
+  // Tiempo total: desde la creación hasta el último registro (en un ticket
+  // finalizado, hasta su finalización). Antes se usaba
+  // tiemposOperativos.leadTimeTotalHoras, que se cortaba al terminar el
+  // taller y dejaba fuera la revisión de pagos y la entrega.
+  final horas = (primero != null && ultimo != null) ? ultimo.difference(primero).inMinutes / 60.0 : 0.0;
   final horasRedondeadas = _redondear2(horas);
-
-  final to = t.tiemposOperativos;
 
   return ResumenTicketDash(
     id: t.id,
     clienteId: t.clienteId,
     equipo: t.equipo.name,
-    marca: t.marca,
+    // Sin distinguir mayúsculas: "aquaspot" (tickets viejos) y "AQUASPOT" son la misma marca.
+    marca: t.marca.trim().toUpperCase(),
     fallaReportada: t.fallaReportada,
     lugarAtencion: _capBloc(t.lugarAtencion.name),
     sede: t.sede.name,
-    tipoGarantia: t.tipoGarantia,
-    tipoRequerimientoEtiqueta: _etiquetaTipoRequerimientoBloc(t.tipoRequerimiento),
-    esReclamoGarantia: t.tipoRequerimiento == TipoRequerimiento.reclamoGarantia,
+    tipoGarantia: _etiquetaTipoGarantiaBloc(t.tipoGarantia),
+    // Un ticket con dictamen de garantía en la auditoría cuenta como reclamo
+    // de garantía aunque su tipo se haya cambiado a mano (ver esReclamoDeGarantia).
+    tipoRequerimientoEtiqueta: t.esReclamoDeGarantia
+        ? _etiquetaTipoRequerimientoBloc(TipoRequerimiento.reclamoGarantia)
+        : _etiquetaTipoRequerimientoBloc(t.tipoRequerimiento),
+    esReclamoGarantia: t.esReclamoDeGarantia,
+    garantiaAprobada: t.esGarantia == true,
     fechaCreacion: primero,
     fechaActualizacion: ultimo,
     horasTotales: horasRedondeadas,
@@ -143,16 +173,10 @@ ResumenTicketDash _resumirTicketBloc(TicketEntity t) {
     numPasos: t.historialEventos.length,
     estadoBucket: _bucketEstadoBloc(t.estadoActual),
     estadoNombre: _nombreEstadoBloc(t.estadoActual),
-    horasNetasCompras: to?.compras.tiempoGestionHoras,
-    horasNetasBodega: to?.bodega.tiempoNetoDespachoHoras,
-    horasEsperaBodega: to?.bodega.tiempoEsperaPorComprasHoras,
-    horasNetasTaller: to?.taller.tiempoNetoTrabajoHoras,
-    horasEsperaTaller: to?.taller.tiempoEsperaMaterialHoras,
-    subEstadoCompras: to?.subEstados.compras,
-    subEstadoBodega: to?.subEstados.bodega,
-    subEstadoTaller: to?.subEstados.taller,
+    dictamenGarantia: _dictamenGarantiaBloc(t),
     // 🆕 Documentos agrupados por trámite lógico (ver comentario en el DTO).
-    documentosActa: _urls([t.pdfActaUrl, ...t.fotosUrls]),
+    documentosActa: _urls([t.pdfActaUrl]),
+    documentosEvidenciaRecepcion: _urls([...t.fotosUrls]),
     documentosEvaluacion: _urls([
       t.evaluacionTecnica?.urlProformaExcel,
       ...?t.evaluacionTecnica?.urlsAdjuntosPdf,
@@ -170,120 +194,35 @@ ResumenTicketDash _resumirTicketBloc(TicketEntity t) {
     ]),
     documentosEntrega: _urls([t.urlGuiaRemision, t.urlFactura]),
     documentosGarantia: _urls([...?t.urlsEvidenciasGarantia]),
+    diagnosticos: t.diagnosticoFallas
+        .map((d) => DiagnosticoFallaDash(
+              categoria: d.categoria,
+              subcategoria: d.subcategoria,
+              falla: d.falla,
+              razones: d.razonesProblema,
+            ))
+        .toList(),
   );
 }
 
-// 🆕 Etiqueta del segmento operativo (CARACOL / COSECHADORA / CONTADOR /
-// GENERAL) a partir del tipo de equipo del ticket — así se puede separar
-// el tiempo de un departamento que atiende varios tipos de equipo (ej.
-// SUPERVISOR) por cada uno, en vez de un solo promedio mezclado.
-String _segmentoOperativoLabelBloc(TipoEquipo equipo) {
-  switch (equipo) {
-    case TipoEquipo.Caracol:
-      return 'CARACOL';
-    case TipoEquipo.Cosechadora:
-      return 'COSECHADORA';
-    case TipoEquipo.Contador:
-      return 'CONTADOR';
-    case TipoEquipo.Otros:
-      return 'GENERAL';
-  }
-}
-
-// ⏱️ Convierte el historial de UN ticket en "segmentos" de tiempo: uno por
-// cada paso (a partir del segundo), con la duración desde el paso anterior,
-// el departamento (usuarioRol) responsable de ese paso y el segmento
-// operativo (tipo de equipo) del ticket.
+// ⏱️ Convierte el historial de UN ticket en el tiempo total que le dedicó
+// cada proceso (y cada persona dentro del proceso). Ver
+// TiemposPorProcesoService: tickets con etiquetas se miden por carriles
+// (paralelismo), los antiguos por el texto de la acción.
 List<SegmentoTiempoDash> _segmentosDeTicketBloc(TicketEntity t) {
-  if (t.historialEventos.length < 2) return const [];
-
-  final segmentoOperativo = _segmentoOperativoLabelBloc(t.equipo);
-  final eventos = [...t.historialEventos]..sort((a, b) => a.timestamp.compareTo(b.timestamp));
-  final segmentos = <SegmentoTiempoDash>[];
-  for (var i = 1; i < eventos.length; i++) {
-    final anterior = eventos[i - 1];
-    final actual = eventos[i];
-    final horas = actual.timestamp.difference(anterior.timestamp).inMinutes / 60.0;
-    final rolCrudo = actual.usuarioRol.trim();
-    final departamento = rolCrudo.isEmpty ? 'SIN ROL' : rolCrudo.toUpperCase();
-    segmentos.add(SegmentoTiempoDash(
+  return TiemposPorProcesoService.calcular(t.historialEventos).map((x) {
+    final rolCrudo = x.usuarioRol.trim();
+    return SegmentoTiempoDash(
       ticketId: t.id,
-      accion: actual.accion,
-      departamento: departamento,
-      usuarioNombre: actual.usuarioNombre,
-      horas: _redondear2(horas),
-      segmentoOperativo: segmentoOperativo,
-    ));
-  }
-  return segmentos;
+      proceso: x.proceso,
+      subproceso: x.subproceso,
+      departamento: rolCrudo.isEmpty ? 'SIN ROL' : rolCrudo.toUpperCase(),
+      usuarioNombre: x.usuarioNombre,
+      horas: _redondear2(x.horas),
+    );
+  }).toList();
 }
 
-
-List<ResumenRepuestoDash> _calcularRankingRepuestosBloc(List<TicketEntity> tickets) {
-  final Map<String, List<Map<String, dynamic>>> agrupados = {};
-
-  for (final t in tickets) {
-    for (final item in t.itemsDespachoBodega) {
-      final cod = item.codigo.trim().toUpperCase();
-      if (cod.isEmpty) continue;
-      agrupados.putIfAbsent(cod, () => []).add({
-        'desc': item.descripcion,
-        'solicitada': item.cantidadSolicitada,
-        'despachada': item.cantidadDespachada,
-        'horasCompras': item.tiempoAbastecimientoCalculadoHoras,
-        'horasBodega': item.tiempoReaccionBodegaCalculadoHoras,
-      });
-    }
-  }
-
-  final ranking = <ResumenRepuestoDash>[];
-
-  agrupados.forEach((cod, lista) {
-    final desc = lista.first['desc'] as String? ?? '';
-    double totalSolicitada = 0.0;
-    double totalDespachada = 0.0;
-    double sumaHorasCompras = 0.0;
-    int countCompras = 0;
-    double sumaHorasBodega = 0.0;
-    int countBodega = 0;
-
-    for (final e in lista) {
-      totalSolicitada += (e['solicitada'] as double? ?? 0.0);
-      totalDespachada += (e['despachada'] as double? ?? 0.0);
-
-      final hc = e['horasCompras'] as double?;
-      if (hc != null && hc >= 0) {
-        sumaHorasCompras += hc;
-        countCompras++;
-      }
-
-      final hb = e['horasBodega'] as double?;
-      if (hb != null && hb >= 0) {
-        sumaHorasBodega += hb;
-        countBodega++;
-      }
-    }
-
-    final promCompras = countCompras > 0 ? (sumaHorasCompras / countCompras) : 0.0;
-    final promBodega = countBodega > 0 ? (sumaHorasBodega / countBodega) : 0.0;
-
-    ranking.add(ResumenRepuestoDash(
-      codigo: cod,
-      descripcion: desc,
-      vecesSolicitado: lista.length,
-      promedioHorasAbastecimiento: _redondear2(promCompras),
-      promedioHorasDespachoBodega: _redondear2(promBodega),
-      cantidadTotalSolicitada: totalSolicitada,
-      cantidadTotalDespachada: totalDespachada,
-      esCritico: promCompras > 48.0, // Más de 48 horas en compras = alerta de cuello de botella
-    ));
-  });
-
-  // Ordenar de mayor demora de abastecimiento a menor (Top cuellos de botella)
-  ranking.sort((a, b) => b.promedioHorasAbastecimiento.compareTo(a.promedioHorasAbastecimiento));
-
-  return ranking;
-}
 
 List<String> _valoresUnicosBloc(Iterable<String> valores) {
   final set = valores.where((v) => v.isNotEmpty).toSet().toList();
@@ -302,17 +241,13 @@ DashboardDatos _procesarDashboardEnHilo(List<TicketEntity> tickets) {
     segmentos.addAll(_segmentosDeTicketBloc(t));
   }
 
-  final ranking = _calcularRankingRepuestosBloc(tickets);
-
   return DashboardDatos(
     resumen: resumen,
     segmentos: segmentos,
     marcas: _valoresUnicosBloc(resumen.map((r) => r.marca)),
     equipos: _valoresUnicosBloc(resumen.map((r) => r.equipo)),
     sedes: _valoresUnicosBloc(resumen.map((r) => r.sede)),
-    tiposGarantia: _valoresUnicosBloc(resumen.map((r) => r.tipoGarantia ?? '')),
-    estadosBucket: _valoresUnicosBloc(resumen.map((r) => r.estadoBucket)),
-    departamentos: _valoresUnicosBloc(segmentos.map((s) => s.departamento)),
-    rankingRepuestos: ranking,
+    tiposGarantia: const ['Máquina nueva', 'Servicio'],
+    estados: EstadoTicket.values.map(_nombreEstadoBloc).toList(),
   );
 }

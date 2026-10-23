@@ -1,0 +1,53 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ==========================================
+    // 🛑 1. BLOQUEO MAESTRO (Cortocircuito por defecto)
+    // ==========================================
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // ==========================================
+    // 📂 2. TUBERÍA DE ACTAS (Raíz Paralela)
+    // ==========================================
+    match /actas_recepcion/{documento} {
+      allow read, write: if request.auth != null;
+    }
+
+    // ==========================================
+    // 🗄️ 3. MATRIZ JERÁRQUICA DE TICKETS
+    // ==========================================
+    // El sufijo {rutasInternas=**} actúa como un bypass recursivo.
+    // Autoriza la lectura/escritura en cualquier subcarpeta interna
+    // (comercial, despachos, evidencia, etc.) siempre que el operario esté logueado.
+    match /tickets/{ticketId}/{rutasInternas=**} {
+      allow read, write: if request.auth != null;
+    }
+
+    // ==========================================
+    // 📸 4. EVIDENCIA DE RETIRO DEL TÉCNICO EXTERNO (sin sesión, vía enlace)
+    // ==========================================
+    // Solo crear (nunca borrar ni reemplazar), solo imágenes de hasta 10 MB,
+    // y solo mientras el enlace exista, sea de ESE ticket, no se haya usado
+    // y no esté vencido. Al confirmar el retiro el enlace se quema y ya no
+    // se puede subir más. `get` hace falta para obtener la URL de descarga.
+    match /tickets/{ticketId}/retiros_externos/{token}/{archivo} {
+      function tokenValido() {
+        let t = firestore.get(/databases/(default)/documents/tokens_recepcion_externa/$(token));
+        return t != null
+          && t.data.ticketId == ticketId
+          && t.data.usado == false
+          && request.time < t.data.fechaExpiracion;
+      }
+
+      allow create: if tokenValido()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+
+      allow get: if tokenValido();
+    }
+
+  }
+}

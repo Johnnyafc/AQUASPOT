@@ -1,3 +1,4 @@
+import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/GenerarCotizacionPage.dart';
 import 'package:flutter/material.dart';
@@ -60,10 +61,48 @@ class BandejaComercialPage extends StatelessWidget {
                     children: [
                       // 🆕 Cliente (empresa/camaronera) y Contacto (persona) son
                       // datos distintos — se muestran ambos.
-                      Text(
-                        "${ticket.clienteId.trim().isNotEmpty ? 'Cliente: ${ticket.clienteId} | ' : ''}"
-                        "Contacto: ${ticket.nombreContacto} | Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}",
-                      ),
+                      // 🛒 Venta de Repuesto: sin equipo/marca; "Repuesto de" y teléfono.
+                      if (ticket.tipoRequerimiento == TipoRequerimiento.ventaRepuesto) ...[
+                        Text(
+                          "${ticket.clienteId.trim().isNotEmpty ? 'Cliente: ${ticket.clienteId} | ' : ''}"
+                          "Contacto: ${ticket.nombreContacto}"
+                          "${ticket.telefonoContacto.trim().isNotEmpty ? ' (${ticket.telefonoContacto.trim()})' : ''}"
+                          " | Repuesto de: ${ticket.equipo.name.toUpperCase()}",
+                        ),
+                        // 📦 Repuestos pedidos (máximo 3; sin stock en rojo).
+                        ...ticket.lineasRepuestoVenta.take(3).map((l) {
+                          final cant = l.cantidad == l.cantidad.roundToDouble()
+                              ? l.cantidad.toStringAsFixed(0)
+                              : l.cantidad.toStringAsFixed(2);
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              '• ${l.codigo.isNotEmpty ? '${l.codigo} — ' : ''}${l.descripcionVisible} × $cant',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: l.tieneStockSuficiente ? kTicketTextoPrincipal : kTicketError,
+                              ),
+                            ),
+                          );
+                        }),
+                        if (ticket.lineasRepuestoVenta.length > 3)
+                          Text(
+                            '+${ticket.lineasRepuestoVenta.length - 3} repuesto(s) más',
+                            style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: kTicketTextoSecundario),
+                          ),
+                        const SizedBox(height: 4),
+                        const InsigniaSuave(
+                          color: kTicketAcento,
+                          icono: Icons.shopping_cart,
+                          texto: 'VENTA DE REPUESTO',
+                        ),
+                      ] else
+                        Text(
+                          "${ticket.clienteId.trim().isNotEmpty ? 'Cliente: ${ticket.clienteId} | ' : ''}"
+                          "Contacto: ${ticket.nombreContacto} | Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}",
+                        ),
                       if (ticket.noRequiereCompras) ...[
                         const SizedBox(height: 4),
                         const InsigniaSuave(

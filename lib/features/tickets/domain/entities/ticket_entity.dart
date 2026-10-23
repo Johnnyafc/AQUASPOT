@@ -11,6 +11,8 @@ import 'evaluacion_tecnica_entity.dart';
 import 'item_despacho_bodega_entity.dart';
 import 'registro_despacho_entity.dart';
 import 'orden_recepcion_repuestos_entity.dart';
+import 'cambio_material_entity.dart';
+import 'linea_repuesto_venta_entity.dart';
 import '../../../fallas/domain/entities/metrica_falla_entity.dart';
 
 import 'evento_auditoria_entity.dart';
@@ -93,6 +95,9 @@ final String marca; // 🚨 El que te habías olvidado
 
   // 🔍 DIAGNÓSTICO DE FALLAS (Causas Raíz por Categoría)
   final List<DiagnosticoFallaEntity> diagnosticoFallas;
+  // Ronda de revisión en la que se guardó por última vez el diagnóstico
+  // (ver rondaRevisionDiagnosticoFallas en core/utils/constants.dart).
+  final int rondaDiagnosticoFallas;
 
   // 📄 INFORME TÉCNICO ADJUNTO (Contador / Cosechadora)
   final String? urlInformeTecnico;
@@ -102,6 +107,31 @@ final String marca; // 🚨 El que te habías olvidado
   final bool materialesValidadosEnTaller;
   final String? supervisorValidoMateriales;
   final DateTime? fechaValidacionMaterialesTaller;
+
+  // 🛒 VENTA DE REPUESTO (solo tipoRequerimiento == ventaRepuesto)
+  final MedioContacto? medioContacto;
+  final List<LineaRepuestoVentaEntity> lineasRepuestoVenta;
+  final bool necesitaAsistenciaTecnica;
+  final List<String> urlsAudiosAsistencia;
+  final List<String> urlsCotizacionCompras; // Cotización adjuntada por Compras (sin stock)
+
+  // 🔎 Inconsistencias de trazabilidad que el administrador ya revisó y
+  // marcó como correctas (claves "regla: detalle"). Solo se escribe con
+  // arrayUnion (ver MarcarInconsistenciaRevisadaEvent).
+  final List<String> inconsistenciasRevisadas;
+
+  // 📦 PICKING EN BODEGA (ver EstadoDespachoService). Solo se escriben con
+  // actualizaciones puntuales (nunca en toJson), así una copia vieja del
+  // ticket no los borra. null en tickets anteriores: se deduce el estado.
+  final String? estadoDespacho; // pendiente | pickingEnCurso | despachoParcial | pickingFinalizado
+  final String? pickingIniciadoPor;
+  final DateTime? pickingIniciadoEn;
+  final String? pickingFinalizadoPor;
+  final DateTime? pickingFinalizadoEn;
+
+  // 🧾 Cambios de materiales hechos por Comercial (registro APARTE de la
+  // auditoría). Solo se agrega con arrayUnion; nunca va en toJson.
+  final List<CambioMaterialEntity> historialCambiosMateriales;
 
 const TicketEntity({
     required this.id,
@@ -156,11 +186,24 @@ const TicketEntity({
     this.tiemposOperativos,
     this.tecnicosAsignados = const [],
     this.diagnosticoFallas = const [],
+    this.rondaDiagnosticoFallas = 0,
     this.urlInformeTecnico,
     this.ordenesRecepcion = const [],
     this.materialesValidadosEnTaller = false,
     this.supervisorValidoMateriales,
     this.fechaValidacionMaterialesTaller,
+    this.medioContacto,
+    this.lineasRepuestoVenta = const [],
+    this.necesitaAsistenciaTecnica = false,
+    this.urlsAudiosAsistencia = const [],
+    this.urlsCotizacionCompras = const [],
+    this.inconsistenciasRevisadas = const [],
+    this.estadoDespacho,
+    this.pickingIniciadoPor,
+    this.pickingIniciadoEn,
+    this.pickingFinalizadoPor,
+    this.pickingFinalizadoEn,
+    this.historialCambiosMateriales = const [],
   });
 
   // ⚙️ CLONADOR INDUSTRIAL CORREGIDO (Mutación Segura)
@@ -217,11 +260,24 @@ const TicketEntity({
     TiemposOperativosEntity? tiemposOperativos,
     List<String>? tecnicosAsignados,
     List<DiagnosticoFallaEntity>? diagnosticoFallas,
+    int? rondaDiagnosticoFallas,
     String? urlInformeTecnico,
     List<OrdenRecepcionRepuestosEntity>? ordenesRecepcion,
     bool? materialesValidadosEnTaller,
     String? supervisorValidoMateriales,
     DateTime? fechaValidacionMaterialesTaller,
+    MedioContacto? medioContacto,
+    List<LineaRepuestoVentaEntity>? lineasRepuestoVenta,
+    bool? necesitaAsistenciaTecnica,
+    List<String>? urlsAudiosAsistencia,
+    List<String>? urlsCotizacionCompras,
+    List<String>? inconsistenciasRevisadas,
+    String? estadoDespacho,
+    String? pickingIniciadoPor,
+    DateTime? pickingIniciadoEn,
+    String? pickingFinalizadoPor,
+    DateTime? pickingFinalizadoEn,
+    List<CambioMaterialEntity>? historialCambiosMateriales,
   }) {
     return TicketEntity(
       id: id ?? this.id,
@@ -276,11 +332,24 @@ const TicketEntity({
       tiemposOperativos: tiemposOperativos ?? this.tiemposOperativos,
       tecnicosAsignados: tecnicosAsignados ?? this.tecnicosAsignados,
       diagnosticoFallas: diagnosticoFallas ?? this.diagnosticoFallas,
+      rondaDiagnosticoFallas: rondaDiagnosticoFallas ?? this.rondaDiagnosticoFallas,
       urlInformeTecnico: urlInformeTecnico ?? this.urlInformeTecnico,
       ordenesRecepcion: ordenesRecepcion ?? this.ordenesRecepcion,
       materialesValidadosEnTaller: materialesValidadosEnTaller ?? this.materialesValidadosEnTaller,
       supervisorValidoMateriales: supervisorValidoMateriales ?? this.supervisorValidoMateriales,
       fechaValidacionMaterialesTaller: fechaValidacionMaterialesTaller ?? this.fechaValidacionMaterialesTaller,
+      medioContacto: medioContacto ?? this.medioContacto,
+      lineasRepuestoVenta: lineasRepuestoVenta ?? this.lineasRepuestoVenta,
+      necesitaAsistenciaTecnica: necesitaAsistenciaTecnica ?? this.necesitaAsistenciaTecnica,
+      urlsAudiosAsistencia: urlsAudiosAsistencia ?? this.urlsAudiosAsistencia,
+      urlsCotizacionCompras: urlsCotizacionCompras ?? this.urlsCotizacionCompras,
+      inconsistenciasRevisadas: inconsistenciasRevisadas ?? this.inconsistenciasRevisadas,
+      estadoDespacho: estadoDespacho ?? this.estadoDespacho,
+      pickingIniciadoPor: pickingIniciadoPor ?? this.pickingIniciadoPor,
+      pickingIniciadoEn: pickingIniciadoEn ?? this.pickingIniciadoEn,
+      pickingFinalizadoPor: pickingFinalizadoPor ?? this.pickingFinalizadoPor,
+      pickingFinalizadoEn: pickingFinalizadoEn ?? this.pickingFinalizadoEn,
+      historialCambiosMateriales: historialCambiosMateriales ?? this.historialCambiosMateriales,
     );
   }
 
@@ -338,12 +407,35 @@ const TicketEntity({
         tiemposOperativos,
         tecnicosAsignados,
         diagnosticoFallas,
+        rondaDiagnosticoFallas,
         urlInformeTecnico,
         ordenesRecepcion,
         materialesValidadosEnTaller,
         supervisorValidoMateriales,
         fechaValidacionMaterialesTaller,
+        medioContacto,
+        lineasRepuestoVenta,
+        necesitaAsistenciaTecnica,
+        urlsAudiosAsistencia,
+        urlsCotizacionCompras,
+        inconsistenciasRevisadas,
+        estadoDespacho,
+        pickingIniciadoPor,
+        pickingIniciadoEn,
+        pickingFinalizadoPor,
+        pickingFinalizadoEn,
+        historialCambiosMateriales,
       ];
+
+  /// Reclamo de garantía según el tipo de requerimiento O según la auditoría:
+  /// si tiene dictamen de garantía ("GARANTÍA APROBADA…" / "GARANTÍA
+  /// RECHAZADA…") lo es, aunque su tipo se haya cambiado manualmente.
+  bool get esReclamoDeGarantia =>
+      tipoRequerimiento == TipoRequerimiento.reclamoGarantia ||
+      historialEventos.any((e) {
+        final a = e.accion.toUpperCase();
+        return a.startsWith('GARANTÍA APROBADA') || a.startsWith('GARANTÍA RECHAZADA');
+      });
 
   /// Obtiene el nombre formateado y estandarizado del responsable de facturación (ej: AGRISPOTSA)
   String get responsableFacturacionLegible => formatearResponsableFacturacion(responsableFacturacion);
@@ -451,6 +543,24 @@ const TicketEntity({
   /// Retorna true si existe algún despacho en el historial que NO cuenta con fotos de evidencia de respaldo
   bool get tieneDespachoPendienteDeEvidencia =>
       historialDespachos.any((d) => d.fotosEvidenciasUrls.isEmpty);
+
+  /// 📦 VALIDACIÓN SIMPLE EN DESPACHO BODEGA: ticket en estado bodega que
+  /// no puede seguir el despacho por ítems y quedaría atascado:
+  ///  1. No tiene repuestos registrados para despacho (tickets antiguos o
+  ///     sin repuestos de taller), o
+  ///  2. Ya tiene el despacho 100% con evidencias, pero nunca cambió de
+  ///     estado (despachos hechos con versiones anteriores). Solo tickets
+  ///     sin `estadoDespacho`: con el picking, un ticket 100% despachado
+  ///     espera a propósito en Bodega hasta "Finalizar picking".
+  /// Bodega solo confirma y el ticket pasa a Proceso de Trabajo.
+  bool get requiereValidacionSimpleBodega {
+    if (estadoActual != EstadoTicket.bodega) return false;
+    final sinRepuestosParaDespacho = itemsDespachoBodega.isEmpty &&
+        (evaluacionTecnica?.repuestosTaller.isEmpty ?? true);
+    final despachoCerradoSinTraspaso = estadoDespacho == null &&
+        bodegaDespachoCompleto && !tieneDespachoPendienteDeEvidencia;
+    return sinRepuestosParaDespacho || despachoCerradoSinTraspaso;
+  }
 
   /// Retorna el despacho pendiente de regularizar fotos de evidencia (si existe)
   RegistroDespachoEntity? get despachoPendienteDeEvidencia =>

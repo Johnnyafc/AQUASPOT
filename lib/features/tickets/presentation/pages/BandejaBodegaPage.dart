@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/ticket_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/widgets/tiempo_en_curso_widget.dart';
 import 'package:aquaspot_postventa/core/theme/ticket_visual_theme.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/services/flujo_venta_repuesto_service.dart';
 
 class BandejaBodegaPage extends StatelessWidget {
   const BandejaBodegaPage({super.key});
@@ -55,8 +56,11 @@ class BandejaBodegaPage extends StatelessWidget {
             final ocGestionada = t.gestionCompras != null || t.isComprasCompletado;
             if (!ocGestionada) return false;
 
+            // 🛒 Venta de Repuesto: igual que Caracol (validación por repuesto
+            // hasta transferir a Bodega).
             final esCaracol = t.equipo == TipoEquipo.Caracol ||
-                t.equipo.name.toLowerCase().contains('caracol');
+                t.equipo.name.toLowerCase().contains('caracol') ||
+                FlujoVentaRepuestoService.validacionPorRepuesto(t);
 
             if (esCaracol) {
               // En Caracol permanece en Validación Bodega hasta que Compras complete la validación o se transfiera a Bodega

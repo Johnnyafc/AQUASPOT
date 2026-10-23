@@ -1,11 +1,14 @@
 // lib/features/tickets/presentation/widgets/trazabilidad_grafica_widget.dart
 //
-// Tarjeta gráfica de "cuánto se demoró en cada proceso", construida sobre
-// el mismo historial de auditoría que ya se muestra en la tarjeta
-// "Trazabilidad y Auditoría" (esa tarjeta no se toca). Toca una fila para
-// ver el evento real, el responsable y las fechas exactas.
+// Tarjeta gráfica de "cuánto se demoró cada acción", construida evento por
+// evento sobre el mismo historial de auditoría que ya se muestra en la
+// tarjeta "Trazabilidad y Auditoría" (esa tarjeta no se toca). Cada barra
+// es una acción real, con su duración = esta acción menos la anterior, sin
+// agrupar ni reclasificar nada. Toca una fila para ver el texto completo,
+// el responsable y las fechas exactas.
 
 import 'package:flutter/material.dart';
+import '../../../../core/enum/ticket_enums.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/services/trazabilidad_grafica_service.dart';
 
@@ -29,7 +32,7 @@ class _TrazabilidadGraficaWidgetState extends State<TrazabilidadGraficaWidget> {
   Widget build(BuildContext context) {
     final resultado = TrazabilidadCalculator.calcular(widget.ticket.historialEventos);
 
-    if (resultado == null || resultado.etapas.isEmpty) {
+    if (resultado == null || resultado.eventos.isEmpty) {
       return Card(
         elevation: 2,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -43,18 +46,31 @@ class _TrazabilidadGraficaWidgetState extends State<TrazabilidadGraficaWidget> {
       );
     }
 
-    final etapasConBarra = resultado.etapasConDuracion.where((e) => e.fin != null).toList();
-    final etapaEnCurso = resultado.etapas.where((e) => e.enCurso && e.nombre != 'Anulado').toList();
-    final etapaAnulada = resultado.etapas.where((e) => e.nombre == 'Anulado').toList();
+    final cicloCerrado = widget.ticket.estadoActual == EstadoTicket.finalizado ||
+        widget.ticket.estadoActual == EstadoTicket.anulado;
 
-    final maxDur = etapasConBarra.isEmpty
-        ? const Duration(hours: 1)
-        : etapasConBarra.map((e) => e.duracion).reduce((a, b) => a > b ? a : b);
-
-    EtapaTrazabilidad? masLarga;
-    for (final e in etapasConBarra) {
-      if (masLarga == null || e.duracion > masLarga.duracion) masLarga = e;
+    // Si el ticket sigue vivo, agregamos una fila final "esperando" desde
+    // el último evento real hasta ahora mismo -- así se ve de un vistazo
+    // cuánto lleva detenido en el punto donde está ahora.
+    final filas = List<EventoConDuracion>.from(resultado.eventos);
+    Duration? esperaActual;
+    if (!cicloCerrado) {
+      esperaActual = DateTime.now().difference(resultado.ultimoEvento);
     }
+
+    final todasLasDuraciones = [
+      ...filas.map((f) => f.duracion),
+      if (esperaActual != null) esperaActual,
+    ];
+    final maxDur = todasLasDuraciones.isEmpty
+        ? const Duration(hours: 1)
+        : todasLasDuraciones.reduce((a, b) => a > b ? a : b);
+
+    EventoConDuracion? masLarga;
+    for (final f in filas) {
+      if (masLarga == null || f.duracion > masLarga.duracion) masLarga = f;
+    }
+    final esperaEsLaMasLarga = esperaActual != null && esperaActual > (masLarga?.duracion ?? Duration.zero);
 
     return Card(
       elevation: 2,
@@ -64,42 +80,47 @@ class _TrazabilidadGraficaWidgetState extends State<TrazabilidadGraficaWidget> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildResumen(resultado),
+            _buildResumen(resultado, cicloCerrado, esperaActual),
             const SizedBox(height: 18),
             const Text(
-              'Duración por proceso',
+              'Duración por acción',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _colorAccento),
             ),
             const SizedBox(height: 4),
             const Text(
-              'Toca una fila para ver el evento, el responsable y las fechas exactas.',
+              'Cada barra es el tiempo entre una acción y la anterior. Toca una fila para ver el detalle.',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
             const SizedBox(height: 10),
-            ..._buildFilas(etapasConBarra, maxDur, masLarga),
-            if (etapaEnCurso.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              ...etapaEnCurso.map((e) => _buildEnCurso(e)),
-            ],
-            if (etapaAnulada.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              _buildAnulado(etapaAnulada.first),
-            ],
+            for (int i = 0; i < filas.length; i++)
+              _buildFila(
+                indice: i,
+                label: filas[i].evento.accion,
+                duracion: filas[i].duracion,
+                maxDur: maxDur,
+                destacada: !esperaEsLaMasLarga && identical(filas[i], masLarga),
+                inicio: filas[i].inicio,
+                fin: filas[i].fin,
+                responsable: '${filas[i].evento.usuarioNombre} [${filas[i].evento.usuarioRol}]',
+              ),
+            if (esperaActual != null)
+              _buildEsperaActual(esperaActual, maxDur, esperaEsLaMasLarga, resultado.ultimoEvento),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildResumen(ResultadoTrazabilidad r) {
+  Widget _buildResumen(ResultadoTrazabilidad r, bool cicloCerrado, Duration? esperaActual) {
     final fmt = (DateTime d) => d.toString().substring(0, 16);
+    final tiempoTotal = cicloCerrado ? r.tiempoTotal : r.tiempoTotal + (esperaActual ?? Duration.zero);
     return Wrap(
       spacing: 24,
       runSpacing: 10,
       children: [
-        _statTile('TIEMPO TOTAL', r.anulado ? _formatDuracion(r.tiempoTotal) : _formatDuracion(r.tiempoTotal) + (r.cierre == null ? ' (en curso)' : '')),
+        _statTile('TIEMPO TOTAL', TrazabilidadCalculator.formatDuracion(tiempoTotal) + (cicloCerrado ? '' : ' (en curso)')),
         _statTile('CREADO', fmt(r.creacion)),
-        if (r.cierre != null) _statTile(r.anulado ? 'ANULADO' : 'FINALIZADO', fmt(r.cierre!)),
+        _statTile(cicloCerrado ? 'ÚLTIMO EVENTO' : 'ÚLTIMA ACCIÓN', fmt(r.ultimoEvento)),
       ],
     );
   }
@@ -118,174 +139,146 @@ class _TrazabilidadGraficaWidgetState extends State<TrazabilidadGraficaWidget> {
     );
   }
 
-  List<Widget> _buildFilas(List<EtapaTrazabilidad> etapas, Duration maxDur, EtapaTrazabilidad? masLarga) {
-    final filas = <Widget>[];
-    bool dentroDeParalelo = false;
+  Widget _buildFila({
+    required int indice,
+    required String label,
+    required Duration duracion,
+    required Duration maxDur,
+    required bool destacada,
+    required DateTime inicio,
+    required DateTime fin,
+    required String responsable,
+  }) {
+    final expandida = _filaExpandida == indice;
+    final proporcion = maxDur.inSeconds == 0 ? 0.05 : (duracion.inSeconds / maxDur.inSeconds).clamp(0.04, 1.0);
 
-    for (int i = 0; i < etapas.length; i++) {
-      final e = etapas[i];
-
-      if (e.paralelo && !dentroDeParalelo) {
-        dentroDeParalelo = true;
-        filas.add(const Padding(
-          padding: EdgeInsets.only(top: 8, bottom: 2),
-          child: Text(
-            'COSTOS + COMPRAS — EN PARALELO, CON COMPUERTA',
-            style: TextStyle(fontSize: 10, letterSpacing: 0.4, color: Colors.grey, fontWeight: FontWeight.w600),
-          ),
-        ));
-      } else if (!e.paralelo) {
-        dentroDeParalelo = false;
-      }
-
-      final expandida = _filaExpandida == i;
-      final esMasLarga = masLarga != null && identical(e, masLarga);
-      final proporcion = maxDur.inSeconds == 0 ? 0.05 : (e.duracion.inSeconds / maxDur.inSeconds).clamp(0.04, 1.0);
-
-      filas.add(InkWell(
-        onTap: () => setState(() => _filaExpandida = expandida ? null : i),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  SizedBox(
-                    width: 128,
-                    child: Row(
-                      children: [
-                        if (esMasLarga) ...[
-                          const Icon(Icons.circle, size: 7, color: _colorDestacado),
-                          const SizedBox(width: 5),
-                        ],
-                        Expanded(
-                          child: Text(
-                            e.nombre,
-                            style: const TextStyle(fontSize: 12.5),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: proporcion.toDouble(),
-                        minHeight: 14,
-                        backgroundColor: Colors.grey.shade200,
-                        valueColor: AlwaysStoppedAnimation<Color>(esMasLarga ? _colorDestacado : _colorAccento),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 58,
-                    child: Text(
-                      _formatDuracion(e.duracion),
-                      textAlign: TextAlign.right,
-                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ],
-              ),
-              if (expandida)
-                Container(
-                  margin: const EdgeInsets.only(top: 6),
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: _colorAccentoSuave,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+    return InkWell(
+      onTap: () => setState(() => _filaExpandida = expandida ? null : indice),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 128,
+                  child: Row(
                     children: [
-                      Text(
-                        '${e.inicio.toString().substring(0, 16)}  →  ${e.fin!.toString().substring(0, 16)}',
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5),
+                      if (destacada) ...[
+                        const Icon(Icons.circle, size: 7, color: _colorDestacado),
+                        const SizedBox(width: 5),
+                      ],
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: const TextStyle(fontSize: 11.5),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                      if (e.eventoCierre != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          '${e.eventoCierre!.usuarioNombre} [${e.eventoCierre!.usuarioRol}]',
-                          style: const TextStyle(fontSize: 12, color: Colors.black87),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          e.eventoCierre!.accion,
-                          style: const TextStyle(fontSize: 11, color: Colors.grey, fontFamily: 'monospace'),
-                        ),
-                      ],
-                      if (e.hitoIntermedio != null) ...[
-                        const SizedBox(height: 4),
-                        Text(e.hitoIntermedio!, style: const TextStyle(fontSize: 11.5, color: Colors.black54)),
-                      ],
-                      if (e.nota != null) ...[
-                        const SizedBox(height: 4),
-                        Text(e.nota!, style: const TextStyle(fontSize: 11.5, color: _colorDestacado, fontWeight: FontWeight.w600)),
-                      ],
                     ],
                   ),
                 ),
-            ],
-          ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: proporcion.toDouble(),
+                      minHeight: 14,
+                      backgroundColor: Colors.grey.shade200,
+                      valueColor: AlwaysStoppedAnimation<Color>(destacada ? _colorDestacado : _colorAccento),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 58,
+                  child: Text(
+                    TrazabilidadCalculator.formatDuracion(duracion),
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            if (expandida)
+              Container(
+                margin: const EdgeInsets.only(top: 6),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: _colorAccentoSuave,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${inicio.toString().substring(0, 16)}  →  ${fin.toString().substring(0, 16)}',
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(responsable, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                    const SizedBox(height: 4),
+                    Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  ],
+                ),
+              ),
+          ],
         ),
-      ));
-    }
-    return filas;
+      ),
+    );
   }
 
-  Widget _buildEnCurso(EtapaTrazabilidad e) {
+  Widget _buildEsperaActual(Duration espera, Duration maxDur, bool esLaMasLarga, DateTime desde) {
+    final proporcion = maxDur.inSeconds == 0 ? 0.05 : (espera.inSeconds / maxDur.inSeconds).clamp(0.04, 1.0);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const Icon(Icons.hourglass_top, size: 14, color: _colorAccento),
+          SizedBox(
+            width: 128,
+            child: Row(
+              children: [
+                Icon(Icons.hourglass_top, size: 13, color: esLaMasLarga ? _colorDestacado : _colorAccento),
+                const SizedBox(width: 5),
+                const Expanded(
+                  child: Text(
+                    'Esperando siguiente acción',
+                    style: TextStyle(fontSize: 11.5, fontStyle: FontStyle.italic),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(width: 8),
           Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: proporcion.toDouble(),
+                minHeight: 14,
+                backgroundColor: Colors.grey.shade200,
+                valueColor: AlwaysStoppedAnimation<Color>(esLaMasLarga ? _colorDestacado : Colors.blueGrey.shade300),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 58,
             child: Text(
-              '${e.nombre} — en curso, ${_formatDuracion(e.duracion)} y contando',
-              style: const TextStyle(fontSize: 12.5, fontStyle: FontStyle.italic, color: _colorAccento),
+              '${TrazabilidadCalculator.formatDuracion(espera)} ⏱',
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, fontStyle: FontStyle.italic),
             ),
           ),
         ],
       ),
     );
-  }
-
-  Widget _buildAnulado(EtapaTrazabilidad e) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.red.shade50,
-        border: Border.all(color: Colors.red.shade200),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.block, size: 16, color: Colors.red),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Ticket anulado a los ${_formatDuracion(e.duracion)} de su último proceso abierto'
-              '${e.eventoCierre != null ? ' (${e.eventoCierre!.usuarioNombre})' : ''}.',
-              style: const TextStyle(fontSize: 12.5, color: Colors.red, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatDuracion(Duration d) {
-    if (d.inMinutes < 60) return '${d.inMinutes}min';
-    final dias = d.inHours ~/ 24;
-    final horas = d.inHours % 24;
-    if (dias > 0) return horas > 0 ? '${dias}d ${horas}h' : '${dias}d';
-    return '${d.inHours}h';
   }
 }

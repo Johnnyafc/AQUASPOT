@@ -7,8 +7,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_state.dart';
 import '../../domain/entities/ticket_entity.dart';
+import '../../domain/services/ruteo_venta_repuesto_service.dart';
+import '../../domain/services/creacion_codigos_venta_service.dart';
 import '../widgets/tiempo_en_curso_widget.dart';
 import '../../../../core/theme/ticket_visual_theme.dart';
+import 'cotizacion_venta_repuesto_page.dart';
 // import 'gestion_compras_page.dart'; // La pantalla que haremos en el siguiente paso
 
 class BandejaComprasPage extends StatelessWidget {
@@ -29,9 +32,15 @@ class BandejaComprasPage extends StatelessWidget {
 
           // ⚙️ FILTRO SCADA: Capturamos los tickets en etapa de compras pendientes de subir OC
           final ticketsCompras = state.historial.where((t) {
+            // 🛒 Venta de Repuesto sin stock: Compras debe cotizar (también en
+            // paralelo mientras otro repuesto está en Evaluación técnica).
+            if (t.estadoActual == EstadoTicket.cotizandoRepuesto) return true;
+            if (RuteoVentaRepuestoService.comprasEnParalelo(t)) return true;
             final enCompras = t.estadoActual == EstadoTicket.costos || 
                               t.estadoActual == EstadoTicket.compras;
             final pendienteOC = t.gestionCompras == null;
+            // 🧾 Venta en Costos solo para crear códigos: aún no hay OV ni OC.
+            if (CreacionCodigosVentaService.requiereCreacionCodigos(t)) return false;
             return enCompras && pendienteOC;
           }).toList();
 
@@ -49,6 +58,10 @@ class BandejaComprasPage extends StatelessWidget {
             itemCount: ticketsCompras.length,
             itemBuilder: (context, index) {
               final ticket = ticketsCompras[index];
+              if (ticket.estadoActual == EstadoTicket.cotizandoRepuesto ||
+                  RuteoVentaRepuestoService.comprasEnParalelo(ticket)) {
+                return _tarjetaCotizarRepuesto(context, ticket);
+              }
               
               // 🔍 LECTURA DE ESTADO (Solo para HMI visual, sin enclavamiento de navegación)
               final bool procesadoPorCostos = ticket.estadoActual == EstadoTicket.compras || 
@@ -144,6 +157,64 @@ class BandejaComprasPage extends StatelessWidget {
             },
           );
         },
+      ),
+    );
+  }
+
+  // 🛒 Tarjeta para Venta de Repuesto en cotización (estado cotizandoRepuesto).
+  Widget _tarjetaCotizarRepuesto(BuildContext context, TicketEntity ticket) {
+    final sinStock = ticket.lineasRepuestoVenta.where(RuteoVentaRepuestoService.requiereGestionCompras).length;
+    return Card(
+      key: ValueKey(ticket.id),
+      elevation: 2,
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: Colors.grey.shade300, width: 1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(16),
+        leading: const AvatarSuave(color: kTicketError, icono: Icons.request_page),
+        title: Text('Ticket: ${ticket.id}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 6),
+            Text('Venta de repuesto • ${ticket.equipo.name.toUpperCase()} | Cliente: ${ticket.clienteId}'),
+            const SizedBox(height: 4),
+            Text(
+              '${ticket.lineasRepuestoVenta.length} repuesto(s), $sinStock requieren gestión',
+              style: const TextStyle(color: kTicketError, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const InsigniaSuave(color: kTicketError, texto: 'COTIZAR REPUESTO'),
+            if (RuteoVentaRepuestoService.comprasEnParalelo(ticket)) ...[
+              const SizedBox(height: 6),
+              const InsigniaSuave(
+                color: Colors.deepOrange,
+                icono: Icons.call_split,
+                texto: 'EN PARALELO — ESPERANDO EVALUACIÓN TÉCNICA',
+              ),
+            ],
+            const SizedBox(height: 8),
+            TiempoEnCursoWidget(
+              desde: ticket.fechaInicioEstadoActual,
+              builder: (context, texto) => Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.hourglass_bottom, size: 12, color: kTicketIcono),
+                  const SizedBox(width: 4),
+                  Text(texto, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kTicketTextoSecundario)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => CotizacionVentaRepuestoPage(ticket: ticket)),
+        ),
       ),
     );
   }

@@ -20,3 +20,9 @@ class ServerFailure extends Failure {
 class NetworkFailure extends Failure {
   const NetworkFailure(String message) : super(message);
 }
+
+// Regla de negocio no cumplida (datos incompletos o inválidos); no es un
+// fallo del servidor.
+class ValidationFailure extends Failure {
+  const ValidationFailure(super.message);
+}

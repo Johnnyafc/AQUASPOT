@@ -28,6 +28,23 @@ abstract class TicketRemoteDataSource {
     required Map<String, dynamic> campos,
     required List<String> estadosPermitidos,
   });
+  // NUEVO: validación simple de Despacho Bodega. En una transacción relee
+  // el ticket y solo escribe si TODAVÍA cumple requiereValidacionSimpleBodega
+  // (por si cambió desde que se cargó la bandeja). Devuelve el ticket real.
+  Future<TicketModel> actualizarCamposConGuardaValidacionSimpleBodega({
+    required String ticketId,
+    required Map<String, dynamic> campos,
+  });
+
+  // 🛒 Relee el ticket en una transacción y escribe lo que calcule
+  // [calcular] a partir del ticket actual: los campos del ticket y, si hay,
+  // documentos nuevos de inventario_bodega (solo se crean si no existen).
+  // Las excepciones que lance [calcular] se propagan tal cual.
+  Future<TicketModel> actualizarEnTransaccion({
+    required String ticketId,
+    required ({Map<String, dynamic> campos, List<Map<String, dynamic>> inventarioNuevos}) Function(TicketModel actual)
+        calcular,
+  });
 
   // NUEVO: guarda las evidencias fotograficas de un despacho de bodega Y,
   // en la MISMA transaccion de Firestore, descuenta el stock de

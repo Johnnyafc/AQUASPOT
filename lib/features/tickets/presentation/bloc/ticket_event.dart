@@ -1,3 +1,4 @@
+import '../../domain/entities/cambio_material_entity.dart';
 import 'package:aquaspot_postventa/core/enum/marca_equipo.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/item_compra_entity.dart';
 import 'package:equatable/equatable.dart';
@@ -8,7 +9,11 @@ import '../../domain/entities/evento_auditoria_entity.dart';
 import '../../domain/entities/item_despacho_bodega_entity.dart';
 import '../../domain/entities/registro_despacho_entity.dart';
 import '../../domain/entities/orden_recepcion_repuestos_entity.dart';
+import '../../domain/entities/linea_repuesto_venta_entity.dart';
+import '../models/archivos_linea_venta.dart';
+import '../../domain/usecases/registrar_codigos_creados_usecase.dart' show CodigoCreado;
 import '../../../../core/enum/ticket_enums.dart'; 
+import '../../../../core/enum/proceso_auditoria.dart';
 import '../../../../core/enum/segmento_operativo.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../domain/entities/actividad_evaluacion_seleccionada.dart';
@@ -153,17 +158,188 @@ class CrearTicketEvent extends TicketEvent {
       ];
 }
 
+// 🛒 Creación de un requerimiento de Venta de Repuesto. Usa el mismo
+// contador consecutivo (metadata/contadores) que Reparación/Garantía, pero
+// sin acta PDF. El estado destino lo decide RuteoVentaRepuestoService:
+//   - alguna línea por determinar → recepcionFisica (Evaluación técnica)
+//   - todas las líneas con stock → comercial
+//   - alguna sin stock / fuera del sistema → cotizandoRepuesto
+// Las líneas ya vienen con stockDisponibleAlEvaluar llenado por la pantalla.
+class CrearVentaRepuestoEvent extends TicketEvent {
+  final String clienteId;
+  final String campamento;
+  final String nombreContacto;
+  final String telefonoContacto;
+  final String emailContacto;
+  final MedioContacto medioContacto;
+  final TipoEquipo segmento; // "Este repuesto es de:"
+  final List<LineaRepuestoVentaEntity> lineas;
+  final List<ArchivosLineaVenta> archivosPorLinea;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const CrearVentaRepuestoEvent({
+    required this.clienteId,
+    required this.campamento,
+    required this.nombreContacto,
+    required this.telefonoContacto,
+    required this.emailContacto,
+    required this.medioContacto,
+    required this.segmento,
+    required this.lineas,
+    this.archivosPorLinea = const [],
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [
+        clienteId, campamento, nombreContacto, telefonoContacto, emailContacto,
+        medioContacto, segmento, lineas, archivosPorLinea,
+        nombreUsuario, rolUsuario,
+      ];
+}
+
+// 🛒 Compras adjunta la cotización de una Venta de Repuesto sin stock
+// (estado cotizandoRepuesto) → el requerimiento pasa a comercial (Proforma).
+class AdjuntarCotizacionVentaRepuestoEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final List<PlatformFile> archivos;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const AdjuntarCotizacionVentaRepuestoEvent({
+    required this.ticket,
+    required this.archivos,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, archivos, nombreUsuario, rolUsuario];
+}
+
+// 🔧 Evaluación de Venta de Repuesto (supervisor): `lineas` ya viene con
+// todas las líneas definidas (ninguna por determinar) y el stock recalculado
+// por la pantalla. `cotizacionesPorLinea` va en la misma posición que su
+// línea: archivos de la cotización del proveedor (repuesto fuera del
+// sistema). El destino lo decide RuteoVentaRepuestoService.
+class FinalizarEvaluacionVentaRepuestoEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final List<LineaRepuestoVentaEntity> lineas;
+  final List<List<PlatformFile>> cotizacionesPorLinea;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const FinalizarEvaluacionVentaRepuestoEvent({
+    required this.ticket,
+    required this.lineas,
+    this.cotizacionesPorLinea = const [],
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, lineas, cotizacionesPorLinea, nombreUsuario, rolUsuario];
+}
+
+// 🛒 Comercial guarda la lista de repuestos editada de una Venta de Repuesto
+// (agregar desde el sistema, quitar, cambiar cantidad).
+class GuardarRepuestosVentaComercialEvent extends TicketEvent {
+  final String ticketId;
+  final List<LineaRepuestoVentaEntity> lineas;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const GuardarRepuestosVentaComercialEvent({
+    required this.ticketId,
+    required this.lineas,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticketId, lineas, nombreUsuario, rolUsuario];
+}
+
+// 🧾 Proformas enviadas: el cliente aceptó la proforma de una venta con
+// repuestos que no están en el sistema → pasa a Costos (crear códigos).
+class ConfirmarAceptacionClienteVentaEvent extends TicketEvent {
+  final String ticketId;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const ConfirmarAceptacionClienteVentaEvent({
+    required this.ticketId,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticketId, nombreUsuario, rolUsuario];
+}
+
+// 🧾 Costos registra los códigos oficiales creados en el ERP.
+class RegistrarCodigosCreadosEvent extends TicketEvent {
+  final String ticketId;
+  final List<CodigoCreado> codigos;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const RegistrarCodigosCreadosEvent({
+    required this.ticketId,
+    required this.codigos,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticketId, codigos, nombreUsuario, rolUsuario];
+}
+
+// 🔎 El administrador marca una inconsistencia de trazabilidad como revisada
+// (correcta); deja de mostrarse en la sección del dashboard.
+class MarcarInconsistenciaRevisadaEvent extends TicketEvent {
+  final String ticketId;
+  final String clave;
+
+  const MarcarInconsistenciaRevisadaEvent({required this.ticketId, required this.clave});
+
+  @override
+  List<Object?> get props => [ticketId, clave];
+}
+
+// 📦 Despacho Bodega -- validación simple: tickets en bodega que no pueden
+// seguir el despacho por ítems (ver TicketEntity.requiereValidacionSimpleBodega).
+// Bodega confirma y el ticket pasa a Proceso de Trabajo.
+class ValidarDespachoSimpleBodegaEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const ValidarDespachoSimpleBodegaEvent({
+    required this.ticket,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, nombreUsuario, rolUsuario];
+}
+
 // 3. Etapa 2: Técnico en el taller emite su diagnóstico
 class ActualizarEvaluacionEvent extends TicketEvent {
   final TicketEntity ticket;
   // NUEVO: si viene, se agrega via arrayUnion a historialEventos en Firestore
   // (solo se usa en el camino con candado de estado -- ver ticket_bloc.dart).
   final EventoAuditoriaEntity? eventoAuditoria;
+  // 🧾 Cambios de materiales de Comercial (registro aparte de la auditoría).
+  final List<CambioMaterialEntity> cambiosMateriales;
 
-  const ActualizarEvaluacionEvent({required this.ticket, this.eventoAuditoria});
+  const ActualizarEvaluacionEvent({required this.ticket, this.eventoAuditoria, this.cambiosMateriales = const []});
 
   @override
-  List<Object?> get props => [ticket, eventoAuditoria];
+  List<Object?> get props => [ticket, eventoAuditoria, cambiosMateriales];
 }
 
 // 4. Etapa 3: Gatillo final para Firebase y el Webhook de Python
@@ -257,6 +433,11 @@ class ProcesarCotizacionEvent extends TicketEvent {
   final String observacion;
   final String nombreUsuario;
   final String rolUsuario;
+  // 🧾 Cambios de materiales aún no guardados (registro aparte de la auditoría).
+  final List<CambioMaterialEntity> cambiosMateriales;
+  // Si el ticket regresó a Comercial: total de cambios de materiales desde
+  // que se abrió la pantalla (va en el único evento de auditoría). null si no.
+  final int? cambiosTrasRegreso;
 
   const ProcesarCotizacionEvent({
     required this.ticket,
@@ -265,11 +446,13 @@ class ProcesarCotizacionEvent extends TicketEvent {
     required this.observacion,
     required this.nombreUsuario,
     required this.rolUsuario,
+    this.cambiosMateriales = const [],
+    this.cambiosTrasRegreso,
   });
 
   @override
   List<Object?> get props => [
-    ticket, archivosPdf, archivosExcel, observacion, nombreUsuario, rolUsuario
+    ticket, archivosPdf, archivosExcel, observacion, nombreUsuario, rolUsuario, cambiosMateriales, cambiosTrasRegreso
   ];
 }
 class ObtenerTicketsEvent extends TicketEvent {
@@ -486,6 +669,10 @@ class ActualizarEstadoTicketEvent extends TicketEvent {
   final String accionAuditoria;
   final String nombreUsuario;
   final String rolUsuario;
+  // 🏷️ Trazabilidad por proceso (opcional, ver proceso_auditoria.dart).
+  final ProcesoAuditoria? proceso;
+  final HitoProceso? hito;
+  final List<ProcesoAuditoria> habilita;
 
   const ActualizarEstadoTicketEvent({
     required this.ticket,
@@ -493,10 +680,13 @@ class ActualizarEstadoTicketEvent extends TicketEvent {
     required this.accionAuditoria,
     required this.nombreUsuario,
     required this.rolUsuario,
+    this.proceso,
+    this.hito,
+    this.habilita = const [],
   });
 
   @override
-  List<Object> get props => [ticket, nuevoEstado, accionAuditoria, nombreUsuario, rolUsuario];
+  List<Object?> get props => [ticket, nuevoEstado, accionAuditoria, nombreUsuario, rolUsuario, proceso, hito, habilita];
 }
 
 class SeleccionarTipoGarantiaEvent extends TicketEvent {
@@ -699,6 +889,50 @@ class RegistrarDespachoBodegaEvent extends TicketEvent {
   List<Object?> get props => [ticket, itemsActualizados, nuevoRegistro, nombreUsuario, rolUsuario];
 }
 
+// 📦 PICKING EN BODEGA (ver EstadoDespachoService)
+class IniciarPickingEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const IniciarPickingEvent({
+    required this.ticket,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, nombreUsuario, rolUsuario];
+}
+
+/// Cierra el picking (todo despachado y con evidencia) y pasa el ticket a
+/// Proceso de Trabajo.
+class FinalizarPickingEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const FinalizarPickingEvent({
+    required this.ticket,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, nombreUsuario, rolUsuario];
+}
+
+/// Escribe en Firestore el estado de despacho deducido de los tickets que
+/// aún no tienen el campo `estadoDespacho` (ticketId → estado).
+class SincronizarEstadoDespachoEvent extends TicketEvent {
+  final Map<String, String> estadosPorTicket;
+
+  const SincronizarEstadoDespachoEvent(this.estadosPorTicket);
+
+  @override
+  List<Object?> get props => [estadosPorTicket];
+}
+
 class ActualizarEvidenciasDespachoEvent extends TicketEvent {
   final TicketEntity ticket;
   final String despachoId;
@@ -785,6 +1019,9 @@ class AsignarTecnicoRecepcionBodegaEvent extends TicketEvent {
   final String nombreSupervisor;
   final String rolSupervisor;
   final String? ordenId;
+  // 📦 Picking que se envía a retirar (cada retiro = un picking). null solo
+  // en tickets antiguos sin pickings registrados.
+  final String? pickingId;
 
   const AsignarTecnicoRecepcionBodegaEvent({
     required this.ticket,
@@ -793,10 +1030,32 @@ class AsignarTecnicoRecepcionBodegaEvent extends TicketEvent {
     required this.nombreSupervisor,
     required this.rolSupervisor,
     this.ordenId,
+    this.pickingId,
   });
 
   @override
-  List<Object?> get props => [ticket, tecnicoId, tecnicoNombre, nombreSupervisor, rolSupervisor, ordenId];
+  List<Object?> get props => [ticket, tecnicoId, tecnicoNombre, nombreSupervisor, rolSupervisor, ordenId, pickingId];
+}
+
+/// 🚫 Anula una orden de retiro pendiente (motivo obligatorio). Su picking
+/// vuelve a quedar listo para retiro.
+class AnularOrdenRecepcionEvent extends TicketEvent {
+  final TicketEntity ticket;
+  final String ordenId;
+  final String motivo;
+  final String nombreUsuario;
+  final String rolUsuario;
+
+  const AnularOrdenRecepcionEvent({
+    required this.ticket,
+    required this.ordenId,
+    required this.motivo,
+    required this.nombreUsuario,
+    required this.rolUsuario,
+  });
+
+  @override
+  List<Object?> get props => [ticket, ordenId, motivo, nombreUsuario, rolUsuario];
 }
 
 class ConfirmarRecepcionRepuestosTecnicoEvent extends TicketEvent {
@@ -806,6 +1065,9 @@ class ConfirmarRecepcionRepuestosTecnicoEvent extends TicketEvent {
   final String nombreTecnico;
   final String rolTecnico;
   final String? observacion;
+  // 📸 Evidencia obligatoria del retiro.
+  final List<XFile> fotosHojaFirmada;
+  final List<XFile> fotosMateriales;
 
   const ConfirmarRecepcionRepuestosTecnicoEvent({
     required this.ticket,
@@ -814,10 +1076,13 @@ class ConfirmarRecepcionRepuestosTecnicoEvent extends TicketEvent {
     required this.nombreTecnico,
     required this.rolTecnico,
     this.observacion,
+    required this.fotosHojaFirmada,
+    required this.fotosMateriales,
   });
 
   @override
-  List<Object?> get props => [ticket, ordenId, itemsValidados, nombreTecnico, rolTecnico, observacion];
+  List<Object?> get props =>
+      [ticket, ordenId, itemsValidados, nombreTecnico, rolTecnico, observacion, fotosHojaFirmada, fotosMateriales];
 }
 
 class ValidarMaterialesRecibidosSupervisorEvent extends TicketEvent {
@@ -850,7 +1115,7 @@ class ValidarConsumoOrdenTallerEvent extends TicketEvent {
 
   @override
   List<Object?> get props => [ticket, ordenId, nombreSupervisor, rolSupervisor];
-}
+}
 
 // ==========================================
 // MODULO ADMIN: CAMBIO DE ESTADO MANUAL SIN RESTRICCIONES

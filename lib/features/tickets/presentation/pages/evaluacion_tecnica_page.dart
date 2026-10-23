@@ -1,7 +1,12 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:aquaspot_postventa/core/services/archivos_borrador_store.dart';
 import 'package:aquaspot_postventa/core/services/borrador_storage_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_picker/file_picker.dart' as fp;
 import 'package:image_picker/image_picker.dart';
@@ -16,6 +21,7 @@ import '../../../../core/enum/rol_usuario.dart';
 import '../../../catalogo/domain/entities/item_catalogo_entity.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/entities/actividad_evaluacion_seleccionada.dart';
+import '../../domain/services/borrador_evaluacion_codec.dart';
 import '../widgets/copy_icon_button_widget.dart';
 import '../widgets/tarjeta_no_requiere_compras_widget.dart';
 
@@ -64,6 +70,28 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
   final ImagePicker _imagePicker = ImagePicker();
   bool _generandoDocumentos = false;
 
+  // 💾 BORRADOR LOCAL: todo se guarda solo (tras ~1 s sin cambios) y se
+  // restaura al volver: actividades de Caracol (horas, hallazgo, repuestos
+  // editados y FOTOS), compras y archivos. Los archivos van a IndexedDB en
+  // web (ArchivosBorradorStore, sin el límite de ~5 MB) y en el celular
+  // con la lógica de BorradorStorageService (base64 hasta 4 MB + ruta).
+  static const Duration _pausaGuardado = Duration(seconds: 1);
+  static const Duration _edadMaximaBorrador = Duration(days: 30);
+  Timer? _timerGuardado;
+  Future<void> _colaGuardado = Future.value();
+  bool _borradorCargado = false; // no guardar antes de restaurar
+  bool _borradorFinalizado = false; // enviado con éxito: no volver a guardar
+  int _contadorArchivos = 0;
+  // Referencia ya guardada de cada foto/archivo (por identidad del objeto),
+  // para no volver a escribirlo en cada guardado.
+  final Expando<Map<String, dynamic>> _refsArchivos = Expando('refsArchivosBorrador');
+
+  String get _claveBorrador => BorradorStorageService.claveDraftEvaluacion(widget.ticket.id);
+  String get _prefijoArchivos => 'evaluacion_${widget.ticket.id}/';
+  bool get _necesitaComprasInicial => !widget.ticket.noRequiereCompras;
+  String get _motivoInicial =>
+      widget.ticket.noRequiereCompras ? (widget.ticket.motivoNoRequiereCompras ?? '') : '';
+
   @override
   void initState() {
     super.initState();
@@ -77,33 +105,232 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
     _observacionController.addListener(_guardarBorrador);
     _motivoNoComprasController.addListener(_guardarBorrador);
     _cargarBorradorLocal();
+    _limpiarBorradoresAntiguos();
 
     if (_esCaracol) {
       context.read<CatalogoBloc>().add(const CargarCatalogoPorEquipoEvent('caracol'));
     }
   }
 
+  /// Cualquier cambio de la pantalla programa el guardado del borrador.
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    _guardarBorrador();
+  }
+
+  /// Programa el guardado (espera una pausa para no guardar en cada tecla).
   void _guardarBorrador() {
-    BorradorStorageService.guardarBorrador(
-      clave: BorradorStorageService.claveDraftEvaluacion(widget.ticket.id),
-      datos: {
-        'observacion': _observacionController.text,
-        'motivoNoCompras': _motivoNoComprasController.text,
-        'necesitaCompras': _necesitaCompras,
-        'proformaExcelPath': _proformaExcel?.path,
-        'adjuntosPdfPaths': BorradorStorageService.platformFilesToPaths(_adjuntosPdf),
-        'documentoOVPath': _documentoOVGarantia?.path,
-        'documentoRevisionAntiguaPath': _documentoRevisionAntigua?.path,
-      },
-    );
+    if (!_borradorCargado || _borradorFinalizado) return;
+    _timerGuardado?.cancel();
+    _timerGuardado = Timer(_pausaGuardado, _encolarGuardado);
+  }
+
+  /// Toma una foto del estado AHORA (sincrónico) y la guarda en cola, un
+  /// guardado a la vez.
+  void _encolarGuardado() {
+    if (_borradorFinalizado) return;
+    final vacio = _actividadesCaracol.isEmpty &&
+        _observacionController.text.trim().isEmpty &&
+        _proformaExcel == null &&
+        _adjuntosPdf.isEmpty &&
+        _documentoOVGarantia == null &&
+        _documentoRevisionAntigua == null &&
+        _necesitaCompras == _necesitaComprasInicial &&
+        _motivoNoComprasController.text.trim() == _motivoInicial.trim();
+    final datos = <String, dynamic>{
+      'version': 2,
+      'observacion': _observacionController.text,
+      'motivoNoCompras': _motivoNoComprasController.text,
+      'necesitaCompras': _necesitaCompras,
+    };
+    final actividades = [
+      for (final a in _actividadesCaracol) (BorradorEvaluacionCodec.actividadToJson(a), List<XFile>.from(a.fotos)),
+    ];
+    final proforma = _proformaExcel;
+    final adjuntos = List<fp.PlatformFile>.from(_adjuntosPdf);
+    final ov = _documentoOVGarantia;
+    final revision = _documentoRevisionAntigua;
+
+    _colaGuardado = _colaGuardado.then((_) async {
+      if (_borradorFinalizado) return;
+      if (vacio) {
+        await BorradorStorageService.eliminarBorrador(_claveBorrador);
+        await ArchivosBorradorStore.eliminarPrefijo(_prefijoArchivos);
+        return;
+      }
+      final actividadesJson = <Map<String, dynamic>>[];
+      for (final (json, fotos) in actividades) {
+        final refs = <Map<String, dynamic>>[];
+        for (final f in fotos) {
+          final ref = await _refFoto(f);
+          if (ref != null) refs.add(ref);
+        }
+        json['fotos'] = refs;
+        actividadesJson.add(json);
+      }
+      final refsAdjuntos = <Map<String, dynamic>>[];
+      for (final f in adjuntos) {
+        final ref = await _refArchivo(f);
+        if (ref != null) refsAdjuntos.add(ref);
+      }
+      datos['actividadesCaracol'] = actividadesJson;
+      datos['adjuntosPdf'] = refsAdjuntos;
+      datos['proformaExcel'] = proforma == null ? null : await _refArchivo(proforma);
+      datos['documentoOV'] = ov == null ? null : await _refArchivo(ov);
+      datos['documentoRevisionAntigua'] = revision == null ? null : await _refArchivo(revision);
+      if (_borradorFinalizado) return;
+
+      await BorradorStorageService.guardarBorrador(clave: _claveBorrador, datos: datos);
+
+      if (ArchivosBorradorStore.disponible) {
+        await ArchivosBorradorStore.marcarActividad(_prefijoArchivos);
+        // Quitar del almacén las fotos/archivos que ya no están en el borrador.
+        final usadas = <String>{
+          for (final act in actividadesJson)
+            for (final f in act['fotos'] as List) if ((f as Map)['idb'] is String) f['idb'] as String,
+          for (final f in [...refsAdjuntos, datos['proformaExcel'], datos['documentoOV'], datos['documentoRevisionAntigua']])
+            if (f is Map && f['idb'] is String) f['idb'] as String,
+        };
+        for (final clave in await ArchivosBorradorStore.listarClaves(_prefijoArchivos)) {
+          if (!usadas.contains(clave)) await ArchivosBorradorStore.eliminar(clave);
+        }
+      }
+    }).catchError((_) {});
+  }
+
+  Future<Map<String, dynamic>?> _guardarEnAlmacen(Uint8List bytes, String nombre) async {
+    final clave = '$_prefijoArchivos${DateTime.now().microsecondsSinceEpoch}-${_contadorArchivos++}';
+    if (!await ArchivosBorradorStore.guardar(clave, bytes)) return null;
+    return {'name': nombre, 'size': bytes.length, 'idb': clave};
+  }
+
+  Future<Map<String, dynamic>?> _refFoto(XFile foto) async {
+    final cache = _refsArchivos[foto];
+    if (cache != null) return cache;
+    Map<String, dynamic>? ref;
+    if (ArchivosBorradorStore.disponible) {
+      try {
+        ref = await _guardarEnAlmacen(await foto.readAsBytes(), foto.name.isNotEmpty ? foto.name : 'foto.jpg');
+      } catch (_) {}
+    } else {
+      ref = await BorradorStorageService.xFileToJson(foto);
+    }
+    if (ref != null) _refsArchivos[foto] = ref;
+    return ref;
+  }
+
+  Future<Map<String, dynamic>?> _refArchivo(fp.PlatformFile archivo) async {
+    final cache = _refsArchivos[archivo];
+    if (cache != null) return cache;
+    Map<String, dynamic>? ref;
+    if (ArchivosBorradorStore.disponible) {
+      final bytes = archivo.bytes;
+      if (bytes != null) ref = await _guardarEnAlmacen(bytes, archivo.name);
+    } else {
+      ref = BorradorStorageService.platformFileToJson(archivo);
+    }
+    if (ref != null) _refsArchivos[archivo] = ref;
+    return ref;
+  }
+
+  Future<XFile?> _fotoDesdeRef(Map<String, dynamic> ref) async {
+    XFile? foto;
+    final idb = ref['idb'] as String?;
+    if (idb != null) {
+      final bytes = await ArchivosBorradorStore.leer(idb);
+      if (bytes != null) foto = XFile.fromData(bytes, name: ref['name'] as String? ?? 'foto.jpg', length: bytes.length);
+    } else if (kIsWeb) {
+      foto = BorradorStorageService.jsonToXFile(ref);
+    } else {
+      // Celular: la ruta original si sigue existiendo; si no, se recrea el
+      // archivo desde el base64 (la miniatura de la foto lee la ruta).
+      final path = ref['path'] as String?;
+      final b64 = ref['base64'] as String?;
+      if (path != null && path.isNotEmpty && File(path).existsSync()) {
+        foto = XFile(path, name: ref['name'] as String?);
+      } else if (b64 != null && b64.isNotEmpty) {
+        try {
+          final nombre = (ref['name'] as String? ?? 'foto.jpg').replaceAll(RegExp(r'[\\/]'), '_');
+          final archivo = File('${Directory.systemTemp.path}${Platform.pathSeparator}'
+              'borrador_${DateTime.now().microsecondsSinceEpoch}_$nombre');
+          await archivo.writeAsBytes(base64Decode(b64));
+          foto = XFile(archivo.path, name: ref['name'] as String?);
+        } catch (_) {}
+      }
+    }
+    if (foto != null) _refsArchivos[foto] = ref;
+    return foto;
+  }
+
+  Future<fp.PlatformFile?> _archivoDesdeRef(dynamic json) async {
+    if (json is! Map) return null;
+    final ref = Map<String, dynamic>.from(json);
+    fp.PlatformFile? archivo;
+    final idb = ref['idb'] as String?;
+    if (idb != null) {
+      final bytes = await ArchivosBorradorStore.leer(idb);
+      if (bytes != null) {
+        archivo = fp.PlatformFile(name: ref['name'] as String? ?? 'archivo', size: bytes.length, bytes: bytes);
+      }
+    } else {
+      archivo = BorradorStorageService.jsonToPlatformFile(ref);
+    }
+    if (archivo != null) _refsArchivos[archivo] = ref;
+    return archivo;
   }
 
   Future<void> _cargarBorradorLocal() async {
-    final draft = await BorradorStorageService.obtenerBorrador(
-      BorradorStorageService.claveDraftEvaluacion(widget.ticket.id),
-    );
-    if (draft != null && mounted) {
-      setState(() {
+    try {
+      final draft = await BorradorStorageService.obtenerBorrador(_claveBorrador);
+      if (draft == null || !mounted) return;
+
+      // Se lee todo (incluidas las fotos) antes de pintar.
+      var perdidos = 0;
+      final actividades = <ActividadEvaluacionSeleccionada>[];
+      for (final raw in (draft['actividadesCaracol'] as List<dynamic>? ?? const [])) {
+        final act = BorradorEvaluacionCodec.actividadFromJson(raw);
+        if (act == null) continue;
+        for (final ref in BorradorEvaluacionCodec.fotosDeJson(raw)) {
+          final foto = await _fotoDesdeRef(ref);
+          if (foto != null) {
+            act.fotos.add(foto);
+          } else {
+            perdidos++;
+          }
+        }
+        actividades.add(act);
+      }
+
+      Future<fp.PlatformFile?> archivo(String clave, String claveRutaAntigua) async {
+        if (draft.containsKey(clave)) {
+          if (draft[clave] == null) return null;
+          final a = await _archivoDesdeRef(draft[clave]);
+          if (a == null) perdidos++;
+          return a;
+        }
+        return BorradorStorageService.pathToPlatformFile(draft[claveRutaAntigua] as String?);
+      }
+
+      final proforma = await archivo('proformaExcel', 'proformaExcelPath');
+      final ov = await archivo('documentoOV', 'documentoOVPath');
+      final revision = await archivo('documentoRevisionAntigua', 'documentoRevisionAntiguaPath');
+      final adjuntos = <fp.PlatformFile>[];
+      if (draft['adjuntosPdf'] is List) {
+        for (final ref in draft['adjuntosPdf'] as List) {
+          final a = await _archivoDesdeRef(ref);
+          if (a != null) {
+            adjuntos.add(a);
+          } else {
+            perdidos++;
+          }
+        }
+      } else if (draft['adjuntosPdfPaths'] is List) {
+        adjuntos.addAll(BorradorStorageService.pathsToPlatformFiles(draft['adjuntosPdfPaths'] as List));
+      }
+      if (!mounted) return;
+
+      super.setState(() {
         if (draft['observacion'] != null && (draft['observacion'] as String).isNotEmpty) {
           _observacionController.text = draft['observacion'] as String;
         }
@@ -113,34 +340,137 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
         if (draft['necesitaCompras'] != null) {
           _necesitaCompras = draft['necesitaCompras'] as bool;
         }
-        if (draft['proformaExcelPath'] != null) {
-          _proformaExcel = BorradorStorageService.pathToPlatformFile(draft['proformaExcelPath'] as String);
+        if (draft.containsKey('actividadesCaracol')) {
+          _actividadesCaracol
+            ..clear()
+            ..addAll(actividades);
         }
-        if (draft['adjuntosPdfPaths'] != null && draft['adjuntosPdfPaths'] is List) {
-          final pdfs = BorradorStorageService.pathsToPlatformFiles(draft['adjuntosPdfPaths'] as List);
-          _adjuntosPdf.clear();
-          _adjuntosPdf.addAll(pdfs);
-        }
-        if (draft['documentoOVPath'] != null) {
-          _documentoOVGarantia = BorradorStorageService.pathToPlatformFile(draft['documentoOVPath'] as String);
-        }
-        if (draft['documentoRevisionAntiguaPath'] != null) {
-          _documentoRevisionAntigua = BorradorStorageService.pathToPlatformFile(draft['documentoRevisionAntiguaPath'] as String);
-        }
+        _proformaExcel = proforma;
+        _documentoOVGarantia = ov;
+        _documentoRevisionAntigua = revision;
+        _adjuntosPdf
+          ..clear()
+          ..addAll(adjuntos);
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('💾 Borrador de evaluación restaurado del almacenamiento local.'),
-          backgroundColor: Color(0xFF005A9C),
-          duration: Duration(seconds: 3),
+        SnackBar(
+          content: Text(perdidos == 0
+              ? '💾 Borrador de evaluación restaurado del almacenamiento local.'
+              : '💾 Borrador de evaluación restaurado. ⚠️ $perdidos foto(s)/archivo(s) no se pudieron recuperar.'),
+          backgroundColor: const Color(0xFF005A9C),
+          duration: Duration(seconds: perdidos == 0 ? 3 : 6),
         ),
       );
+    } catch (_) {
+      // Un borrador dañado no debe impedir trabajar.
+    } finally {
+      _borradorCargado = true;
     }
+  }
+
+  /// Borra los borradores de evaluación sin tocar hace más de 30 días
+  /// (de otros tickets; nunca el que está abierto).
+  Future<void> _limpiarBorradoresAntiguos() async {
+    try {
+      await ArchivosBorradorStore.solicitarPersistencia();
+      final prefijoClave = BorradorStorageService.claveDraftEvaluacion('');
+      final prefs = await SharedPreferences.getInstance();
+
+      final prefijosWeb = await ArchivosBorradorStore.limpiarAntiguos(
+        _edadMaximaBorrador,
+        excluirPrefijo: _prefijoArchivos,
+      );
+      for (final p in prefijosWeb) {
+        if (p.startsWith('evaluacion_') && p.endsWith('/')) {
+          await prefs.remove('$prefijoClave${p.substring('evaluacion_'.length, p.length - 1)}');
+        }
+      }
+
+      final limite = DateTime.now().subtract(_edadMaximaBorrador);
+      for (final clave in prefs.getKeys().where((k) => k.startsWith(prefijoClave)).toList()) {
+        if (clave == _claveBorrador) continue;
+        DateTime? fecha;
+        try {
+          final json = jsonDecode(prefs.getString(clave) ?? '');
+          if (json is Map) fecha = DateTime.tryParse(json['timestampUltimaModificacion'] as String? ?? '');
+        } catch (_) {}
+        if (fecha != null && fecha.isBefore(limite)) {
+          await prefs.remove(clave);
+          await ArchivosBorradorStore.eliminarPrefijo('evaluacion_${clave.substring(prefijoClave.length)}/');
+        }
+      }
+    } catch (_) {}
+  }
+
+  /// Evaluación enviada con éxito: se borra el borrador y sus archivos.
+  void _finalizarBorrador() {
+    _borradorFinalizado = true;
+    _timerGuardado?.cancel();
+    _colaGuardado.whenComplete(() {
+      BorradorStorageService.eliminarBorrador(_claveBorrador);
+      ArchivosBorradorStore.eliminarPrefijo(_prefijoArchivos);
+    });
+  }
+
+  Future<void> _confirmarDescartarBorrador() async {
+    final bool? confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.delete_sweep, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Descartar Borrador'),
+          ],
+        ),
+        content: const Text(
+          '¿Desea eliminar el borrador de esta evaluación guardado en este dispositivo? '
+          'Se quitarán las actividades, fotos, repuestos editados, observaciones y archivos.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Descartar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true || !mounted) return;
+
+    _timerGuardado?.cancel();
+    await _colaGuardado;
+    await BorradorStorageService.eliminarBorrador(_claveBorrador);
+    await ArchivosBorradorStore.eliminarPrefijo(_prefijoArchivos);
+    if (!mounted) return;
+
+    _borradorCargado = false; // que el reinicio no vuelva a guardar
+    super.setState(() {
+      _actividadesCaracol.clear();
+      _adjuntosPdf.clear();
+      _proformaExcel = null;
+      _documentoOVGarantia = null;
+      _documentoRevisionAntigua = null;
+      _necesitaCompras = _necesitaComprasInicial;
+    });
+    _observacionController.clear();
+    _motivoNoComprasController.text = _motivoInicial;
+    _borradorCargado = true;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('🗑️ Borrador de evaluación descartado.')),
+    );
   }
 
   @override
   void dispose() {
+    // Si quedó un guardado pendiente (se salió antes de la pausa), se hace ya.
+    if (_timerGuardado?.isActive ?? false) {
+      _timerGuardado!.cancel();
+      _encolarGuardado();
+    }
     _observacionController.removeListener(_guardarBorrador);
     _motivoNoComprasController.removeListener(_guardarBorrador);
     _observacionController.dispose();
@@ -473,13 +803,18 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
         title: Text("Evaluación Técnica: ${widget.ticket.id}"),
         backgroundColor: const Color(0xFF005A9C),
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            tooltip: 'Descartar Borrador',
+            onPressed: _generandoDocumentos ? null : _confirmarDescartarBorrador,
+          ),
+        ],
       ),
       body: BlocConsumer<TicketBloc, TicketState>(
         listener: (context, state) {
           if (state.status == TicketStatus.operationSuccess) {
-            BorradorStorageService.eliminarBorrador(
-              BorradorStorageService.claveDraftEvaluacion(widget.ticket.id),
-            );
+            _finalizarBorrador();
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text("✅ Evaluación técnica procesada con éxito"), backgroundColor: Colors.green),
             );

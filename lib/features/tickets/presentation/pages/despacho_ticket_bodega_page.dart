@@ -7,6 +7,8 @@ import 'package:printing/printing.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/entities/item_despacho_bodega_entity.dart';
 import '../../domain/entities/registro_despacho_entity.dart';
+import '../../domain/services/flujo_venta_repuesto_service.dart';
+import '../../../../core/enum/ticket_enums.dart';
 import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_event.dart';
 import '../bloc/ticket_state.dart';
@@ -45,6 +47,11 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
     _tabController = TabController(length: 3, vsync: this);
     _sincronizarItemsConTicket(widget.ticket);
   }
+
+  /// 🛒 Textos de Venta de Repuesto (preparar pedido / guía firmada);
+  /// reparación queda igual que antes.
+  String _t(TicketEntity t, String reparacion, String venta) =>
+      FlujoVentaRepuestoService.esVenta(t) ? venta : reparacion;
 
   void _sincronizarItemsConTicket(TicketEntity ticket) {
     // 🔍 Sincronización en vivo con el catálogo de inventario en bodega
@@ -120,7 +127,14 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
     List<ItemDespachoBodegaEntity> originales,
     List<ItemDespachoBodegaEntity> recalculados,
   ) {
-    if (originales.isEmpty) return false;
+    // 🆕 Primera vez que el ticket llega a Bodega (todavia sin pasar
+    // por Compras): no hay nada guardado en el ticket, pero si hay ítems
+    // recalculados con stock real que vale la pena persistir -- si no lo
+    // hacemos aqui, Despacho depende de que alguien abra el ticket en
+    // Compras primero para que itemsDespachoBodega deje de estar vacio.
+    if (originales.isEmpty) {
+      return recalculados.isNotEmpty;
+    }
     final mapaOriginal = {for (final i in originales) i.codigo: i};
     for (final item in recalculados) {
       final original = mapaOriginal[item.codigo];
@@ -313,6 +327,51 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                     },
                   ),
                 ),
+                const SizedBox(height: 12),
+
+                // Formato 3: Solicitud de materiales COMPLETA (todo el ticket)
+                Material(
+                  color: const Color(0xFFFFF3E0),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    side: BorderSide(color: Colors.orange.shade100),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor: Color(0xFFE65100),
+                      child: Icon(Icons.list_alt, color: Colors.white, size: 20),
+                    ),
+                    title: const Text(
+                      '3. Solicitud de materiales (completo)',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    subtitle: const Text(
+                      'Incluye TODOS los repuestos del ticket: los ya entregados en cualquier despacho y los que aun faltan por completo.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      final seguro = await _mostrarDialogoConfirmacion(
+                        context: context,
+                        titulo: '¿Esta seguro de descargar la Solicitud de Materiales completa?',
+                        mensaje: 'Se generara el listado completo del ticket, con todos los repuestos entregados y pendientes hasta la fecha.',
+                        textoConfirmar: 'Si, Descargar Completo',
+                        colorConfirmar: const Color(0xFFE65100),
+                        icono: Icons.list_alt,
+                      );
+                      if (seguro == true) {
+                        final fuenteItems = ticket.itemsDespachoBodega.isNotEmpty ? ticket.itemsDespachoBodega : _items;
+                        final mapAcumulado = {for (final it in fuenteItems) it.codigo: it.cantidadDespachada};
+                        _descargarExcelSolicitudMateriales(
+                          ticket,
+                          items: fuenteItems,
+                          cantidadesDespachadasLote: mapAcumulado,
+                        );
+                      }
+                    },
+                  ),
+                ),
               ],
             ),
           ),
@@ -344,6 +403,7 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
 
   Future<void> _descargarExcelSolicitudMateriales(
     TicketEntity ticket, {
+    List<ItemDespachoBodegaEntity>? items,
     Map<String, double>? cantidadesDespachadasLote,
     String? codigoDespacho,
   }) async {
@@ -353,9 +413,17 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
       nombre = authState.usuario.nombre;
     }
 
+    // 🎯 Por defecto (sin 'items' explicito) la hoja solo incluye lo
+    // que esta seleccionado para despachar en este momento -- no todo el
+    // ticket ni lo ya entregado en lotes anteriores. Quien llama puede
+    // pasar su propio 'items' para otro alcance (reimpresion de un lote
+    // pasado, o la descarga completa del ticket).
+    final itemsParaHoja = items ??
+        _items.where((i) => _itemsSeleccionados.contains(i.codigo)).toList();
+
     final bytes = GeneradorExcelDespachoBodega.generarExcelSolicitudMateriales(
       ticket: ticket,
-      items: ticket.itemsDespachoBodega.isNotEmpty ? ticket.itemsDespachoBodega : _items,
+      items: itemsParaHoja,
       cantidadesDespachadasLote: cantidadesDespachadasLote ?? _cantidadesADespachar,
       nombreBodeguero: nombre,
     );
@@ -412,33 +480,40 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
 
     if (detalles.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Seleccione al menos un repuesto habilitado con cantidad mayor a 0 para despachar'),
+        SnackBar(
+          content: Text(_t(ticket, 'Seleccione al menos un repuesto con cantidad mayor a 0 para el picking',
+              'Seleccione al menos un repuesto con cantidad mayor a 0 para preparar el pedido')),
           backgroundColor: Colors.red,
         ),
       );
       return;
     }
 
+    // 🔢 CÓDIGO CONSECUTIVO DEL PICKING (los anteriores conservan "DESP").
+    final int correlativo = ticket.historialDespachos.length + 1;
+    final codigoDespacho = '${ticket.id}-PICK-${correlativo.toString().padLeft(2, '0')}';
+
     // 🛑 DIÁLOGO DE SEGURIDAD CRÍTICO: "¿Está seguro de...?"
     final confirmado = await _mostrarDialogoConfirmacion(
       context: context,
-      titulo: '¿Está seguro de confirmar el despacho?',
-      mensaje:
-          'Se confirmará la entrega física de ${detalles.length} repuesto(s) seleccionado(s).\n\n'
-          '1. Se registrará el despacho en el sistema.\n'
-          '2. Se descargarán inmediatamente los dos Excels (Baja ERP y Solicitud de Materiales).\n'
-          '3. Deberá subir obligatoriamente las fotos de evidencia (repuestos y documento de baja del ERP).',
-      textoConfirmar: 'Sí, Confirmar y Descargar',
+      titulo: _t(ticket, '¿Confirmar picking listo para retiro?', '¿Confirmar preparación del pedido?'),
+      mensaje: FlujoVentaRepuestoService.esVenta(ticket)
+          ? 'Se confirmará que ${detalles.length} repuesto(s) están preparados para el cliente.\n\n'
+              '1. Se registrará la preparación ($codigoDespacho).\n'
+              '2. Se descargarán inmediatamente los dos Excels (Baja ERP y Solicitud de Materiales).\n'
+              '3. Cuando todo esté preparado, pulse "Pasar a entrega" en la bandeja.\n'
+              '4. La guía firmada se sube al final, ya en Entrega.'
+          : 'Se confirmará que ${detalles.length} repuesto(s) están recolectados y listos para retiro.\n\n'
+              '1. Se registrará el picking parcial ($codigoDespacho).\n'
+              '2. Se descargarán inmediatamente los dos Excels (Baja ERP y Solicitud de Materiales).\n'
+              '3. Deberá subir obligatoriamente las fotos de evidencia (repuestos y documento de baja del ERP).\n'
+              '4. Se notificará a Proceso de Trabajo que puede enviar a retirar los repuestos.',
+      textoConfirmar: _t(ticket, 'Sí, confirmar picking y descargar', 'Sí, confirmar preparación y descargar'),
       colorConfirmar: const Color(0xFF2E7D32),
       icono: Icons.check_circle_outline,
     );
 
     if (confirmado != true) return;
-
-    // 🔢 CÓDIGO CONSECUTIVO DE DESPACHO
-    final int correlativo = ticket.historialDespachos.length + 1;
-    final codigoDespacho = '${ticket.id}-DESP-${correlativo.toString().padLeft(2, '0')}';
 
     final nuevoRegistro = RegistroDespachoEntity(
       id: codigoDespacho,
@@ -452,7 +527,12 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
     // 1. GENERACIÓN INMEDIATA Y DESCARGA DE AMBOS ARCHIVOS EXCEL
     try {
       await _descargarExcelBajaERP(ticket, itemsDespachados: detalles, codigoDespacho: codigoDespacho);
-      await _descargarExcelSolicitudMateriales(ticket, cantidadesDespachadasLote: _cantidadesADespachar, codigoDespacho: codigoDespacho);
+      await _descargarExcelSolicitudMateriales(
+        ticket,
+        items: _items.where((i) => _itemsSeleccionados.contains(i.codigo)).toList(),
+        cantidadesDespachadasLote: _cantidadesADespachar,
+        codigoDespacho: codigoDespacho,
+      );
     } catch (e) {
       debugPrint('Advertencia al descargar Excels: $e');
     }
@@ -470,7 +550,21 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
         );
 
     // 3. APERTURA AUTOMÁTICA DEL MODAL PARA SUBIR MÚLTIPLES EVIDENCIAS
-    _mostrarModalSubirEvidencias(ticket, nuevoRegistro, itemsActualizados);
+    // 🛒 Venta: la evidencia (guía firmada) se sube al final, ya en Entrega.
+    // Se cierra la ventana (como en reparación tras las fotos) para que la
+    // lista de repuestos no quede desactualizada y no se repita la preparación.
+    if (!FlujoVentaRepuestoService.esVenta(ticket)) {
+      _mostrarModalSubirEvidencias(ticket, nuevoRegistro, itemsActualizados);
+    } else if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Preparación registrada. Cuando todo esté preparado, pulse "Pasar a entrega".'),
+          backgroundColor: Color(0xFF2E7D32),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   // ===========================================================================
@@ -500,7 +594,7 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text(
-                  '⚠️ Despacho registrado. El ticket quedó BLOQUEADO hasta adjuntar fotos de evidencia.',
+                  '⚠️ Picking registrado. Quedó BLOQUEADO hasta adjuntar las fotos de evidencia.',
                 ),
                 backgroundColor: Colors.orange,
                 duration: Duration(seconds: 4),
@@ -514,7 +608,7 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
             Navigator.pop(context);
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('✅ Despacho y evidencias guardadas correctamente.'),
+                content: Text('✅ Picking listo para retiro. Se notificó a Proceso de Trabajo.'),
                 backgroundColor: Color(0xFF2E7D32),
                 duration: Duration(seconds: 3),
               ),
@@ -561,7 +655,9 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
         // 🛑 ENCLAVAMIENTO BLOQUEANTE:
         // Si hay algún despacho pendiente de regularizar fotos de evidencia,
         // la pantalla se bloquea exclusivamente en el Modo Regularización.
-        if (currentTicket.tieneDespachoPendienteDeEvidencia) {
+        if (currentTicket.tieneDespachoPendienteDeEvidencia &&
+            (!FlujoVentaRepuestoService.esVenta(currentTicket) ||
+                currentTicket.estadoActual == EstadoTicket.entrega)) {
           return _buildPantallaRegularizacionEvidencias(
             currentTicket,
             currentTicket.despachoPendienteDeEvidencia!,
@@ -577,7 +673,7 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
           backgroundColor: const Color(0xFFF4F6F9),
           appBar: AppBar(
             title: Text(
-              'Despachar: ${currentTicket.id}',
+              '${_t(currentTicket, 'Picking', 'Preparación de pedido')}: ${currentTicket.id}',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             backgroundColor: const Color(0xFF005A9C),
@@ -605,7 +701,7 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                 ),
                 Tab(
                   icon: const Icon(Icons.history, size: 18),
-                  text: 'Historial (${historial.length})',
+                  text: '${_t(currentTicket, 'Pickings realizados', 'Preparaciones realizadas')} (${historial.length})',
                 ),
               ],
             ),
@@ -680,7 +776,7 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                             : null,
                         icon: const Icon(Icons.check_circle),
                         label: Text(
-                          'Confirmar Despacho en Bodega (${_itemsSeleccionados.length} seleccionados)',
+                          '${_t(currentTicket, 'Confirmar picking listo', 'Confirmar preparación')} (${_itemsSeleccionados.length} repuestos)',
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                         style: ElevatedButton.styleFrom(
@@ -718,7 +814,7 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
       backgroundColor: const Color(0xFFFBF6EE),
       appBar: AppBar(
         title: Text(
-          '⚠️ Evidencia Pendiente: ${ticket.id}',
+          '${_t(ticket, '⚠️ Evidencia Pendiente', '📝 Guía firmada pendiente')}: ${ticket.id}',
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
         backgroundColor: Colors.orange.shade800,
@@ -744,10 +840,10 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                     children: [
                       Icon(Icons.warning_amber_rounded, color: Colors.orange.shade900, size: 28),
                       const SizedBox(width: 10),
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'DESPACHO CON EVIDENCIAS PENDIENTES',
-                          style: TextStyle(
+                          _t(ticket, 'PICKING CON EVIDENCIA PENDIENTE', 'SUBA LA GUÍA FIRMADA PARA FINALIZAR'),
+                          style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.bold,
                             color: Color(0xFFE65100),
@@ -758,8 +854,14 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'El despacho ${despacho.id} realizado el $fechaStr por ${despacho.usuarioNombre} no cuenta con fotos de evidencia de respaldo.\n\n'
-                    'Para continuar despachando otros repuestos, primero debe adjuntar la evidencia fotográfica (Foto de los repuestos alistados y foto del documento físico generado por el ERP).',
+                    _t(
+                      ticket,
+                      'El picking ${despacho.id} realizado el $fechaStr por ${despacho.usuarioNombre} no tiene fotos de evidencia.\n\n'
+                          'Para registrar otro picking, primero adjunte las fotos (repuestos alistados y documento físico generado por el ERP).',
+                      'Los repuestos de ${despacho.id} (preparados el $fechaStr por ${despacho.usuarioNombre}) ya se entregaron.\n\n'
+                          'Adjunte la guía de remisión FIRMADA por el cliente. Es el último paso: con la guía y la factura '
+                          'registradas en Entregas, el requerimiento pasa a Finalizado.',
+                    ),
                     style: const TextStyle(fontSize: 13, height: 1.4, color: Colors.black87),
                   ),
                 ],
@@ -783,7 +885,7 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Repuestos Despachados (${despacho.items.length}):',
+                          'Repuestos del picking (${despacho.items.length}):',
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                         ),
                         // Botones para re-descargar los Excels si necesita imprimir
@@ -797,7 +899,17 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                             TextButton.icon(
                               icon: const Icon(Icons.assignment, size: 14),
                               label: const Text('Solicitud', style: TextStyle(fontSize: 11)),
-                              onPressed: () => _descargarExcelSolicitudMateriales(ticket),
+                              onPressed: () {
+                                final fuenteItems = ticket.itemsDespachoBodega.isNotEmpty ? ticket.itemsDespachoBodega : _items;
+                                final codigosLote = despacho.items.map((it) => it.codigo).toSet();
+                                final itemsLote = fuenteItems.where((i) => codigosLote.contains(i.codigo)).toList();
+                                final mapCant = {for (final it in despacho.items) it.codigo: it.cantidad};
+                                _descargarExcelSolicitudMateriales(
+                                  ticket,
+                                  items: itemsLote,
+                                  cantidadesDespachadasLote: mapCant,
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -977,10 +1089,13 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                         final ticketBloc = context.read<TicketBloc>();
                         final seguro = await _mostrarDialogoConfirmacion(
                           context: context,
-                          titulo: '¿Está seguro de guardar las evidencias?',
-                          mensaje:
-                              'Se vincularán ${_fotosRegularizacion.length} foto(s) de soporte al despacho ${despacho.id} y se habilitará el despacho de los ítems restantes.',
-                          textoConfirmar: 'Sí, Guardar Evidencias',
+                          titulo: _t(ticket, '¿Está seguro de guardar las evidencias?', '¿Guardar la guía firmada?'),
+                          mensaje: _t(
+                            ticket,
+                            'Se vincularán ${_fotosRegularizacion.length} foto(s) al picking ${despacho.id}; quedará listo para retiro y podrá registrar otro picking.',
+                            'Se vincularán ${_fotosRegularizacion.length} archivo(s) de la guía firmada a ${despacho.id}.',
+                          ),
+                          textoConfirmar: _t(ticket, 'Sí, Guardar Evidencias', 'Sí, guardar guía firmada'),
                           colorConfirmar: const Color(0xFF2E7D32),
                           icono: Icons.cloud_upload_outlined,
                         );
@@ -1008,10 +1123,11 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                           if (mounted) {
                             Navigator.pop(context);
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('✅ Despacho regularizado y desbloqueado exitosamente.'),
-                                backgroundColor: Color(0xFF2E7D32),
-                                duration: Duration(seconds: 3),
+                              SnackBar(
+                                content: Text(_t(ticket, '✅ Evidencia guardada. Picking listo para retiro.',
+                                    '✅ Guía firmada guardada.')),
+                                backgroundColor: const Color(0xFF2E7D32),
+                                duration: const Duration(seconds: 3),
                               ),
                             );
                           }
@@ -1028,7 +1144,8 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                 label: Text(
                   _estaSubiendoEvidencias
                       ? 'Subiendo fotos a almacenamiento seguro...'
-                      : 'Guardar Evidencias del Despacho (${_fotosRegularizacion.length} fotos)',
+                      : _t(ticket, 'Guardar evidencia del picking (${_fotosRegularizacion.length} fotos)',
+                          'Guardar guía firmada (${_fotosRegularizacion.length})'),
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                 ),
                 style: ElevatedButton.styleFrom(
@@ -1064,7 +1181,7 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
               Icon(Icons.lock_clock_outlined, size: 72, color: Colors.orange.shade300),
               const SizedBox(height: 16),
               const Text(
-                'No hay repuestos disponibles para despacho todavía.',
+                'No hay repuestos disponibles para picking todavía.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
               ),
@@ -1218,7 +1335,7 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                     child: Row(
                       children: [
                         const Text(
-                          'Despachar en este lote:',
+                          'Recolectar en este picking:',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
@@ -1403,13 +1520,13 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
               Icon(Icons.history_outlined, size: 64, color: Colors.grey.shade400),
               const SizedBox(height: 16),
               const Text(
-                'No hay registros de despachos previos para este requerimiento.',
+                'Aún no hay pickings registrados para este requerimiento.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87),
               ),
               const SizedBox(height: 8),
               Text(
-                'Al confirmar el primer despacho parcial o total, quedará archivado aquí con sus archivos Excel y fotos de respaldo.',
+                'Cada picking confirmado queda aquí con sus Excels y fotos.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
@@ -1454,8 +1571,9 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                       ),
                       child: Text(
                         reg.tieneEvidencia
-                            ? '✅ Con Evidencias (${reg.fotosEvidenciasUrls.length})'
-                            : '⚠️ Evidencia Pendiente',
+                            ? _t(ticket, '✅ Con Evidencias (${reg.fotosEvidenciasUrls.length})',
+                                '✅ Guía firmada (${reg.fotosEvidenciasUrls.length})')
+                            : _t(ticket, '⚠️ Evidencia Pendiente', '⏳ Guía firmada pendiente'),
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
@@ -1467,7 +1585,7 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Fecha: $fechaStr • Despachador: ${reg.usuarioNombre}',
+                  'Fecha: $fechaStr • Bodeguero: ${reg.usuarioNombre}',
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
                 const Divider(height: 14),
@@ -1545,8 +1663,15 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       ),
                       onPressed: () {
+                        final fuenteItems = ticket.itemsDespachoBodega.isNotEmpty ? ticket.itemsDespachoBodega : _items;
+                        final codigosLote = reg.items.map((it) => it.codigo).toSet();
+                        final itemsLote = fuenteItems.where((i) => codigosLote.contains(i.codigo)).toList();
                         final mapCant = {for (var it in reg.items) it.codigo: it.cantidad};
-                        _descargarExcelSolicitudMateriales(ticket, cantidadesDespachadasLote: mapCant);
+                        _descargarExcelSolicitudMateriales(
+                          ticket,
+                          items: itemsLote,
+                          cantidadesDespachadasLote: mapCant,
+                        );
                       },
                     ),
                   ],
@@ -1632,8 +1757,8 @@ class _ModalCargaEvidenciasState extends State<_ModalCargaEvidencias> {
           ],
         ),
         content: const Text(
-          '⚠️ El despacho quedará registrado pero BLOQUEADO.\n\n'
-          'No podrá despachar nuevos repuestos de este ticket hasta que adjunte las fotos de soporte obligatorias.',
+          '⚠️ El picking quedará registrado pero BLOQUEADO.\n\n'
+          'No podrá registrar otro picking de este ticket hasta adjuntar las fotos de evidencia.',
           style: TextStyle(fontSize: 13, height: 1.4),
         ),
         actions: [
@@ -1701,7 +1826,7 @@ class _ModalCargaEvidenciasState extends State<_ModalCargaEvidencias> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'El despacho ha sido registrado y los Excels generados. Adjunte las fotos de soporte: repuestos alistados en mesón y foto del documento/vale emitido por el ERP.',
+                  'El picking fue registrado y los Excels generados. Adjunte las fotos: repuestos alistados en mesón y documento/vale emitido por el ERP.',
                   style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
                 ),
                 const SizedBox(height: 16),
@@ -1818,7 +1943,7 @@ class _ModalCargaEvidenciasState extends State<_ModalCargaEvidencias> {
                                 title: const Text('¿Guardar Evidencias?',
                                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                                 content: Text(
-                                  'Se subirán ${_fotos.length} foto(s) de respaldo para el despacho ${widget.despacho.id}.',
+                                  'Se subirán ${_fotos.length} foto(s) de evidencia para el picking ${widget.despacho.id}.',
                                   style: const TextStyle(fontSize: 13),
                                 ),
                                 actions: [
@@ -1881,7 +2006,7 @@ class _ModalCargaEvidenciasState extends State<_ModalCargaEvidencias> {
                     label: Text(
                       _subiendo
                           ? 'Subiendo fotos...'
-                          : 'Guardar Evidencias del Despacho (${_fotos.length})',
+                          : 'Guardar evidencia del picking (${_fotos.length})',
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                     style: ElevatedButton.styleFrom(

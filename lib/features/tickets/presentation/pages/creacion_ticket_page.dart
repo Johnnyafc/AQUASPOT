@@ -12,7 +12,13 @@ import '../../../../core/enum/ticket_enums.dart';
 import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../../../features/auth/presentation/bloc/auth_state.dart';
 import '../widgets/ticket_form_widget.dart';
+import '../widgets/venta_repuesto_form_widget.dart';
 import '../widgets/confirmacion_ingreso_dialog.dart';
+import '../../domain/entities/linea_repuesto_venta_entity.dart';
+import '../../domain/services/evaluacion_venta_repuesto_service.dart';
+import '../models/archivos_linea_venta.dart';
+import '../../../inventario/presentation/bloc/inventario_bloc.dart';
+import '../../../inventario/presentation/bloc/inventario_state.dart';
 import 'package:printing/printing.dart';
 
 class CreacionTicketPage extends StatefulWidget {
@@ -50,6 +56,15 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
   final Map<String, bool> _accesoriosSeleccionados = {};
   final List<XFile> _archivosEvidencia = [];
   final List<XFile> _archivosEvidenciaGarantia = [];
+
+  // 🆕 VENTA DE REPUESTO: medio de contacto + líneas (repuesto + cantidad).
+  MedioContacto? _medioContactoVenta;
+  TipoEquipo? _segmentoVenta; // "Este repuesto es de:"
+  final List<LineaRepuestoVentaEntity> _lineasRepuestoVenta = [];
+
+  // 🆕 Asistencia de Servicio Técnico (opcional, dentro de Venta de Repuesto).
+  // 🔧 Evidencia de cada línea "por determinar" (misma posición que su línea).
+  final List<ArchivosLineaVenta> _archivosLineasVenta = [];
 
   Timer? _debounceTimer;
 
@@ -295,6 +310,10 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
       _accesoriosSeleccionados.clear();
       _archivosEvidencia.clear();
       _archivosEvidenciaGarantia.clear();
+      _medioContactoVenta = null;
+      _segmentoVenta = null;
+      _lineasRepuestoVenta.clear();
+      _archivosLineasVenta.clear();
     });
     
     context.read<TicketBloc>().add(ResetearRequerimientoEvent());
@@ -395,6 +414,64 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
         );
       }
     }
+  }
+
+  // 🆕 VENTA DE REPUESTO: valida, toma una foto del stock neto actual de
+  // cada línea y despacha CrearVentaRepuestoEvent (el Bloc decide el estado).
+  void _submitVentaRepuesto() {
+    if (_selectedClienteId == null || _selectedClienteId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⚠️ Seleccione un Cliente.'), backgroundColor: Colors.orange));
+      return;
+    }
+    if (_medioContactoVenta == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⚠️ Seleccione el Medio de contacto.'), backgroundColor: Colors.orange));
+      return;
+    }
+    if (_segmentoVenta == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⚠️ Indique de qué equipo es el repuesto.'), backgroundColor: Colors.orange));
+      return;
+    }
+    if (_lineasRepuestoVenta.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⚠️ Agregue al menos un repuesto.'), backgroundColor: Colors.orange));
+      return;
+    }
+
+    // Foto del stock neto (disponible - reservado) al momento de registrar,
+    // solo de los repuestos conocidos (los "por determinar" los define el técnico).
+    final inventario = context.read<InventarioBloc>().state;
+    if (inventario is! InventarioLoaded) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⏳ El inventario aún se está cargando, intente de nuevo en unos segundos.'), backgroundColor: Colors.orange));
+      return;
+    }
+    final lineasEvaluadas = EvaluacionVentaRepuestoService.conStockActual(
+      _lineasRepuestoVenta,
+      {
+        for (final e in inventario.mapaPorCodigo.entries)
+          EvaluacionVentaRepuestoService.claveCodigo(e.key): e.value.stockNetoDisponible,
+      },
+    );
+
+    final authState = context.read<AuthBloc>().state;
+    String nombreOperario = 'SISTEMA';
+    String rolOperario = 'DESCONOCIDO';
+    if (authState is Authenticated) {
+      nombreOperario = authState.usuario.nombre;
+      rolOperario = authState.usuario.rol.name.toUpperCase();
+    }
+
+    context.read<TicketBloc>().add(CrearVentaRepuestoEvent(
+      clienteId: _selectedClienteId!,
+      campamento: _campamentoController.text.trim(),
+      nombreContacto: _nombreContactoController.text.trim(),
+      telefonoContacto: _telefonoController.text.trim(),
+      emailContacto: _emailController.text.trim(),
+      medioContacto: _medioContactoVenta!,
+      segmento: _segmentoVenta!,
+      lineas: lineasEvaluadas,
+      archivosPorLinea: List<ArchivosLineaVenta>.from(_archivosLineasVenta),
+      nombreUsuario: nombreOperario,
+      rolUsuario: rolOperario,
+    ));
   }
 
   void _submitForm() async {
@@ -543,7 +620,8 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Registro Exitoso'), backgroundColor: Colors.green));
             
             final ticketReciente = state.currentTicket;
-            final bool esTicketCompleto = ticketReciente != null && ticketReciente.esRegistroCompleto;
+            final bool esTicketCompleto = ticketReciente != null && ticketReciente.esRegistroCompleto &&
+                ticketReciente.tipoRequerimiento != TipoRequerimiento.ventaRepuesto; // la venta no genera acta
             final bool esOperacionEnCampo = state.lugarAtencion == LugarAtencion.campo;
 
             if (esTicketCompleto && !esOperacionEnCampo && state.pdfBytes != null && state.pdfBytes!.isNotEmpty) {
@@ -571,7 +649,51 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
                     elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     child: Padding(
                       padding: const EdgeInsets.all(32.0),
-                      child: TicketForm(
+                      child: state.tipoSeleccionado == TipoRequerimiento.ventaRepuesto
+                          ? VentaRepuestoFormWidget(
+                              formKey: _formKey,
+                              isProcessing: state.status == TicketStatus.loading,
+                              listaClientes: state.clientes,
+                              clienteController: _clienteController,
+                              campamentoController: _campamentoController,
+                              nombreContactoController: _nombreContactoController,
+                              emailController: _emailController,
+                              telefonoController: _telefonoController,
+                              selectedClienteId: _selectedClienteId,
+                              onClienteSelected: (seleccion) {
+                                setState(() {
+                                  _selectedClienteId = seleccion.camaronera;
+                                  _clienteController.text = seleccion.camaronera;
+                                  _campamentoController.text = seleccion.direccion;
+                                  _nombreContactoController.text = seleccion.nombreContacto;
+                                  _emailController.text = seleccion.emailContacto;
+                                  _telefonoController.text = seleccion.celular;
+                                });
+                                _guardarBorrador();
+                              },
+                              onClienteCleared: () {
+                                setState(() => _selectedClienteId = null);
+                                _guardarBorrador();
+                              },
+                              medioContacto: _medioContactoVenta,
+                              onMedioContactoChanged: (val) => setState(() => _medioContactoVenta = val),
+                              segmento: _segmentoVenta,
+                              onSegmentoChanged: (val) => setState(() => _segmentoVenta = val),
+                              lineasRepuestoVenta: _lineasRepuestoVenta,
+                              archivosPorLinea: _archivosLineasVenta,
+                              onLineasActualizadas: (lineas, archivos) {
+                                setState(() {
+                                  _lineasRepuestoVenta
+                                    ..clear()
+                                    ..addAll(lineas);
+                                  _archivosLineasVenta
+                                    ..clear()
+                                    ..addAll(archivos);
+                                });
+                              },
+                              onSubmit: _submitVentaRepuesto,
+                            )
+                          : TicketForm(
                         formKey: _formKey,
                         isProcessing: state.status == TicketStatus.loading,
                         listaClientes: state.clientes,

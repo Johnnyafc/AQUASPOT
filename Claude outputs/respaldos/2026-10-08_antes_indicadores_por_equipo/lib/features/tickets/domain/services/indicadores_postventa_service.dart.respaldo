@@ -1,0 +1,261 @@
+// lib/features/tickets/domain/services/indicadores_postventa_service.dart
+//
+// 📊 Indicadores de Postventa (botón del Dashboard → Excel). Solo cálculo,
+// sin Flutter ni Firebase; probado en test/indicadores_postventa_test.dart.
+//
+// 1. N.º de servicios técnicos realizados por tipo (taller / campo):
+//    tickets que YA TERMINARON Proceso de Trabajo (hoy en Revisión de
+//    pagos, Entrega o Finalizado), en el mes en que salieron de él (último
+//    evento de Proceso de Trabajo).
+// 2. Lead time de atención (taller / campo): tickets FINALIZADOS en el
+//    mes, días desde la creación hasta la finalización (igual que "Días
+//    promedio" del Dashboard).
+// 3. Recurrencia de fallas por sistema y tipo de equipo: el diagnóstico de
+//    fallas (categoría = sistema → falla → razones), por mes de CREACIÓN del
+//    ticket (igual que el filtro de fechas del Dashboard). Sin anulados.
+
+import '../../../../core/enum/proceso_auditoria.dart';
+import '../../../../core/enum/ticket_enums.dart';
+import '../../../../core/utils/constants.dart' show razonesProblemaEstandar;
+import '../entities/ticket_entity.dart';
+import 'tiempos_por_proceso_service.dart';
+
+class ServicioRealizado {
+  final TicketEntity ticket;
+  final DateTime fechaFinTrabajo;
+  final String tipo;
+  final String lugar;
+  final String equipo;
+
+  const ServicioRealizado({
+    required this.ticket,
+    required this.fechaFinTrabajo,
+    required this.tipo,
+    required this.lugar,
+    required this.equipo,
+  });
+
+  DateTime get mes => IndicadoresPostventaService.mesDe(fechaFinTrabajo);
+}
+
+class LeadTimeTicket {
+  final TicketEntity ticket;
+  final DateTime fechaCreacion;
+  final DateTime fechaFinalizacion;
+  final String lugar;
+
+  const LeadTimeTicket({
+    required this.ticket,
+    required this.fechaCreacion,
+    required this.fechaFinalizacion,
+    required this.lugar,
+  });
+
+  double get dias => fechaFinalizacion.difference(fechaCreacion).inMinutes / 1440.0;
+  DateTime get mes => IndicadoresPostventaService.mesDe(fechaFinalizacion);
+}
+
+class FallaDiagnosticada {
+  final TicketEntity ticket;
+  final DateTime fechaCreacion;
+  final String equipo;
+  final String sistema; // categoría de la falla
+  final String subcategoria;
+  final String falla;
+  final List<String> razones; // normalizadas como en el Dashboard (sin repetir)
+
+  const FallaDiagnosticada({
+    required this.ticket,
+    required this.fechaCreacion,
+    required this.equipo,
+    required this.sistema,
+    required this.subcategoria,
+    required this.falla,
+    required this.razones,
+  });
+
+  DateTime get mes => IndicadoresPostventaService.mesDe(fechaCreacion);
+}
+
+/// Resumen de lead time de un grupo (mes × lugar).
+class ResumenLeadTime {
+  final int tickets;
+  final double promedio;
+  final double minimo;
+  final double maximo;
+
+  const ResumenLeadTime({required this.tickets, required this.promedio, required this.minimo, required this.maximo});
+
+  static ResumenLeadTime? de(Iterable<LeadTimeTicket> lista) {
+    final dias = lista.map((l) => l.dias).toList();
+    if (dias.isEmpty) return null;
+    final suma = dias.fold<double>(0, (s, d) => s + d);
+    return ResumenLeadTime(
+      tickets: dias.length,
+      promedio: suma / dias.length,
+      minimo: dias.reduce((a, b) => a < b ? a : b),
+      maximo: dias.reduce((a, b) => a > b ? a : b),
+    );
+  }
+}
+
+class IndicadoresPostventa {
+  final List<DateTime> meses;
+  final List<ServicioRealizado> servicios;
+  final List<LeadTimeTicket> leadTimes;
+  final List<FallaDiagnosticada> fallas;
+
+  const IndicadoresPostventa({
+    required this.meses,
+    required this.servicios,
+    required this.leadTimes,
+    required this.fallas,
+  });
+}
+
+class IndicadoresPostventaService {
+  static const String otrasRazones = 'Otras (texto libre)';
+  static const String taller = 'Taller';
+  static const String campo = 'Campo';
+  static const String sinLugar = 'Sin definir';
+
+  /// Estados de un ticket que ya terminó Proceso de Trabajo.
+  static const Set<EstadoTicket> estadosTrabajoTerminado = {
+    EstadoTicket.validacionFacturacion,
+    EstadoTicket.entrega,
+    EstadoTicket.finalizado,
+  };
+
+  static DateTime mesDe(DateTime d) => DateTime(d.year, d.month);
+
+  /// Meses de [desde] a [hasta] (ambos incluidos).
+  static List<DateTime> mesesEntre(DateTime desde, DateTime hasta) {
+    final meses = <DateTime>[];
+    var m = mesDe(desde);
+    final fin = mesDe(hasta);
+    while (!m.isAfter(fin)) {
+      meses.add(m);
+      m = DateTime(m.year, m.month + 1);
+    }
+    return meses;
+  }
+
+  static String etiquetaTipo(TicketEntity t) {
+    // Igual que el Dashboard: el dictamen de garantía en la auditoría manda.
+    if (t.esReclamoDeGarantia) return 'Reclamo de garantía';
+    switch (t.tipoRequerimiento) {
+      case TipoRequerimiento.reparacion:
+        return 'Reparación regular';
+      case TipoRequerimiento.reclamoGarantia:
+        return 'Reclamo de garantía';
+      case TipoRequerimiento.ventaRepuesto:
+        return 'Venta de repuesto';
+      case TipoRequerimiento.alquilerPrueba:
+        return 'Alquiler / prueba';
+      case TipoRequerimiento.ventaMaquina:
+        return 'Venta de máquina';
+      case TipoRequerimiento.ninguno:
+        return 'Sin especificar';
+    }
+  }
+
+  static String etiquetaLugar(LugarAtencion l) => switch (l) {
+        LugarAtencion.taller => taller,
+        LugarAtencion.campo => campo,
+        _ => sinLugar,
+      };
+
+  static DateTime? fechaCreacion(TicketEntity t) => t.fechaCreacionTicket;
+
+  /// Fecha de finalización: último registro de un ticket finalizado.
+  static DateTime? fechaFinalizacion(TicketEntity t) {
+    if (t.estadoActual != EstadoTicket.finalizado || t.historialEventos.isEmpty) return null;
+    return t.historialEventos.map((e) => e.timestamp).reduce((a, b) => a.isAfter(b) ? a : b);
+  }
+
+  /// Fecha en que el ticket salió de Proceso de Trabajo (último evento de
+  /// ese proceso). null si no lo terminó o no tiene eventos de taller.
+  static DateTime? fechaFinProcesoTrabajo(TicketEntity t) {
+    if (!estadosTrabajoTerminado.contains(t.estadoActual)) return null;
+    DateTime? ultimo;
+    for (final e in t.historialEventos) {
+      final esTaller = e.proceso != null
+          ? e.proceso == ProcesoAuditoria.taller
+          : TiemposPorProcesoService.procesoPorTexto(e.accion) == TiemposPorProcesoService.taller;
+      if (esTaller && (ultimo == null || e.timestamp.isAfter(ultimo))) ultimo = e.timestamp;
+    }
+    return ultimo;
+  }
+
+  /// Razones de una falla como las agrupa el Dashboard: las del catálogo
+  /// estándar con su nombre, el resto como "Otras (texto libre)"; sin repetir.
+  static List<String> normalizarRazones(List<String> razones) {
+    final estandar = {for (final r in razonesProblemaEstandar) r.trim().toLowerCase(): r};
+    final vistas = <String>{};
+    final resultado = <String>[];
+    for (final r in razones) {
+      if (r.trim().isEmpty) continue;
+      final et = estandar[r.trim().toLowerCase()] ?? otrasRazones;
+      if (vistas.add(et)) resultado.add(et);
+    }
+    return resultado;
+  }
+
+  static IndicadoresPostventa calcular({
+    required List<TicketEntity> tickets,
+    required DateTime desde,
+    required DateTime hasta,
+  }) {
+    final meses = mesesEntre(desde, hasta);
+    final enRango = meses.toSet();
+    bool dentro(DateTime fecha) => enRango.contains(mesDe(fecha));
+
+    final servicios = <ServicioRealizado>[];
+    final leadTimes = <LeadTimeTicket>[];
+    final fallas = <FallaDiagnosticada>[];
+
+    for (final t in tickets) {
+      if (t.estadoActual == EstadoTicket.anulado) continue;
+      final lugar = etiquetaLugar(t.lugarAtencion);
+
+      final finTrabajo = fechaFinProcesoTrabajo(t);
+      if (finTrabajo != null && dentro(finTrabajo)) {
+        servicios.add(ServicioRealizado(
+          ticket: t,
+          fechaFinTrabajo: finTrabajo,
+          tipo: etiquetaTipo(t),
+          lugar: lugar,
+          equipo: t.equipo.name,
+        ));
+      }
+
+      final creacion = fechaCreacion(t);
+      final finalizacion = fechaFinalizacion(t);
+      if (creacion != null && finalizacion != null && dentro(finalizacion)) {
+        leadTimes.add(LeadTimeTicket(
+          ticket: t,
+          fechaCreacion: creacion,
+          fechaFinalizacion: finalizacion,
+          lugar: lugar,
+        ));
+      }
+
+      if (creacion != null && dentro(creacion)) {
+        for (final d in t.diagnosticoFallas) {
+          if (d.categoria.trim().isEmpty) continue;
+          fallas.add(FallaDiagnosticada(
+            ticket: t,
+            fechaCreacion: creacion,
+            equipo: t.equipo.name,
+            sistema: d.categoria.trim(),
+            subcategoria: d.subcategoria.trim(),
+            falla: d.falla.trim(),
+            razones: normalizarRazones(d.razonesProblema),
+          ));
+        }
+      }
+    }
+
+    return IndicadoresPostventa(meses: meses, servicios: servicios, leadTimes: leadTimes, fallas: fallas);
+  }
+}

@@ -8,6 +8,8 @@ import 'package:aquaspot_postventa/features/tickets/data/models/ticket_model.dar
 import 'package:aquaspot_postventa/features/tickets/data/models/evento_auditoria_model.dart';
 import 'package:aquaspot_postventa/features/tickets/data/models/item_despacho_bodega_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../../core/enum/proceso_auditoria.dart';
+import '../../../../core/utils/constants.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/evaluacion_tecnica_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/actividad_registrada_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/repuesto_registrado_entity.dart';
@@ -22,6 +24,12 @@ import 'package:aquaspot_postventa/features/tickets/domain/usecases/SubirOrdenVe
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_documento_comercial_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_documento_evaluacion_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_orden_compra_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/finalizar_evaluacion_venta_repuesto_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/registrar_cotizacion_compras_venta_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/guardar_repuestos_venta_comercial_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/confirmar_aceptacion_cliente_venta_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/registrar_codigos_creados_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/cerrar_entrega_venta_usecase.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/errors/failures.dart';
@@ -38,6 +46,16 @@ import '../../domain/entities/ticket_entity.dart';
 import '../../../../core/enum/ticket_enums.dart';
 import 'dart:async';
 import 'ticket_event.dart';
+import '../../../../core/enum/marca_equipo.dart';
+import '../../domain/entities/cambio_material_entity.dart';
+import '../../domain/services/estado_despacho_service.dart';
+import '../../domain/services/retiro_picking_service.dart';
+import '../../domain/services/ruteo_venta_repuesto_service.dart';
+import '../../domain/services/flujo_venta_repuesto_service.dart';
+import '../models/archivos_linea_venta.dart';
+import '../../domain/entities/linea_repuesto_venta_entity.dart';
+import '../../data/models/orden_recepcion_repuestos_model.dart';
+import '../../../../core/services/acceso_temporal_bodega_service.dart';
 import 'ticket_state.dart'; // Asegúrate de estar importando el nuevo TicketState unificado
 
 class TicketBloc extends Bloc<TicketEvent, TicketState> {
@@ -54,6 +72,12 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
   final SubirDocumentoComercialUseCase subirDocumentoComercialUseCase;
   final SubirOrdenVentaUseCase subirOrdenVentaUseCase;
   final SubirOrdenCompraUseCase subirOrdenCompraUseCase;
+  final FinalizarEvaluacionVentaRepuestoUseCase finalizarEvaluacionVentaRepuesto;
+  final RegistrarCotizacionComprasVentaUseCase registrarCotizacionComprasVenta;
+  final GuardarRepuestosVentaComercialUseCase guardarRepuestosVentaComercial;
+  final ConfirmarAceptacionClienteVentaUseCase confirmarAceptacionClienteVenta;
+  final RegistrarCodigosCreadosUseCase registrarCodigosCreados;
+  final CerrarEntregaVentaUseCase cerrarEntregaVenta;
   final ITicketRepository ticketRepository;
   
   TicketBloc({
@@ -70,10 +94,24 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     required this.subirDocumentoComercialUseCase,
     required this.subirOrdenVentaUseCase,
     required this.subirOrdenCompraUseCase,
+    required this.finalizarEvaluacionVentaRepuesto,
+    required this.registrarCotizacionComprasVenta,
+    required this.guardarRepuestosVentaComercial,
+    required this.confirmarAceptacionClienteVenta,
+    required this.registrarCodigosCreados,
+    required this.cerrarEntregaVenta,
     required this.ticketRepository,
   }) : super(const TicketState()) { // Inicializamos con el estado base unificado
     on<ObtenerClientesEvent>(_onObtenerClientes);
     on<CrearTicketEvent>(_onCrearTicket);
+    on<CrearVentaRepuestoEvent>(_onCrearVentaRepuesto);
+    on<AdjuntarCotizacionVentaRepuestoEvent>(_onAdjuntarCotizacionVentaRepuesto);
+    on<FinalizarEvaluacionVentaRepuestoEvent>(_onFinalizarEvaluacionVentaRepuesto);
+    on<GuardarRepuestosVentaComercialEvent>(_onGuardarRepuestosVentaComercial);
+    on<ConfirmarAceptacionClienteVentaEvent>(_onConfirmarAceptacionClienteVenta);
+    on<RegistrarCodigosCreadosEvent>(_onRegistrarCodigosCreados);
+    on<ValidarDespachoSimpleBodegaEvent>(_onValidarDespachoSimpleBodega);
+    on<MarcarInconsistenciaRevisadaEvent>(_onMarcarInconsistenciaRevisada);
     on<ActualizarEvaluacionEvent>(_onActualizarEvaluacion);
     on<NotificarYGenerarActaEvent>(_onNotificarYGenerarActa);
     on<ObtenerHistorialTicketsEvent>(_onObtenerHistorialTickets);
@@ -106,11 +144,15 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     on<GuardarValidacionBodegaComprasEvent>(_onGuardarValidacionBodegaCompras);
     on<SincronizarStockDespachoBodegaEvent>(_onSincronizarStockDespachoBodega);
     on<RegistrarDespachoBodegaEvent>(_onRegistrarDespachoBodega);
+    on<IniciarPickingEvent>(_onIniciarPicking);
+    on<FinalizarPickingEvent>(_onFinalizarPicking);
+    on<SincronizarEstadoDespachoEvent>(_onSincronizarEstadoDespacho);
     on<ActualizarEvidenciasDespachoEvent>(_onActualizarEvidenciasDespacho);
     on<AsignarTecnicosTrabajoEvent>(_onAsignarTecnicosTrabajo);
     on<GuardarDiagnosticoFallasEvent>(_onGuardarDiagnosticoFallas);
     on<SubirInformeTecnicoEvent>(_onSubirInformeTecnico);
     on<AsignarTecnicoRecepcionBodegaEvent>(_onAsignarTecnicoRecepcionBodega);
+    on<AnularOrdenRecepcionEvent>(_onAnularOrdenRecepcion);
     on<ConfirmarRecepcionRepuestosTecnicoEvent>(_onConfirmarRecepcionRepuestosTecnico);
     on<ValidarMaterialesRecibidosSupervisorEvent>(_onValidarMaterialesRecibidosSupervisor);
     on<ValidarConsumoOrdenTallerEvent>(_onValidarConsumoOrdenTaller);
@@ -124,6 +166,15 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
   ProcesarEvidenciaTrabajoEvent event, 
   Emitter<TicketState> emit
 ) async {
+  // 📦 PICKING: no se finaliza el trabajo con materiales sin despachar.
+  if (!EstadoDespachoService.materialesDespachados(event.ticket)) {
+    emit(state.copyWith(
+      status: TicketStatus.error,
+      message: 'Bodega aún no despacha todos los materiales (picking sin finalizar). No se puede finalizar el trabajo.',
+    ));
+    return;
+  }
+
   emit(state.copyWith(
     status: TicketStatus.loading,
     message: 'Transmitiendo evidencia multimedia (Esto puede demorar)...'
@@ -182,6 +233,9 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
       usuarioNombre: event.nombreUsuario, 
       usuarioRol: event.rolUsuario,
       timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.taller,
+      hito: HitoProceso.fin,
+      habilita: const [ProcesoAuditoria.revisionPagos],
     );
 
   final ahoraEvidencia = DateTime.now();
@@ -190,12 +244,15 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     timestamp: ahoraEvidencia,
   );
 
-  // 4. MUTACIÓN DEL TICKET 
+  // 4. MUTACIÓN DEL TICKET
   final ticketActualizado = event.ticket.copyWith(
     evidenciaTrabajo: evidencia,
     estadoActual: EstadoTicket.validacionFacturacion, // 🚀 TRASPASO AL SIGUIENTE ESTADO LOGICO
     tiemposOperativos: tiemposFinalizados,
     historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+    // Diagnóstico hecho en vivo: queda sellado con la ronda vigente para
+    // que no caiga en la bandeja de revisión de fallas.
+    rondaDiagnosticoFallas: event.ticket.diagnosticoFallas.isNotEmpty ? rondaRevisionDiagnosticoFallas : null,
   );
 
   // 5. PERSISTENCIA Y HOT SWAP
@@ -225,10 +282,12 @@ Future<void> _onIniciarTrabajoFisico(
     emit(state.copyWith(status: TicketStatus.loading, message: 'Energizando línea de trabajo...'));
 
     final eventoAuditoria = EventoAuditoriaEntity(
-      accion: 'INICIO DE TRABAJO EN CAMPO / TALLER',
+      accion: 'TALLER: INICIO DE TRABAJO EN CAMPO / TALLER',
       usuarioNombre: event.nombreUsuario, 
       usuarioRol: event.rolUsuario,
       timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.taller,
+      hito: HitoProceso.inicio,
     );
 
     final ahora = DateTime.now();
@@ -268,6 +327,49 @@ Future<void> _onIniciarTrabajoFisico(
 // =========================================================
   // ⚙️ SUBRUTINA 1: PROCESAMIENTO DE GUÍA DE REMISIÓN
   // =========================================================
+  // 🛒 Entrega de Venta de Repuesto: registra guía/factura y finaliza solo
+  // con guía + factura + guía firmada de Bodega (regla en el use case).
+  // [silencioso]: no avisa si no cambió nada (llamada tras la guía firmada).
+  Future<void> _registrarEntregaVenta(
+    Emitter<TicketState> emit, {
+    required String ticketId,
+    String? urlGuiaRemision,
+    String? urlFactura,
+    String observacion = '',
+    required String nombreUsuario,
+    required String rolUsuario,
+    bool silencioso = false,
+  }) async {
+    if (!silencioso) {
+      emit(state.copyWith(status: TicketStatus.loading, message: 'Registrando documento de entrega...'));
+    }
+    final result = await cerrarEntregaVenta(
+      ticketId: ticketId,
+      urlGuiaRemision: urlGuiaRemision,
+      urlFactura: urlFactura,
+      observacion: observacion,
+      nombreUsuario: nombreUsuario,
+      rolUsuario: rolUsuario,
+    );
+    result.fold(
+      (failure) => emit(state.copyWith(status: TicketStatus.error, message: failure.message)),
+      (t) {
+        final finalizado = t.estadoActual == EstadoTicket.finalizado;
+        if (silencioso && !finalizado) return;
+        final faltan = FlujoVentaRepuestoService.faltantesParaFinalizar(t);
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: finalizado
+              ? '✅ Entrega completa (guía, factura y guía firmada): ${t.id} finalizado.'
+              : '📄 Documento registrado. Falta para finalizar: ${faltan.join(', ')}.',
+          historial: state.historial.map((x) => x.id == t.id ? t : x).toList(),
+          tickets: state.tickets.map((x) => x.id == t.id ? t : x).toList(),
+          currentTicket: t,
+        ));
+      },
+    );
+  }
+
   Future<void> _onProcesarEntregaGuia(
     ProcesarEntregaGuiaEvent event, 
     Emitter<TicketState> emit
@@ -297,6 +399,17 @@ Future<void> _onIniciarTrabajoFisico(
       return; 
     }
 
+    // 🛒 Venta de Repuesto: guía + factura + guía firmada de Bodega (transacción).
+    if (FlujoVentaRepuestoService.esVenta(event.ticket)) {
+      await _registrarEntregaVenta(emit,
+          ticketId: event.ticket.id,
+          urlGuiaRemision: urlSubida,
+          observacion: event.observacion,
+          nombreUsuario: event.nombreUsuario,
+          rolUsuario: event.rolUsuario);
+      return;
+    }
+
     emit(state.copyWith(status: TicketStatus.loading, message: 'Consolidando enclavamiento en base de datos...'));
 
     final eventoAuditoria = EventoAuditoriaEntity(
@@ -304,6 +417,8 @@ Future<void> _onIniciarTrabajoFisico(
       usuarioNombre: event.nombreUsuario, 
       usuarioRol: event.rolUsuario,
       timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.entrega,
+      hito: (event.ticket.urlFactura?.isNotEmpty ?? false) && event.ticket.estadoActual == EstadoTicket.entrega ? HitoProceso.fin : HitoProceso.avance,
     );
 
     final ticketPaso1 = event.ticket.copyWith(urlGuiaRemision: urlSubida);
@@ -384,6 +499,17 @@ Future<void> _onIniciarTrabajoFisico(
       return;
     }
 
+    // 🛒 Venta de Repuesto: guía + factura + guía firmada de Bodega (transacción).
+    if (FlujoVentaRepuestoService.esVenta(event.ticket)) {
+      await _registrarEntregaVenta(emit,
+          ticketId: event.ticket.id,
+          urlFactura: urlSubida,
+          observacion: event.observacion,
+          nombreUsuario: event.nombreUsuario,
+          rolUsuario: event.rolUsuario);
+      return;
+    }
+
     emit(state.copyWith(status: TicketStatus.loading, message: 'Consolidando enclavamiento en base de datos...'));
 
     final eventoAuditoria = EventoAuditoriaEntity(
@@ -391,6 +517,8 @@ Future<void> _onIniciarTrabajoFisico(
       usuarioNombre: event.nombreUsuario, 
       usuarioRol: event.rolUsuario,
       timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.entrega,
+      hito: (event.ticket.urlGuiaRemision?.isNotEmpty ?? false) && event.ticket.estadoActual == EstadoTicket.entrega ? HitoProceso.fin : HitoProceso.avance,
     );
 
     final ticketPaso1 = event.ticket.copyWith(urlFactura: urlSubida);
@@ -478,6 +606,9 @@ Future<void> _onIniciarTrabajoFisico(
         usuarioNombre: event.nombreUsuario, 
         usuarioRol: event.rolUsuario,
         timestamp: DateTime.now(),
+        proceso: ProcesoAuditoria.revisionPagos,
+        hito: HitoProceso.fin,
+        habilita: nuevoEstado == EstadoTicket.entrega ? const [ProcesoAuditoria.entrega] : const [],
       );
 
       final ticketActualizado = ticketOriginal.copyWith(
@@ -584,6 +715,9 @@ Future<void> _onReversarAComercial(
       usuarioNombre: event.nombreUsuario, 
       usuarioRol: event.rolUsuario,
       timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.aprobacionCliente,
+      hito: HitoProceso.fin,
+      habilita: const [ProcesoAuditoria.comercial],
     );
 
     // 3. MUTACIÓN DEL TICKET (El Troquelado)
@@ -663,6 +797,9 @@ Future<void> _onDictaminarGarantia(
     usuarioNombre: event.nombreUsuario, 
     usuarioRol: event.rolUsuario,
     timestamp: DateTime.now(),
+    proceso: ProcesoAuditoria.garantia,
+    hito: HitoProceso.fin,
+    habilita: event.esGarantia && event.ticket.tipoGarantia == 'servicio' ? const [ProcesoAuditoria.costos, ProcesoAuditoria.compras] : const [ProcesoAuditoria.comercial],
   );
 
   // ==========================================
@@ -962,6 +1099,9 @@ Future<void> _onProcesarEvaluacionDocumental(
     usuarioNombre: event.nombreUsuario, 
     usuarioRol: event.rolUsuario,
     timestamp: DateTime.now(),
+    proceso: ProcesoAuditoria.evaluacion,
+    hito: HitoProceso.fin,
+    habilita: event.ticket.tipoRequerimiento == TipoRequerimiento.reclamoGarantia ? const [ProcesoAuditoria.garantia] : const [ProcesoAuditoria.comercial],
   );
 
   // ==========================================
@@ -1209,6 +1349,9 @@ Future<void> _onProcesarGestionCompras(
       usuarioNombre: event.nombreUsuario, 
       usuarioRol: event.rolUsuario,
       timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.compras,
+      hito: HitoProceso.fin,
+      habilita: const [ProcesoAuditoria.validacionBodega],
     );
 
     // ==========================================
@@ -1315,6 +1458,16 @@ Future<void> _onNotificarYGenerarActa(NotificarYGenerarActaEvent event, Emitter<
   }
 
 
+/// 🧾 Agrega cambios de materiales al registro aparte de la auditoría
+/// (arrayUnion). Devuelve el ticket releído, o null si no había cambios o falló.
+Future<TicketEntity?> _agregarCambiosMateriales(String ticketId, List<CambioMaterialEntity> cambios) async {
+  if (cambios.isEmpty) return null;
+  final r = await ticketRepository.actualizarCampos(ticketId, {
+    'historialCambiosMateriales': FieldValue.arrayUnion(cambios.map((c) => c.toJson()).toList()),
+  });
+  return r.fold((_) => null, (t) => t);
+}
+
 Future<void> _onActualizarEvaluacion(ActualizarEvaluacionEvent event, Emitter<TicketState> emit) async {
     emit(state.copyWith(
       status: TicketStatus.loading, 
@@ -1326,13 +1479,16 @@ Future<void> _onActualizarEvaluacion(ActualizarEvaluacionEvent event, Emitter<Ti
     if (!esCaracol) {
       // CAMINO ORIGINAL: sin cambios, para cualquier equipo que no sea Caracol.
       final result = await actualizarTicket(event.ticket);
+      // 🧾 Registro aparte de cambios de materiales (no va en el ticket completo).
+      final conCambios = result.isRight() ? await _agregarCambiosMateriales(event.ticket.id, event.cambiosMateriales) : null;
 
       result.fold(
         (failure) => emit(state.copyWith(
           status: TicketStatus.error,
           message: _mapFailureToMessage(failure)
         )),
-        (ticketActualizado) {
+        (ticketGuardado) {
+          final ticketActualizado = conCambios ?? ticketGuardado;
           final listaActualizada = state.tickets.map((t) => 
             t.id == ticketActualizado.id ? ticketActualizado : t
           ).toList();
@@ -1367,6 +1523,8 @@ Future<void> _onActualizarEvaluacion(ActualizarEvaluacionEvent event, Emitter<Ti
         'historialEventos': FieldValue.arrayUnion([
           EventoAuditoriaModel.fromEntity(event.eventoAuditoria!).toJson(),
         ]),
+      if (event.cambiosMateriales.isNotEmpty)
+        'historialCambiosMateriales': FieldValue.arrayUnion(event.cambiosMateriales.map((c) => c.toJson()).toList()),
     };
 
     // NUEVO: la nueva lista de repuestosTaller se manda tal cual para que
@@ -1390,11 +1548,14 @@ Future<void> _onActualizarEvaluacion(ActualizarEvaluacionEvent event, Emitter<Ti
         message: _mapFailureToMessage(failure),
       )),
       (_) {
+        final ticketMemoria = event.ticket.copyWith(
+          historialCambiosMateriales: [...event.ticket.historialCambiosMateriales, ...event.cambiosMateriales],
+        );
         final listaActualizada = state.tickets.map((t) =>
-          t.id == event.ticket.id ? event.ticket : t
+          t.id == event.ticket.id ? ticketMemoria : t
         ).toList();
         final listaHistorial = state.historial.map((t) =>
-          t.id == event.ticket.id ? event.ticket : t
+          t.id == event.ticket.id ? ticketMemoria : t
         ).toList();
 
         emit(state.copyWith(
@@ -1402,7 +1563,7 @@ Future<void> _onActualizarEvaluacion(ActualizarEvaluacionEvent event, Emitter<Ti
           message: 'Requerimiento actualizado.',
           tickets: listaActualizada,
           historial: listaHistorial,
-          currentTicket: event.ticket,
+          currentTicket: ticketMemoria,
         ));
       },
     );
@@ -1441,6 +1602,8 @@ Future<void> _onActualizarEvaluacion(ActualizarEvaluacionEvent event, Emitter<Ti
       usuarioNombre: event.nombreUsuario, 
       usuarioRol: event.rolUsuario,
       timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.comercial,
+      hito: HitoProceso.avance,
     );
 
     // 2. MUTACIÓN (Se inyecta el historial, el estado actual del ticket NO cambia)
@@ -1528,10 +1691,15 @@ Future<void> _onProcesarCotizacion(
 
        final proformaModel = ProformaModel.fromEntity(nuevaProforma);
      final eventoAuditoria = EventoAuditoriaEntity(
-  accion: 'COTIZACIÓN GENERADA: ${event.observacion.isNotEmpty ? event.observacion : "Sin observaciones adicionales."}',
+  accion: (event.cambiosTrasRegreso ?? 0) > 0
+      ? 'COMERCIAL: COTIZACIÓN MODIFICADA TRAS REGRESO (${event.cambiosTrasRegreso} cambio(s) de materiales; detalle en "Cambios de materiales"): ${event.observacion.isNotEmpty ? event.observacion : "Sin observaciones adicionales."}'
+      : 'COTIZACIÓN GENERADA: ${event.observacion.isNotEmpty ? event.observacion : "Sin observaciones adicionales."}',
   usuarioNombre: event.nombreUsuario,
   usuarioRol: event.rolUsuario,
   timestamp: DateTime.now(),
+  proceso: ProcesoAuditoria.comercial,
+  hito: HitoProceso.fin,
+  habilita: const [ProcesoAuditoria.aprobacionCliente],
 );
 
       final bool esCaracol = event.ticket.equipo == TipoEquipo.Caracol;
@@ -1592,6 +1760,8 @@ Future<void> _onProcesarCotizacion(
           'historialEventos': FieldValue.arrayUnion([
             EventoAuditoriaModel.fromEntity(eventoAuditoria).toJson(),
           ]),
+          if (event.cambiosMateriales.isNotEmpty)
+            'historialCambiosMateriales': FieldValue.arrayUnion(event.cambiosMateriales.map((c) => c.toJson()).toList()),
         };
 
         final resultCaracol = await ticketRepository.actualizarCamposConGuardaEstado(
@@ -1609,6 +1779,7 @@ Future<void> _onProcesarCotizacion(
 
       // CAMINO ORIGINAL: sin cambios, para cualquier equipo que no sea Caracol.
       final result = await actualizarTicket(ticketActualizado);
+      if (result.isRight()) await _agregarCambiosMateriales(event.ticket.id, event.cambiosMateriales);
 
       result.fold(
         (failure) => emit(state.copyWith(status: TicketStatus.error, message: failure.message)),
@@ -1627,6 +1798,12 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
   emit(state.copyWith(status: TicketStatus.loading, message: 'Asignando número de serie en servidor...'));
 
   final marcaDeTiempo = DateTime.now();
+
+  // 🏷️ Trazabilidad: la recepción termina al crear solo si el registro nace
+  // completo y no viaja desde El Guabo (mismo criterio que el ruteo de abajo).
+  final String sedeCreacion = event.sede.name.toLowerCase();
+  final bool recepcionCompletaAlCrear = event.esRegistroCompleto &&
+      !((sedeCreacion == 'elguabo' || sedeCreacion == 'el_guabo') && event.lugarAtencion != LugarAtencion.campo);
   
   // ⚙️ 2. ZONA DE ENSAMBLAJE BASE
   final eventoAuditoria = EventoAuditoriaEntity(
@@ -1634,6 +1811,9 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
     usuarioNombre: event.nombreUsuario,
     usuarioRol: event.rolUsuario,
     timestamp: marcaDeTiempo,
+    proceso: ProcesoAuditoria.recepcion,
+    hito: recepcionCompletaAlCrear ? HitoProceso.fin : HitoProceso.inicio,
+    habilita: recepcionCompletaAlCrear ? const [ProcesoAuditoria.evaluacion] : const [],
   );
 
   final ticketBase = TicketEntity(
@@ -1650,9 +1830,9 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
     equipoDetalle: event.equipoDetalle,
     accesoriosRecibidos: event.accesoriosRecibidos, 
     fallaReportada: event.fallaReportada,
-    marca: event.marcaEquipo?.name ?? 'NO_ESPECIFICADA',
+    marca: event.marcaEquipo?.valor ?? 'NO_ESPECIFICADA',
     notasRecepcion: event.notasRecepcion,
-    numeroSerie: event.numeroSerie, 
+    numeroSerie: _enMayusculas(event.numeroSerie),
     historialEventos: [eventoAuditoria],
     esRegistroCompleto: event.esRegistroCompleto,
     tipoRequerimiento: event.tipoRequerimiento,
@@ -1833,6 +2013,348 @@ Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) a
   }
 }
 
+// 🛒 VENTA DE REPUESTO: mismo número consecutivo que Reparación/Garantía
+// (crearTicket → transacción sobre metadata/contadores), sin acta PDF.
+// Ruteo (RuteoVentaRepuestoService): alguna línea por determinar →
+// recepcionFisica; todas con stock → comercial; alguna sin stock o fuera del
+// sistema → cotizandoRepuesto. Cada línea por determinar sube su evidencia.
+Future<void> _onCrearVentaRepuesto(CrearVentaRepuestoEvent event, Emitter<TicketState> emit) async {
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Asignando número de requerimiento...'));
+
+  final destino = RuteoVentaRepuestoService.destino(event.lineas);
+  final estadoDestino = RuteoVentaRepuestoService.estadoDe(destino);
+
+  final ticketBase = TicketEntity(
+    id: 'TEMP', // 🔌 Será reemplazado por la Transacción en Firebase
+    estadoActual: EstadoTicket.creado,
+    sede: Sede.NINGUNO,
+    clienteId: event.clienteId,
+    campamento: event.campamento,
+    nombreContacto: event.nombreContacto,
+    telefonoContacto: event.telefonoContacto,
+    emailContacto: event.emailContacto,
+    equipo: event.segmento,
+    equipoDetalle: null,
+    accesoriosRecibidos: null,
+    fallaReportada: '',
+    numeroSerie: null,
+    historialEventos: [
+      EventoAuditoriaEntity(
+        accion: 'CREACIÓN DE REQUERIMIENTO',
+        usuarioNombre: event.nombreUsuario,
+        usuarioRol: event.rolUsuario,
+        timestamp: DateTime.now(),
+        proceso: ProcesoAuditoria.recepcion,
+        hito: HitoProceso.fin,
+        habilita: RuteoVentaRepuestoService.procesosHabilitadosAlCrear(event.lineas),
+      ),
+    ],
+    tipoRequerimiento: TipoRequerimiento.ventaRepuesto,
+    lugarAtencion: LugarAtencion.noAplica,
+    esRegistroCompleto: true,
+    medioContacto: event.medioContacto,
+    lineasRepuestoVenta: event.lineas,
+    necesitaAsistenciaTecnica: event.lineas.any((l) => l.porDeterminar),
+  );
+
+  final dbResult = await crearTicket(ticketBase);
+  if (dbResult.isLeft()) {
+    emit(state.copyWith(
+      status: TicketStatus.error,
+      message: 'Fallo al crear el requerimiento: ${_mapFailureToMessage(dbResult.fold((l) => l, (r) => throw Exception()))}',
+    ));
+    return;
+  }
+  final ticketOficial = dbResult.fold((l) => throw Exception(), (r) => r);
+  final idReal = ticketOficial.id;
+
+  // 📸 Fotos/videos y 🎙️ notas de voz de cada línea por determinar: se
+  // guardan en su línea y, además, juntas en el ticket (fotosUrls /
+  // urlsAudiosAsistencia) para las pantallas que ya las muestran.
+  final List<String> urlsEvidencias = [];
+  final List<String> urlsAudios = [];
+  final List<LineaRepuestoVentaEntity> lineasFinales = [];
+
+  // Si falla una subida, se dice qué archivo y por qué (el mensaje genérico
+  // "Fallo de comunicación con los servidores SCADA" ocultaba la causa), y
+  // que el requerimiento ya quedó creado sin enrutar.
+  String falloSubida(String tipo, String nombre, Failure failure) =>
+      'No se pudo subir $tipo "$nombre": ${failure.message}. '
+      'El requerimiento $idReal quedó creado sin enrutar: anúlelo desde "Modificar Ticket" y vuelva a registrarlo.';
+
+  for (int i = 0; i < event.lineas.length; i++) {
+    final linea = event.lineas[i];
+    final archivos = i < event.archivosPorLinea.length ? event.archivosPorLinea[i] : const ArchivosLineaVenta();
+    if (!linea.porDeterminar || archivos.estaVacio) {
+      lineasFinales.add(linea);
+      continue;
+    }
+    final List<String> evidenciasLinea = [];
+    final List<String> audiosLinea = [];
+    for (final file in archivos.evidencias) {
+      emit(state.copyWith(status: TicketStatus.loading, message: 'Subiendo evidencias a $idReal...'));
+      final r = await subirEvidenciaUseCase(file, idReal);
+      r.fold(
+        (failure) => emit(state.copyWith(status: TicketStatus.error, message: falloSubida('la evidencia', file.name, failure))),
+        (url) => evidenciasLinea.add(url),
+      );
+      if (state.status == TicketStatus.error) return;
+    }
+    for (final audio in archivos.audios) {
+      emit(state.copyWith(status: TicketStatus.loading, message: 'Subiendo notas de voz a $idReal...'));
+      final r = await subirDocumentoEvaluacionUseCase(audio, idReal, 'audios_asistencia');
+      r.fold(
+        (failure) => emit(state.copyWith(status: TicketStatus.error, message: falloSubida('la nota de voz', audio.name, failure))),
+        (url) => audiosLinea.add(url),
+      );
+      if (state.status == TicketStatus.error) return;
+    }
+    urlsEvidencias.addAll(evidenciasLinea);
+    urlsAudios.addAll(audiosLinea);
+    lineasFinales.add(linea.copyWith(urlsEvidencia: evidenciasLinea, urlsAudios: audiosLinea));
+  }
+
+  // Cambio de estado separado de la creación: así las Cloud Functions de
+  // cambio de estado (notificaciones) se disparan igual que en Reparación.
+  final ticketFinal = ticketOficial.copyWith(
+    estadoActual: estadoDestino,
+    lineasRepuestoVenta: lineasFinales,
+    fotosUrls: urlsEvidencias,
+    urlsAudiosAsistencia: urlsAudios,
+  );
+
+  final updateResult = await actualizarTicket(ticketFinal);
+  updateResult.fold(
+    (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+    (ticketGuardado) => emit(state.copyWith(
+      status: TicketStatus.operationSuccess,
+      message: '✅ $idReal registrado → ${estadoDestino.nombreLegible}.',
+      historial: [ticketGuardado, ...state.historial],
+      tickets: [ticketGuardado, ...state.tickets],
+      currentTicket: ticketGuardado,
+    )),
+  );
+}
+
+// 🔧 Evaluación de Venta de Repuesto (supervisor): sube la cotización del
+// proveedor de cada línea fuera del sistema y delega en
+// FinalizarEvaluacionVentaRepuestoUseCase (ruteo, auditoría y guardado con
+// candado de estado). El Bloc no conoce Firestore.
+Future<void> _onFinalizarEvaluacionVentaRepuesto(FinalizarEvaluacionVentaRepuestoEvent event, Emitter<TicketState> emit) async {
+  final idTicket = event.ticket.id;
+
+  final List<LineaRepuestoVentaEntity> lineasFinales = [];
+  for (int i = 0; i < event.lineas.length; i++) {
+    final linea = event.lineas[i];
+    final archivos = i < event.cotizacionesPorLinea.length ? event.cotizacionesPorLinea[i] : const [];
+    final List<String> urls = [];
+    for (final archivo in archivos) {
+      emit(state.copyWith(status: TicketStatus.loading, message: 'Subiendo cotización del proveedor de $idTicket...'));
+      final r = await subirDocumentoEvaluacionUseCase(archivo, idTicket, 'cotizacion_proveedor');
+      r.fold(
+        (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+        (url) => urls.add(url),
+      );
+      if (state.status == TicketStatus.error) return;
+    }
+    lineasFinales.add(urls.isEmpty
+        ? linea
+        : linea.copyWith(urlsCotizacionProveedor: [...linea.urlsCotizacionProveedor, ...urls]));
+  }
+
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Guardando evaluación de $idTicket...'));
+
+  final result = await finalizarEvaluacionVentaRepuesto(
+    ticket: event.ticket,
+    lineas: lineasFinales,
+    nombreUsuario: event.nombreUsuario,
+    rolUsuario: event.rolUsuario,
+  );
+
+  result.fold(
+    (failure) => emit(state.copyWith(status: TicketStatus.error, message: failure.message)),
+    (ticketGuardado) => emit(state.copyWith(
+      status: TicketStatus.operationSuccess,
+      message: '✅ Evaluación de $idTicket completada → ${ticketGuardado.estadoActual.nombreLegible}.',
+      historial: state.historial.map((t) => t.id == idTicket ? ticketGuardado : t).toList(),
+      tickets: state.tickets.map((t) => t.id == idTicket ? ticketGuardado : t).toList(),
+      currentTicket: ticketGuardado,
+    )),
+  );
+}
+
+// 🛒 Comercial guarda los repuestos editados de una Venta de Repuesto. La
+// regla (solo en Comercial, cambios de materiales) vive en el use case.
+Future<void> _onGuardarRepuestosVentaComercial(GuardarRepuestosVentaComercialEvent event, Emitter<TicketState> emit) async {
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Guardando repuestos de ${event.ticketId}...'));
+  final result = await guardarRepuestosVentaComercial(
+    ticketId: event.ticketId,
+    lineas: event.lineas,
+    nombreUsuario: event.nombreUsuario,
+    rolUsuario: event.rolUsuario,
+  );
+  result.fold(
+    (failure) => emit(state.copyWith(status: TicketStatus.error, message: failure.message)),
+    (ticketGuardado) => emit(state.copyWith(
+      status: TicketStatus.operationSuccess,
+      message: '✅ Repuestos de la venta guardados.',
+      historial: state.historial.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      tickets: state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      currentTicket: ticketGuardado,
+    )),
+  );
+}
+
+// 🧾 Cliente aceptó la proforma (venta con repuestos nuevos) → Costos.
+Future<void> _onConfirmarAceptacionClienteVenta(ConfirmarAceptacionClienteVentaEvent event, Emitter<TicketState> emit) async {
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Registrando aceptación del cliente...'));
+  final result = await confirmarAceptacionClienteVenta(
+    ticketId: event.ticketId,
+    nombreUsuario: event.nombreUsuario,
+    rolUsuario: event.rolUsuario,
+  );
+  result.fold(
+    (failure) => emit(state.copyWith(status: TicketStatus.error, message: failure.message)),
+    (t) => emit(state.copyWith(
+      status: TicketStatus.operationSuccess,
+      message: '✅ Aceptación registrada. ${t.id} pasa a Costos para crear los códigos.',
+      historial: state.historial.map((x) => x.id == t.id ? t : x).toList(),
+      tickets: state.tickets.map((x) => x.id == t.id ? t : x).toList(),
+      currentTicket: t,
+    )),
+  );
+}
+
+// 🧾 Costos registra los códigos creados → vuelve a Proformas enviadas.
+Future<void> _onRegistrarCodigosCreados(RegistrarCodigosCreadosEvent event, Emitter<TicketState> emit) async {
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Guardando códigos...'));
+  final result = await registrarCodigosCreados(
+    ticketId: event.ticketId,
+    codigos: event.codigos,
+    nombreUsuario: event.nombreUsuario,
+    rolUsuario: event.rolUsuario,
+  );
+  result.fold(
+    (failure) => emit(state.copyWith(status: TicketStatus.error, message: failure.message)),
+    (t) => emit(state.copyWith(
+      status: TicketStatus.operationSuccess,
+      message: '✅ Códigos registrados. ${t.id} regresa a Proformas enviadas para la OV.',
+      historial: state.historial.map((x) => x.id == t.id ? t : x).toList(),
+      tickets: state.tickets.map((x) => x.id == t.id ? t : x).toList(),
+      currentTicket: t,
+    )),
+  );
+}
+
+Future<void> _onAdjuntarCotizacionVentaRepuesto(AdjuntarCotizacionVentaRepuestoEvent event, Emitter<TicketState> emit) async {
+  final idTicket = event.ticket.id;
+  final List<String> urlsSubidas = [];
+
+  for (final archivo in event.archivos) {
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Subiendo cotización de $idTicket...'));
+    final r = await subirDocumentoEvaluacionUseCase(archivo, idTicket, 'cotizacion_compras');
+    r.fold(
+      (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+      (url) => urlsSubidas.add(url),
+    );
+    if (state.status == TicketStatus.error) return;
+  }
+
+  // Marca las líneas pendientes como cotizadas sobre el ticket ACTUAL
+  // (transacción): si la Evaluación técnica sigue en curso, no cambia de
+  // etapa; si no, pasa a Proforma (Comercial).
+  final result = await registrarCotizacionComprasVenta(
+    ticketId: idTicket,
+    urlsCotizacion: urlsSubidas,
+    nombreUsuario: event.nombreUsuario,
+    rolUsuario: event.rolUsuario,
+  );
+  result.fold(
+    (failure) => emit(state.copyWith(status: TicketStatus.error, message: failure.message)),
+    (ticketGuardado) => emit(state.copyWith(
+      status: TicketStatus.operationSuccess,
+      message: ticketGuardado.estadoActual == EstadoTicket.recepcionFisica
+          ? '✅ Cotización registrada. $idTicket sigue en Evaluación técnica; pasará a Proforma cuando termine.'
+          : '✅ Cotización adjuntada. $idTicket pasa a ${ticketGuardado.estadoActual.nombreLegible}.',
+      historial: state.historial.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      tickets: state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      currentTicket: ticketGuardado,
+    )),
+  );
+}
+
+// 📦 Validación simple de Despacho Bodega: mismo patrón que el despacho
+// normal (_onRegistrarDespachoBodega) -- escritura parcial, auditoría vía
+// arrayUnion y métricas de bodega como "despacho total" -- pero sin ítems:
+// no descuenta stock ni libera reservas. La capa de datos relee el ticket
+// en una transacción y solo escribe si todavía aplica la validación simple.
+Future<void> _onValidarDespachoSimpleBodega(ValidarDespachoSimpleBodegaEvent event, Emitter<TicketState> emit) async {
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Validando despacho en Bodega...'));
+
+  final ahora = DateTime.now();
+  final nuevoEvento = EventoAuditoriaEntity(
+    accion: 'BODEGA: DESPACHO TOTAL Y TRANSFERENCIA A PROCESO DE TRABAJO (VALIDACIÓN SIMPLE)',
+    usuarioNombre: event.nombreUsuario,
+    usuarioRol: event.rolUsuario,
+    timestamp: ahora,
+    proceso: ProcesoAuditoria.bodega,
+    hito: HitoProceso.fin,
+    habilita: const [ProcesoAuditoria.taller],
+  );
+
+  final tiemposBodega = CalculadorTiemposOperativos.actualizarMetricasBodega(
+    ticket: event.ticket,
+    itemsActualizados: const [],
+    esDespachoCompleto: true,
+    timestamp: ahora,
+  );
+  final jsonCompleto = TicketModel.fromEntity(event.ticket.copyWith(tiemposOperativos: tiemposBodega)).toJson();
+
+  final campos = <String, dynamic>{
+    'estadoActual': EstadoTicket.procesoTrabajo.name,
+    'tiemposOperativos': jsonCompleto['tiemposOperativos'],
+    'historialEventos': FieldValue.arrayUnion([
+      EventoAuditoriaModel.fromEntity(nuevoEvento).toJson(),
+    ]),
+  };
+
+  final result = await ticketRepository.actualizarCamposConGuardaValidacionSimpleBodega(
+    ticketId: event.ticket.id,
+    campos: campos,
+  );
+  result.fold(
+    (failure) => emit(state.copyWith(
+      status: TicketStatus.error,
+      message: failure is ServerFailure ? failure.message : _mapFailureToMessage(failure),
+    )),
+    (ticketGuardado) => emit(state.copyWith(
+      status: TicketStatus.operationSuccess,
+      message: '✅ Despacho validado. ${ticketGuardado.id} pasa a Proceso de Trabajo.',
+      historial: state.historial.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      tickets: state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      currentTicket: ticketGuardado,
+    )),
+  );
+}
+
+// 🔎 Guarda la marca con arrayUnion (no pisa otras marcas) y actualiza el
+// ticket en memoria sin cambiar el estado de carga de la app.
+Future<void> _onMarcarInconsistenciaRevisada(MarcarInconsistenciaRevisadaEvent event, Emitter<TicketState> emit) async {
+  final result = await ticketRepository.actualizarCampos(event.ticketId, {
+    'inconsistenciasRevisadas': FieldValue.arrayUnion([event.clave]),
+  });
+  result.fold(
+    (failure) => emit(state.copyWith(
+      status: TicketStatus.error,
+      message: 'No se pudo marcar como revisado: ${_mapFailureToMessage(failure)}',
+    )),
+    (ticketGuardado) => emit(state.copyWith(
+      historial: state.historial.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      tickets: state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+    )),
+  );
+}
+
 Future<void> _onActualizarEstadoTicket(ActualizarEstadoTicketEvent event, Emitter<TicketState> emit) async {
   emit(state.copyWith(status: TicketStatus.loading, message: 'Actualizando estado a ${event.nuevoEstado.name}...'));
 
@@ -1842,6 +2364,9 @@ Future<void> _onActualizarEstadoTicket(ActualizarEstadoTicketEvent event, Emitte
     usuarioNombre: event.nombreUsuario,
     usuarioRol: event.rolUsuario,
     timestamp: DateTime.now(),
+    proceso: event.proceso,
+    hito: event.hito,
+    habilita: event.habilita,
   );
 
   // ⚙️ 2. Clonación Inmutable del Payload (Uso directo de su copyWith)
@@ -1886,6 +2411,8 @@ Future<void> _onAnularTicket(AnularTicketEvent event, Emitter<TicketState> emit)
     usuarioNombre: event.nombreUsuario,
     usuarioRol: event.rolUsuario,
     timestamp: DateTime.now(),
+    proceso: ProcesoAuditoria.otro,
+    hito: HitoProceso.fin,
   );
 
   // ⚙️ Preparación del payload (Estado nuevo + Historial actualizado)
@@ -2033,20 +2560,36 @@ Future<void> _onAprobarProformaComercial(AprobarProformaComercialEvent event, Em
   // ⚙️ FASE 2: ENSAMBLAJE DEL NUEVO ESTADO DEL TICKET
   // =========================================================
 
+  // 🛒 Venta de Repuesto: la OV va directo a Compras (sin Costos/proyecto) y
+  // arma la lista para Bodega con los repuestos finales de la venta.
+  final bool esVentaOV = FlujoVentaRepuestoService.esVenta(event.ticket);
   final eventoAuditoria = EventoAuditoriaEntity(
-    accion: 'APROBACIÓN COMERCIAL - Órdenes anexadas',
+    accion: esVentaOV
+        ? 'APROBACIÓN COMERCIAL - OV registrada (VENTA DE REPUESTO) — PASA A COMPRAS'
+        : 'APROBACIÓN COMERCIAL - Órdenes anexadas',
     usuarioNombre: event.nombreUsuario,
     usuarioRol: event.rolUsuario,
     timestamp: DateTime.now(),
+    proceso: ProcesoAuditoria.aprobacionCliente,
+    hito: HitoProceso.fin,
+    habilita: FlujoVentaRepuestoService.procesosTrasOV(event.ticket),
   );
 
   final ticketActualizado = event.ticket.copyWith(
-    estadoActual: EstadoTicket.costos, 
+    estadoActual: FlujoVentaRepuestoService.estadoTrasOV(event.ticket),
+    itemsDespachoBodega: esVentaOV
+        ? FlujoVentaRepuestoService.itemsDespachoDesdeLineas(
+            event.ticket.lineasRepuestoVenta,
+            fechaSolicitud: event.ticket.historialEventos.isNotEmpty
+                ? event.ticket.historialEventos.first.timestamp
+                : DateTime.now(),
+          )
+        : null,
     numeroOrdenVenta: event.numeroOrdenVenta,
     codigoOrdenVenta: urlsOrdenVenta,
     codigoOrdenCompra: urlsOrdenCompra,
     historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
-    isCostosCompletado: false, 
+    isCostosCompletado: esVentaOV, // venta: Costos no aplica tras la OV
     isComprasCompletado: false,
   );
 
@@ -2102,6 +2645,9 @@ Future<void> _onCompletarCostos(CompletarFaseCostosEvent event, Emitter<TicketSt
     usuarioNombre: event.nombreUsuario,
     usuarioRol: event.rolUsuario,
     timestamp: DateTime.now(),
+    proceso: ProcesoAuditoria.costos,
+    hito: HitoProceso.fin,
+    habilita: const [ProcesoAuditoria.bodega],
   );
 
   final ticketActualizado = event.ticket.copyWith(
@@ -2379,12 +2925,20 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
 
   // 2. CONSOLIDACIÓN DE DATOS (EL CEREBRO DEL BLOC)
     final List<String> urlsTotales = [...event.ticket.fotosUrls, ...urlsNuevas];
+
+    // 🏷️ Trazabilidad: si la sede es El Guabo el equipo sigue en camino
+    // (la recepción termina al llegar al taller).
+    final String sedeRecepcion = event.ticket.sede.name.toLowerCase();
+    final bool esSedeGuaboRecepcion = sedeRecepcion == 'elguabo' || sedeRecepcion == 'el_guabo';
     
     final eventoRecepcion = EventoAuditoriaEntity(
       accion: 'RECEPCIÓN FÍSICA Y EMISIÓN DE ACTA',
       usuarioNombre: event.nombreUsuario,
       usuarioRol: event.rolUsuario,
       timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.recepcion,
+      hito: esSedeGuaboRecepcion ? HitoProceso.avance : HitoProceso.fin,
+      habilita: esSedeGuaboRecepcion ? const [] : const [ProcesoAuditoria.evaluacion],
     );
 
     // 🧠 UNIDAD DE CONTROL LÓGICO: Ruteo Dinámico por Sede
@@ -2397,7 +2951,7 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
     // ⚙️ AQUÍ SE HACE LA INGENIERÍA: Ensamblamos TODAS las piezas nuevas en la entidad
     final ticketActualizado = event.ticket.copyWith(
       estadoActual: estadoDestino, // 🔀 TRASPASO DE ESTADO DINÁMICO
-      numeroSerie: event.numeroSerie,        
+      numeroSerie: _enMayusculas(event.numeroSerie),
       fallaReportada: event.fallaReportada, 
       accesoriosRecibidos: event.accesoriosRecibidos, 
       
@@ -2598,6 +3152,9 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
         usuarioNombre: event.nombreUsuario,
         usuarioRol: event.rolUsuario,
         timestamp: DateTime.now(),
+        proceso: ProcesoAuditoria.validacionBodega,
+        hito: event.transferirDirectoATaller || event.transferirABodega ? HitoProceso.fin : HitoProceso.avance,
+        habilita: event.transferirDirectoATaller ? const [ProcesoAuditoria.taller] : (event.transferirABodega || totalValidados > 0 ? const [ProcesoAuditoria.bodega] : const []),
       ),
     ];
 
@@ -2691,9 +3248,25 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
     RegistrarDespachoBodegaEvent event,
     Emitter<TicketState> emit,
   ) async {
+    // 🛑 No despachar más de lo que falta: se compara con la versión más
+    // reciente del ticket que tiene el Bloc (la pantalla pudo quedar vieja).
+    final candidatos = [
+      event.ticket,
+      ...state.historial.where((t) => t.id == event.ticket.id),
+      ...state.tickets.where((t) => t.id == event.ticket.id),
+      if (state.currentTicket?.id == event.ticket.id) state.currentTicket!,
+    ];
+    final masReciente = candidatos.reduce(
+        (a, b) => b.historialDespachos.length > a.historialDespachos.length ? b : a);
+    final exceso = EstadoDespachoService.motivoExcesoDespacho(masReciente, event.nuevoRegistro.items);
+    if (exceso != null) {
+      emit(state.copyWith(status: TicketStatus.error, message: exceso));
+      return;
+    }
+
     emit(state.copyWith(
       status: TicketStatus.loading,
-      message: 'Registrando despacho en bodega...',
+      message: 'Registrando picking...',
     ));
 
     final ticketConItems = event.ticket.copyWith(
@@ -2702,17 +3275,19 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
     );
 
     final esDespachoCompleto = ticketConItems.bodegaDespachoCompleto;
-    final bool transferirATaller = esDespachoCompleto && !ticketConItems.tieneDespachoPendienteDeEvidencia;
 
+    // 📦 PICKING: cada entrega es una guía (despacho parcial). El ticket ya
+    // NO pasa solo a Proceso de Trabajo: eso lo hace "Finalizar picking"
+    // (ver _onFinalizarPicking), cuando todo tiene check y evidencia.
     final nuevoEvento = EventoAuditoriaEntity(
       accion: esDespachoCompleto
-          ? (transferirATaller
-              ? 'BODEGA: DESPACHO TOTAL Y TRANSFERENCIA A PROCESO DE TRABAJO (${event.nuevoRegistro.items.length} ítems entregados)'
-              : 'BODEGA: DESPACHO TOTAL REGISTRADO - PENDIENTE DE EVIDENCIAS FOTOGRÁFICAS (${event.nuevoRegistro.items.length} ítems entregados)')
-          : 'BODEGA: DESPACHO PARCIAL (${event.nuevoRegistro.items.length} ítems entregados)',
+          ? 'BODEGA: PICKING PARCIAL ${event.nuevoRegistro.id} LISTO PARA RETIRO (${event.nuevoRegistro.items.length} ítems) - 100 % RECOLECTADO, PENDIENTE DE FINALIZAR PICKING'
+          : 'BODEGA: PICKING PARCIAL ${event.nuevoRegistro.id} LISTO PARA RETIRO (${event.nuevoRegistro.items.length} ítems)',
       usuarioNombre: event.nombreUsuario,
       usuarioRol: event.rolUsuario,
       timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.bodega,
+      hito: HitoProceso.avance,
     );
 
     final ahoraDesp = DateTime.now();
@@ -2739,14 +3314,14 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
       'historialEventos': FieldValue.arrayUnion([
         EventoAuditoriaModel.fromEntity(nuevoEvento).toJson(),
       ]),
-      if (transferirATaller) 'estadoActual': EstadoTicket.procesoTrabajo.name,
+      'estadoDespacho': EstadoDespachoService.despachoParcial,
     };
 
     final result = await ticketRepository.actualizarCampos(event.ticket.id, campos);
     result.fold(
       (failure) => emit(state.copyWith(
         status: TicketStatus.error,
-        message: 'Fallo al registrar despacho: ${_mapFailureToMessage(failure)}',
+        message: 'Fallo al registrar el picking: ${_mapFailureToMessage(failure)}',
       )),
       (ticketGuardado) {
         final listaActualizada = state.historial
@@ -2759,8 +3334,8 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
         emit(state.copyWith(
           status: TicketStatus.operationSuccess,
           message: esDespachoCompleto
-              ? '✅ Despacho total completado: Ticket transferido a Proceso de Trabajo.'
-              : '✅ Despacho parcial registrado exitosamente. Notificado a Taller.',
+              ? '✅ Picking registrado: todo recolectado. Suba la evidencia y luego finalice el picking desde la tarjeta.'
+              : '✅ Picking registrado. Suba la evidencia para dejarlo listo para retiro.',
           historial: listaActualizada,
           tickets: listaTickets,
           currentTicket: ticketGuardado,
@@ -2769,13 +3344,129 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
     );
   }
 
+  // ===========================================================================
+  // 📦 PICKING EN BODEGA
+  // ===========================================================================
+  void _reemplazarTicketEnEstado(Emitter<TicketState> emit, TicketEntity ticketGuardado, String mensaje) {
+    emit(state.copyWith(
+      status: TicketStatus.operationSuccess,
+      message: mensaje,
+      historial: state.historial.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      tickets: state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      currentTicket: ticketGuardado,
+    ));
+  }
+
+  Future<void> _onIniciarPicking(IniciarPickingEvent event, Emitter<TicketState> emit) async {
+    if (!EstadoDespachoService.puedeIniciarPicking(event.ticket)) {
+      emit(state.copyWith(status: TicketStatus.error, message: 'El picking de este ticket ya fue iniciado.'));
+      return;
+    }
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Iniciando picking...'));
+    final ahora = DateTime.now();
+    final evento = EventoAuditoriaEntity(
+      accion: 'BODEGA: INICIO DE PICKING',
+      usuarioNombre: event.nombreUsuario,
+      usuarioRol: event.rolUsuario,
+      timestamp: ahora,
+      proceso: ProcesoAuditoria.bodega,
+      hito: HitoProceso.avance,
+    );
+    final result = await ticketRepository.actualizarCampos(event.ticket.id, {
+      'estadoDespacho': EstadoDespachoService.pickingEnCurso,
+      'pickingIniciadoPor': event.nombreUsuario,
+      'pickingIniciadoEn': Timestamp.fromDate(ahora),
+      'historialEventos': FieldValue.arrayUnion([EventoAuditoriaModel.fromEntity(evento).toJson()]),
+    });
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'No se pudo iniciar el picking: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) => _reemplazarTicketEnEstado(emit, ticketGuardado, '▶️ Picking iniciado.'),
+    );
+  }
+
+  Future<void> _onFinalizarPicking(FinalizarPickingEvent event, Emitter<TicketState> emit) async {
+    final motivo = EstadoDespachoService.motivoNoFinaliza(event.ticket);
+    if (motivo != null) {
+      emit(state.copyWith(status: TicketStatus.error, message: 'No se puede finalizar el picking: $motivo'));
+      return;
+    }
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Finalizando picking...'));
+    final ahora = DateTime.now();
+    // Solo se mueve a Proceso de Trabajo si el ticket aún no pasó de ahí.
+    const posteriores = {
+      EstadoTicket.validacionFacturacion,
+      EstadoTicket.entrega,
+      EstadoTicket.finalizado,
+      EstadoTicket.anulado,
+    };
+    final pasaATaller = !posteriores.contains(event.ticket.estadoActual);
+    // 🛒 Venta de Repuesto: del picking pasa directo a Entrega (no al taller).
+    final esVentaPicking = FlujoVentaRepuestoService.esVenta(event.ticket);
+    final destino = FlujoVentaRepuestoService.estadoTrasPicking(event.ticket);
+    final evento = EventoAuditoriaEntity(
+      accion: !pasaATaller
+          ? 'BODEGA: FIN DE PICKING (${event.ticket.historialDespachos.length} despacho(s))'
+          : esVentaPicking
+              ? 'BODEGA: FIN DE PICKING — REPUESTOS LISTOS PARA RETIRO, PASA A ENTREGA (VENTA) (${event.ticket.historialDespachos.length} despacho(s))'
+              : 'BODEGA: FIN DE PICKING Y TRANSFERENCIA A PROCESO DE TRABAJO (${event.ticket.historialDespachos.length} despacho(s))',
+      usuarioNombre: event.nombreUsuario,
+      usuarioRol: event.rolUsuario,
+      timestamp: ahora,
+      proceso: ProcesoAuditoria.bodega,
+      hito: HitoProceso.fin,
+      habilita: pasaATaller ? FlujoVentaRepuestoService.procesosTrasPicking(event.ticket) : const [],
+    );
+    final result = await ticketRepository.actualizarCampos(event.ticket.id, {
+      'estadoDespacho': EstadoDespachoService.pickingFinalizado,
+      'pickingFinalizadoPor': event.nombreUsuario,
+      'pickingFinalizadoEn': Timestamp.fromDate(ahora),
+      if (pasaATaller) 'estadoActual': destino.name,
+      'historialEventos': FieldValue.arrayUnion([EventoAuditoriaModel.fromEntity(evento).toJson()]),
+    });
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'No se pudo finalizar el picking: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) => _reemplazarTicketEnEstado(
+        emit,
+        ticketGuardado,
+        !pasaATaller
+            ? '✅ Picking finalizado.'
+            : esVentaPicking
+                ? '✅ Picking finalizado: los repuestos están listos para retiro (Entrega).'
+                : '✅ Picking finalizado: el ticket pasó a Proceso de Trabajo.',
+      ),
+    );
+  }
+
+  /// Escribe el estado deducido en los tickets que aún no tienen
+  /// `estadoDespacho`. Silencioso: no cambia el status de la pantalla.
+  Future<void> _onSincronizarEstadoDespacho(SincronizarEstadoDespachoEvent event, Emitter<TicketState> emit) async {
+    final escritos = <String, String>{};
+    for (final entrada in event.estadosPorTicket.entries) {
+      final result = await ticketRepository.actualizarCampos(entrada.key, {'estadoDespacho': entrada.value});
+      result.fold((_) {}, (_) => escritos[entrada.key] = entrada.value);
+    }
+    if (escritos.isEmpty) return;
+    TicketEntity conEstado(TicketEntity t) =>
+        escritos.containsKey(t.id) ? t.copyWith(estadoDespacho: escritos[t.id]) : t;
+    emit(state.copyWith(
+      historial: state.historial.map(conEstado).toList(),
+      tickets: state.tickets.map(conEstado).toList(),
+    ));
+  }
+
   Future<void> _onActualizarEvidenciasDespacho(
     ActualizarEvidenciasDespachoEvent event,
     Emitter<TicketState> emit,
   ) async {
     emit(state.copyWith(
       status: TicketStatus.loading,
-      message: 'Subiendo fotos de evidencia del despacho...',
+      message: 'Subiendo evidencia del picking...',
     ));
 
     final List<String> urlsEvidencias = [];
@@ -2804,19 +3495,20 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
       return d;
     }).toList();
 
+    // 📦 PICKING: las evidencias ya no pasan el ticket a Proceso de Trabajo;
+    // eso lo hace "Finalizar picking" desde la tarjeta.
     final nuevoEvento = EventoAuditoriaEntity(
-      accion: 'BODEGA: REGISTRO DE ${urlsEvidencias.length} EVIDENCIAS PARA DESPACHO ${event.despachoId}',
+      accion: 'BODEGA: REGISTRO DE ${urlsEvidencias.length} EVIDENCIAS PARA PICKING ${event.despachoId}',
       usuarioNombre: event.nombreUsuario,
       usuarioRol: event.rolUsuario,
       timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.bodega,
+      hito: HitoProceso.avance,
     );
 
     final ticketConNuevoHistorial = event.ticket.copyWith(
       historialDespachos: nuevoHistorial,
     );
-
-    final esDespachoCompletoYEvidenciasOk = ticketConNuevoHistorial.bodegaDespachoCompleto &&
-        !ticketConNuevoHistorial.tieneDespachoPendienteDeEvidencia;
 
     // NUEVO (fix overwrite): mismo criterio que en _onRegistrarDespachoBodega
     // -- solo mandamos historialDespachos, el nuevo evento (via arrayUnion)
@@ -2828,7 +3520,6 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
       'historialEventos': FieldValue.arrayUnion([
         EventoAuditoriaModel.fromEntity(nuevoEvento).toJson(),
       ]),
-      if (esDespachoCompletoYEvidenciasOk) 'estadoActual': EstadoTicket.procesoTrabajo.name,
     };
 
     // NUEVO: descuento automatico de stock (inventario_bodega) al mismo
@@ -2855,7 +3546,7 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
       itemsADescontar: itemsADescontar,
       // NUEVO: solo los tickets Caracol reservan stock, asi que solo
       // ellos tienen algo que liberar en este paso.
-      liberarReserva: event.ticket.equipo == TipoEquipo.Caracol,
+      liberarReserva: FlujoVentaRepuestoService.liberaReservaEnPicking(event.ticket),
     );
     result.fold(
       (failure) => emit(state.copyWith(
@@ -2874,9 +3565,6 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
         }).toList();
         final ticketGuardado = ticketConNuevoHistorial.copyWith(
           historialDespachos: historialConFlag,
-          estadoActual: esDespachoCompletoYEvidenciasOk
-              ? EstadoTicket.procesoTrabajo
-              : ticketConNuevoHistorial.estadoActual,
         );
 
         final listaActualizada = state.historial
@@ -2888,13 +3576,27 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
 
         emit(state.copyWith(
           status: TicketStatus.operationSuccess,
-          message: '✅ Evidencias del despacho guardadas correctamente.',
+          message: FlujoVentaRepuestoService.esVenta(event.ticket)
+              ? '✅ Guía firmada guardada.'
+              : '✅ Evidencia guardada. Picking listo para retiro.',
           historial: listaActualizada,
           tickets: listaTickets,
           currentTicket: ticketGuardado,
         ));
       },
     );
+
+    // 🛒 Venta en Entrega: con la guía firmada puede quedar completa
+    // (guía + factura + guía firmada) → Finalizado.
+    if (result.isRight() &&
+        FlujoVentaRepuestoService.esVenta(event.ticket) &&
+        event.ticket.estadoActual == EstadoTicket.entrega) {
+      await _registrarEntregaVenta(emit,
+          ticketId: event.ticket.id,
+          nombreUsuario: event.nombreUsuario,
+          rolUsuario: event.rolUsuario,
+          silencioso: true);
+    }
   }
 
   Future<void> _onAsignarTecnicosTrabajo(
@@ -2949,20 +3651,15 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
       message: 'Guardando diagnóstico de fallas...',
     ));
 
-    final resumenFallas = event.fallas.map((f) => '${f.categoria}: ${f.razon}').join('; ');
-    final evento = EventoAuditoriaEntity(
-      accion: 'Diagnóstico de causas de falla registrado: ${resumenFallas.isEmpty ? "Sin fallas seleccionadas" : resumenFallas}',
-      usuarioNombre: event.nombreUsuario,
-      usuarioRol: event.rolUsuario,
-      timestamp: DateTime.now(),
-    );
-
-    final ticketActualizado = event.ticket.copyWith(
-      diagnosticoFallas: event.fallas,
-      historialEventos: [...event.ticket.historialEventos, evento],
-    );
-
-    final result = await actualizarTicket(ticketActualizado);
+    // 🔕 Carga retroactiva de diagnóstico de fallas: no genera línea de
+    // auditoría (a diferencia del diagnóstico en vivo desde Proceso de
+    // Trabajo, que sí queda resumido dentro de su propio evento general).
+    // Escritura parcial: solo el diagnóstico y el sello de la ronda de
+    // revisión, así la copia de la bandeja nunca pisa estado ni auditoría.
+    final result = await ticketRepository.actualizarCampos(event.ticket.id, {
+      'diagnosticoFallas': event.fallas.map((f) => f.toJson()).toList(),
+      'rondaDiagnosticoFallas': rondaRevisionDiagnosticoFallas,
+    });
     result.fold(
       (failure) => emit(state.copyWith(
         status: TicketStatus.error,
@@ -3012,6 +3709,8 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
           usuarioNombre: event.nombreUsuario,
           usuarioRol: event.rolUsuario,
           timestamp: DateTime.now(),
+          proceso: ProcesoAuditoria.taller,
+          hito: HitoProceso.avance,
         );
 
         final ticketActualizado = event.ticket.copyWith(
@@ -3043,28 +3742,77 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
     );
   }
 
+  // ===========================================================================
+  // 🔒 GUARDADO PARCIAL DEL TALLER: las acciones de órdenes de retiro solo
+  // escriben las órdenes, las marcas de certificación (al validar) y su
+  // evento (arrayUnion). Nunca el ticket completo: así una pantalla abierta
+  // desde antes no borra pickings/evidencias que Bodega registró mientras
+  // tanto, ni otros campos del ticket.
+  // ===========================================================================
+  Map<String, dynamic> _camposTaller(TicketEntity t, EventoAuditoriaEntity evento, {bool conMarcas = false}) => {
+        'ordenesRecepcion': t.ordenesRecepcion.map((o) => OrdenRecepcionRepuestosModel.fromEntity(o).toJson()).toList(),
+        if (conMarcas) 'materialesValidadosEnTaller': t.materialesValidadosEnTaller,
+        if (conMarcas) 'supervisorValidoMateriales': t.supervisorValidoMateriales,
+        if (conMarcas && t.fechaValidacionMaterialesTaller != null)
+          'fechaValidacionMaterialesTaller': Timestamp.fromDate(t.fechaValidacionMaterialesTaller!),
+        'historialEventos': FieldValue.arrayUnion([EventoAuditoriaModel.fromEntity(evento).toJson()]),
+      };
+
   Future<void> _onAsignarTecnicoRecepcionBodega(
     AsignarTecnicoRecepcionBodegaEvent event,
     Emitter<TicketState> emit,
   ) async {
+    // 🔒 Taller secuencial: una sola orden activa a la vez (las anteriores
+    // retiradas y con consumo validado) y el picking con evidencia de Bodega.
+    final bloqueo = RetiroPickingService.motivoBloqueoAsignacion(event.ticket, pickingId: event.pickingId);
+    if (bloqueo != null) {
+      emit(state.copyWith(status: TicketStatus.error, message: bloqueo));
+      return;
+    }
+
     emit(state.copyWith(
       status: TicketStatus.loading,
       message: 'Asignando orden de recogida a técnico...',
     ));
 
-    // Construir los ítems a recoger: saldo pendiente de lo despachado en bodega que no ha sido recibido en taller
+    // 📦 Cada retiro = un picking: la orden lleva SOLO los repuestos de ese
+    // picking que aún no se retiraron ni están en otra orden pendiente.
     final itemsARecoger = <ItemRecepcionRepuestoEntity>[];
-    for (final item in event.ticket.itemsDespachoBodega) {
-      final cantPendiente = event.ticket.cantidadPendienteRecogerEnBodega(item.codigo);
-      if (cantPendiente > 0) {
-        itemsARecoger.add(ItemRecepcionRepuestoEntity(
-          codigo: item.codigo,
-          descripcion: item.descripcion,
-          unidad: item.unidad,
-          cantidadDespachadaBodega: cantPendiente,
-          cantidadRecibidaTecnico: 0.0,
-          validado: false,
+    if (event.pickingId != null) {
+      if (RetiroPickingService.estado(event.ticket, event.pickingId!) != RetiroPickingService.listo) {
+        emit(state.copyWith(
+          status: TicketStatus.error,
+          message: 'El picking ${RetiroPickingService.codigoCorto(event.ticket, event.pickingId!)} ya tiene una orden de retiro pendiente o ya fue retirado.',
         ));
+        return;
+      }
+      for (final item in RetiroPickingService.items(event.ticket, event.pickingId!)) {
+        if (item.disponible > 0) {
+          itemsARecoger.add(ItemRecepcionRepuestoEntity(
+            codigo: item.codigo,
+            descripcion: item.descripcion,
+            unidad: item.unidad,
+            cantidadDespachadaBodega: item.disponible,
+            cantidadRecibidaTecnico: 0.0,
+            validado: false,
+          ));
+        }
+      }
+    } else {
+      // Tickets antiguos sin pickings: saldo despachado no recibido, sin
+      // repetir lo que ya está en otra orden pendiente.
+      for (final item in event.ticket.itemsDespachoBodega) {
+        final cantPendiente = event.ticket.cantidadDisponibleParaAsignarRetiro(item.codigo);
+        if (cantPendiente > 0) {
+          itemsARecoger.add(ItemRecepcionRepuestoEntity(
+            codigo: item.codigo,
+            descripcion: item.descripcion,
+            unidad: item.unidad,
+            cantidadDespachadaBodega: cantPendiente,
+            cantidadRecibidaTecnico: 0.0,
+            validado: false,
+          ));
+        }
       }
     }
 
@@ -3086,21 +3834,24 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
       fechaAsignacion: DateTime.now(),
       estado: EstadoOrdenRecepcion.pendienteRecoger,
       items: itemsARecoger,
+      pickingId: event.pickingId,
     );
 
+    final picking = event.pickingId == null ? '' : ' DEL PICKING ${RetiroPickingService.codigoCorto(event.ticket, event.pickingId!)}';
     final evento = EventoAuditoriaEntity(
-      accion: 'TALLER: ORDEN $ordenId ASIGNADA A [${event.tecnicoNombre.toUpperCase()}] PARA RETIRO EN BODEGA (${itemsARecoger.length} ítems)',
+      accion: 'TALLER: ORDEN $ordenId ASIGNADA A [${event.tecnicoNombre.toUpperCase()}] PARA RETIRO EN BODEGA$picking (${itemsARecoger.length} ítems)',
       usuarioNombre: event.nombreSupervisor,
       usuarioRol: event.rolSupervisor,
       timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.taller,
+      hito: HitoProceso.avance,
     );
 
     final ticketActualizado = event.ticket.copyWith(
       ordenesRecepcion: [...event.ticket.ordenesRecepcion, nuevaOrden],
-      historialEventos: [...event.ticket.historialEventos, evento],
     );
 
-    final result = await actualizarTicket(ticketActualizado);
+    final result = await ticketRepository.actualizarCampos(event.ticket.id, _camposTaller(ticketActualizado, evento));
     result.fold(
       (failure) => emit(state.copyWith(
         status: TicketStatus.error,
@@ -3116,6 +3867,73 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
           message: '✅ Orden de recogida asignada a ${event.tecnicoNombre}. Ya disponible en su bandeja.',
           historial: listaActualizada,
           tickets: listaActualizada,
+          currentTicket: ticketGuardado,
+        ));
+      },
+    );
+  }
+
+  Future<void> _onAnularOrdenRecepcion(AnularOrdenRecepcionEvent event, Emitter<TicketState> emit) async {
+    final motivo = event.motivo.trim();
+    if (motivo.isEmpty) {
+      emit(state.copyWith(status: TicketStatus.error, message: 'Indique el motivo de la anulación.'));
+      return;
+    }
+    OrdenRecepcionRepuestosEntity? orden;
+    for (final o in event.ticket.ordenesRecepcion) {
+      if (o.id == event.ordenId) orden = o;
+    }
+    if (orden == null || orden.estado != EstadoOrdenRecepcion.pendienteRecoger) {
+      emit(state.copyWith(status: TicketStatus.error, message: 'Solo se pueden anular órdenes pendientes de retiro.'));
+      return;
+    }
+
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Anulando orden ${event.ordenId}...'));
+    final ahora = DateTime.now();
+    final ordenes = event.ticket.ordenesRecepcion
+        .map((o) => o.id == event.ordenId
+            ? o.copyWith(
+                estado: EstadoOrdenRecepcion.anulada,
+                motivoAnulacion: motivo,
+                anuladaPor: event.nombreUsuario,
+                fechaAnulacion: ahora,
+              )
+            : o)
+        .toList();
+    final picking = orden.pickingId == null ? '' : ' (picking ${RetiroPickingService.codigoCorto(event.ticket, orden.pickingId!)})';
+    final evento = EventoAuditoriaEntity(
+      accion: 'TALLER: ORDEN DE RETIRO ${event.ordenId}$picking ANULADA -- Motivo: $motivo',
+      usuarioNombre: event.nombreUsuario,
+      usuarioRol: event.rolUsuario,
+      timestamp: ahora,
+      proceso: ProcesoAuditoria.taller,
+      hito: HitoProceso.avance,
+    );
+
+    final result = await ticketRepository.actualizarCampos(
+      event.ticket.id,
+      _camposTaller(event.ticket.copyWith(ordenesRecepcion: ordenes), evento),
+    );
+    // El enlace del técnico externo de esa orden deja de servir.
+    if (result.isRight()) {
+      try {
+        await AccesoTemporalBodegaService().quemarTokensDeOrden(event.ordenId, nota: 'ORDEN ANULADA: $motivo');
+      } catch (_) {}
+    }
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'No se pudo anular la orden: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) {
+        final lista = (state.historial.isNotEmpty ? state.historial : state.tickets)
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: '🚫 Orden ${event.ordenId} anulada. Su picking vuelve a estar listo para retiro.',
+          historial: lista,
+          tickets: lista,
           currentTicket: ticketGuardado,
         ));
       },
@@ -3139,10 +3957,38 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
       }
     }
 
+    // 📸 Evidencia obligatoria: hoja de materiales firmada + materiales retirados.
+    if (event.fotosHojaFirmada.isEmpty || event.fotosMateriales.isEmpty) {
+      emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Suba la foto de la hoja de materiales firmada y la de los materiales retirados para confirmar.',
+      ));
+      return;
+    }
+
     emit(state.copyWith(
       status: TicketStatus.loading,
-      message: 'Confirmando recepción de repuestos...',
+      message: 'Subiendo evidencia y confirmando recepción de repuestos...',
     ));
+
+    Future<List<String>> subir(List<XFile> fotos) async {
+      final urls = <String>[];
+      for (final foto in fotos) {
+        final r = await subirEvidenciaUseCase(foto, event.ticket.id);
+        r.fold((_) {}, urls.add);
+      }
+      return urls;
+    }
+
+    final urlsHoja = await subir(event.fotosHojaFirmada);
+    final urlsMateriales = await subir(event.fotosMateriales);
+    if (urlsHoja.isEmpty || urlsMateriales.isEmpty) {
+      emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'No se pudieron subir las fotos de evidencia. Verifique su conexión e intente de nuevo.',
+      ));
+      return;
+    }
 
     final ordenesActualizadas = event.ticket.ordenesRecepcion.map((orden) {
       if (orden.id == event.ordenId) {
@@ -3152,6 +3998,8 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
           fechaRecepcion: DateTime.now(),
           estado: todosConformes ? EstadoOrdenRecepcion.recibidoTotal : EstadoOrdenRecepcion.recibidoParcial,
           observacion: event.observacion,
+          urlsHojaFirmada: [...orden.urlsHojaFirmada, ...urlsHoja],
+          urlsFotosMateriales: [...orden.urlsFotosMateriales, ...urlsMateriales],
         );
       }
       return orden;
@@ -3161,18 +4009,20 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
     final total = event.itemsValidados.length;
 
     final evento = EventoAuditoriaEntity(
-      accion: 'TALLER: REPUESTOS RECIBIDOS EN BODEGA POR [${event.nombreTecnico.toUpperCase()}] ($conformes/$total conformes). Trasladados a taller.',
+      accion: 'TALLER: REPUESTOS RECIBIDOS EN BODEGA POR [${event.nombreTecnico.toUpperCase()}] ($conformes/$total conformes). '
+          'Trasladados a taller. Evidencia de retiro: ${urlsHoja.length} foto(s) de hoja firmada y ${urlsMateriales.length} de materiales.',
       usuarioNombre: event.nombreTecnico,
       usuarioRol: event.rolTecnico,
       timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.taller,
+      hito: HitoProceso.avance,
     );
 
     final ticketActualizado = event.ticket.copyWith(
       ordenesRecepcion: ordenesActualizadas,
-      historialEventos: [...event.ticket.historialEventos, evento],
     );
 
-    final result = await actualizarTicket(ticketActualizado);
+    final result = await ticketRepository.actualizarCampos(event.ticket.id, _camposTaller(ticketActualizado, evento));
     result.fold(
       (failure) => emit(state.copyWith(
         status: TicketStatus.error,
@@ -3211,21 +4061,43 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
       message: 'Certificando recepción de materiales en taller...',
     ));
 
+    // El consumo general certifica también cada lote ya retirado que aún no
+    // tenga su certificación (los pendientes de recoger no se tocan).
+    final ahora = DateTime.now();
+    final lotesCertificados = <String>[];
+    final ordenesCertificadas = event.ticket.ordenesRecepcion.map((o) {
+      if (o.estaCompletada && !o.validadoSupervisor) {
+        lotesCertificados.add(o.id);
+        return o.copyWith(
+          validadoSupervisor: true,
+          fechaValidadoSupervisor: ahora,
+          supervisorValida: event.nombreSupervisor,
+        );
+      }
+      return o;
+    }).toList();
+
     final evento = EventoAuditoriaEntity(
-      accion: 'TALLER: CONFORMIDAD DE MATERIALES EN TALLER POR SUPERVISOR [${event.nombreSupervisor.toUpperCase()}]. 100% de repuestos recibidos.',
+      accion: 'TALLER: CONFORMIDAD DE MATERIALES EN TALLER POR SUPERVISOR [${event.nombreSupervisor.toUpperCase()}]. 100% de repuestos recibidos.'
+          '${lotesCertificados.isEmpty ? '' : ' Consumo general certificado. Lotes: ${lotesCertificados.join(', ')}.'}',
       usuarioNombre: event.nombreSupervisor,
       usuarioRol: event.rolSupervisor,
-      timestamp: DateTime.now(),
+      timestamp: ahora,
+      proceso: ProcesoAuditoria.taller,
+      hito: HitoProceso.avance,
     );
 
     final ticketActualizado = event.ticket.copyWith(
       materialesValidadosEnTaller: true,
       supervisorValidoMateriales: event.nombreSupervisor,
-      fechaValidacionMaterialesTaller: DateTime.now(),
-      historialEventos: [...event.ticket.historialEventos, evento],
+      fechaValidacionMaterialesTaller: ahora,
+      ordenesRecepcion: ordenesCertificadas,
     );
 
-    final result = await actualizarTicket(ticketActualizado);
+    final result = await ticketRepository.actualizarCampos(
+      event.ticket.id,
+      _camposTaller(ticketActualizado, evento, conMarcas: true),
+    );
     result.fold(
       (failure) => emit(state.copyWith(
         status: TicketStatus.error,
@@ -3238,7 +4110,7 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
 
         emit(state.copyWith(
           status: TicketStatus.operationSuccess,
-          message: '✅ Materiales validados en taller por Supervisor. Requerimiento listo para finalizar y liberar.',
+          message: '✅ Consumo general certificado (incluye todos los lotes retirados). Requerimiento listo para finalizar y liberar.',
           historial: listaActualizada,
           tickets: listaActualizada,
           currentTicket: ticketGuardado,
@@ -3272,6 +4144,8 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
       usuarioNombre: event.nombreSupervisor,
       usuarioRol: event.rolSupervisor,
       timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.taller,
+      hito: HitoProceso.avance,
     );
 
     final ticketActualizado = event.ticket.copyWith(
@@ -3279,10 +4153,12 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
       materialesValidadosEnTaller: true,
       supervisorValidoMateriales: event.nombreSupervisor,
       fechaValidacionMaterialesTaller: DateTime.now(),
-      historialEventos: [...event.ticket.historialEventos, evento],
     );
 
-    final result = await actualizarTicket(ticketActualizado);
+    final result = await ticketRepository.actualizarCampos(
+      event.ticket.id,
+      _camposTaller(ticketActualizado, evento, conMarcas: true),
+    );
     result.fold(
       (failure) => emit(state.copyWith(
         status: TicketStatus.error,
@@ -3327,6 +4203,11 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
       usuarioNombre: event.nombreAdmin,
       usuarioRol: event.rolAdmin,
       timestamp: DateTime.now(),
+      // Fuera de los promedios; reinicia el reloj de las etapas abiertas y
+      // habilita la etapa del estado destino (ver TiemposPorProcesoService).
+      proceso: ProcesoAuditoria.admin,
+      hito: HitoProceso.fin,
+      habilita: [if (procesoDeEstado(event.nuevoEstado) != null) procesoDeEstado(event.nuevoEstado)!],
     );
 
     final campos = <String, dynamic>{
@@ -3366,3 +4247,7 @@ Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<Ticket
     );
   }
 }
+
+/// Número de serie (y textos similares) en MAYÚSCULAS y sin espacios
+/// sobrantes antes de guardarlo en Firestore.
+String? _enMayusculas(String? texto) => texto?.trim().toUpperCase();

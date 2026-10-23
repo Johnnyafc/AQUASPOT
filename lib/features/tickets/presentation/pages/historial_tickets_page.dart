@@ -24,6 +24,18 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
   // ⚙️ SENSORES DE BÚSQUEDA LOCAL
   final TextEditingController _searchController = TextEditingController();
   String _filtroBusqueda = '';
+  // 🆕 Chip del "Resumen General" pulsado (Garantías / Caracol / Cosechadora /
+  // Contador): la pestaña TODOS muestra solo esos tickets. null = todos.
+  String? _grupoResumen;
+
+  static const String _grupoReclamos = 'Reclamos de garantía';
+  static const String _grupoAprobadas = 'Garantías aprobadas';
+
+  bool _perteneceAGrupo(TicketEntity t, String grupo) {
+    if (grupo == _grupoReclamos) return t.esReclamoDeGarantia; // tipo o dictamen en la auditoría
+    if (grupo == _grupoAprobadas) return t.esGarantia == true;
+    return t.equipo.name == grupo;
+  }
 
   @override
   void initState() {
@@ -67,6 +79,7 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
     switch (estado) {
       case EstadoTicket.creado: return Icons.fiber_new;
       case EstadoTicket.revisionGarantia: return Icons.policy;
+      case EstadoTicket.cotizandoRepuesto: return Icons.request_page;
       case EstadoTicket.recepcionFisica: return Icons.handyman;
       case EstadoTicket.enCamino: return Icons.local_shipping;
       case EstadoTicket.comercial: return Icons.point_of_sale;
@@ -282,8 +295,12 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
                         // tarjetas: al desplazar hacia abajo, el resumen se va con la lista y
                         // deja ver los siguientes tickets.
                         _buildListaTickets(
-                          state.historial,
-                          "No hay tickets registrados en el sistema.",
+                          _grupoResumen == null
+                              ? state.historial
+                              : state.historial.where((t) => _perteneceAGrupo(t, _grupoResumen!)).toList(),
+                          _grupoResumen == null
+                              ? "No hay tickets registrados en el sistema."
+                              : "No hay tickets de $_grupoResumen.",
                           header: _buildResumenGeneral(state.historial),
                         ),
                         ...EstadoTicket.values.map((estadoTicketActual) {
@@ -319,7 +336,8 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
 
   Widget _buildResumenGeneral(List<TicketEntity> tickets) {
     final int total = tickets.length;
-    final int totalGarantias = tickets.where((t) => t.esGarantia == true).length;
+    final int totalReclamos = tickets.where((t) => _perteneceAGrupo(t, _grupoReclamos)).length;
+    final int totalAprobadas = tickets.where((t) => _perteneceAGrupo(t, _grupoAprobadas)).length;
     final int totalCaracol = tickets.where((t) => t.equipo == TipoEquipo.Caracol).length;
     final int totalCosechadora = tickets.where((t) => t.equipo == TipoEquipo.Cosechadora).length;
     final int totalContador = tickets.where((t) => t.equipo == TipoEquipo.Contador).length;
@@ -367,12 +385,25 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _buildChipResumen('Garantías', totalGarantias, Colors.red, Icons.policy),
-              _buildChipResumen('Caracol', totalCaracol, Colors.brown, Icons.rotate_right),
-              _buildChipResumen('Cosechadora', totalCosechadora, Colors.green.shade700, Icons.agriculture),
-              _buildChipResumen('Contador', totalContador, Colors.blueGrey, Icons.speed),
+              _buildChipResumen(_grupoReclamos, totalReclamos, Colors.orange.shade800, Icons.assignment_late_outlined,
+                  grupo: _grupoReclamos,
+                  descripcion: 'Tickets que ingresaron como RECLAMO DE GARANTÍA (tipo de requerimiento), sin importar si la garantía después se aprobó o se rechazó.'),
+              _buildChipResumen(_grupoAprobadas, totalAprobadas, Colors.red.shade700, Icons.verified_outlined,
+                  grupo: _grupoAprobadas,
+                  descripcion: 'Reclamos cuya garantía fue APROBADA por ingeniería en la revisión de garantía. No incluye los rechazados (pasan a facturación al cliente) ni los que aún no tienen dictamen.'),
+              _buildChipResumen('Caracol', totalCaracol, Colors.brown, Icons.rotate_right, grupo: TipoEquipo.Caracol.name),
+              _buildChipResumen('Cosechadora', totalCosechadora, Colors.green.shade700, Icons.agriculture, grupo: TipoEquipo.Cosechadora.name),
+              _buildChipResumen('Contador', totalContador, Colors.blueGrey, Icons.speed, grupo: TipoEquipo.Contador.name),
             ],
           ),
+          if (_grupoResumen != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Mostrando solo: $_grupoResumen. Toque el mismo recuadro otra vez para ver todos.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+              ),
+            ),
 
           const Divider(height: 24),
 
@@ -400,12 +431,15 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
     );
   }
 
-  Widget _buildChipResumen(String etiqueta, int cantidad, Color color, IconData icono) {
-    return Container(
+  // `grupo` != null: el recuadro se puede pulsar para filtrar la pestaña
+  // TODOS (y se resalta mientras está seleccionado).
+  Widget _buildChipResumen(String etiqueta, int cantidad, Color color, IconData icono, {String? grupo, String? descripcion}) {
+    final seleccionado = grupo != null && _grupoResumen == grupo;
+    final chip = Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        border: Border.all(color: color.withOpacity(0.4)),
+        color: seleccionado ? color.withOpacity(0.25) : color.withOpacity(0.1),
+        border: Border.all(color: seleccionado ? color : color.withOpacity(0.4), width: seleccionado ? 2 : 1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -420,6 +454,18 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
         ],
       ),
     );
+    Widget resultado = chip;
+    if (grupo != null) {
+      resultado = InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => setState(() => _grupoResumen = seleccionado ? null : grupo),
+        child: chip,
+      );
+    }
+    if (descripcion != null) {
+      resultado = Tooltip(message: descripcion, waitDuration: const Duration(milliseconds: 250), child: resultado);
+    }
+    return resultado;
   }
 
   Widget _buildListaTickets(List<TicketEntity> ticketsFiltrados, String mensajeVacio, {Widget? header}) {

@@ -1,0 +1,138 @@
+// lib/features/tickets/presentation/widgets/venta_repuesto_form_widget.dart
+//
+// Formulario completo de "Venta de Repuesto": selector de requerimiento +
+// Datos del Cliente (modo venta, con Medio de contacto en vez de Sede) +
+// Datos del Repuesto (búsqueda + cantidad + lista de líneas). Es un
+// widget hermano de TicketForm (no vive dentro de él) para no tocar nada
+// de lo que ya usan Reparación/Garantía.
+//
+// El botón "Registrar Requerimiento" dispara onSubmit; la validación y el
+// guardado (CrearVentaRepuestoEvent) viven en creacion_ticket_page.dart.
+
+import 'package:flutter/material.dart';
+import '../../domain/entities/cliente_entity.dart';
+import '../../domain/entities/linea_repuesto_venta_entity.dart';
+import '../../../../core/enum/ticket_enums.dart';
+import 'selector_requerimiento_widget.dart';
+import 'custom_dropdown.dart';
+import 'sections/datos_cliente_section.dart';
+import 'sections/datos_repuesto_section.dart';
+import '../bloc/ticket_event.dart' show ArchivosLineaVenta;
+
+class VentaRepuestoFormWidget extends StatelessWidget {
+  final GlobalKey<FormState> formKey;
+  final bool isProcessing;
+  final List<ClienteEntity> listaClientes;
+  final TextEditingController clienteController;
+  final TextEditingController campamentoController;
+  final TextEditingController nombreContactoController;
+  final TextEditingController emailController;
+  final TextEditingController telefonoController;
+  final String? selectedClienteId;
+  final ValueChanged<ClienteEntity> onClienteSelected;
+  final VoidCallback onClienteCleared;
+  final MedioContacto? medioContacto;
+  final ValueChanged<MedioContacto?> onMedioContactoChanged;
+  // "Este repuesto es de:" -- define el segmento (supervisor que lo ve).
+  final TipoEquipo? segmento;
+  final ValueChanged<TipoEquipo?> onSegmentoChanged;
+  final List<LineaRepuestoVentaEntity> lineasRepuestoVenta;
+  // 🔧 Evidencia de cada línea "por determinar" (misma posición que su línea).
+  final List<ArchivosLineaVenta> archivosPorLinea;
+  final void Function(List<LineaRepuestoVentaEntity> lineas, List<ArchivosLineaVenta> archivos) onLineasActualizadas;
+
+  final VoidCallback onSubmit;
+
+  const VentaRepuestoFormWidget({
+    super.key,
+    required this.formKey,
+    required this.isProcessing,
+    required this.listaClientes,
+    required this.clienteController,
+    required this.campamentoController,
+    required this.nombreContactoController,
+    required this.emailController,
+    required this.telefonoController,
+    required this.selectedClienteId,
+    required this.onClienteSelected,
+    required this.onClienteCleared,
+    required this.medioContacto,
+    required this.onMedioContactoChanged,
+    required this.segmento,
+    required this.onSegmentoChanged,
+    required this.lineasRepuestoVenta,
+    required this.archivosPorLinea,
+    required this.onLineasActualizadas,
+    required this.onSubmit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Form(
+      key: formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('REQUERIMIENTO',
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Color(0xFF005A9C))),
+          const SizedBox(height: 16),
+          const SelectorRequerimientoWidget(),
+          const Padding(padding: EdgeInsets.symmetric(vertical: 24.0), child: Divider(thickness: 1.5, color: Colors.black12)),
+
+          DatosClienteSection(
+            listaClientes: listaClientes,
+            selectedSede: null,
+            selectedClienteId: selectedClienteId,
+            clienteController: clienteController,
+            campamentoController: campamentoController,
+            nombreContactoController: nombreContactoController,
+            emailController: emailController,
+            telefonoController: telefonoController,
+            onSedeChanged: (_) {},
+            onClienteSelected: onClienteSelected,
+            onClienteCleared: onClienteCleared,
+            showSede: false,
+            esVenta: true,
+            medioContacto: medioContacto,
+            onMedioContactoChanged: onMedioContactoChanged,
+          ),
+
+          CustomDropdownField<TipoEquipo>(
+            label: 'Este repuesto es de:',
+            icon: Icons.precision_manufacturing,
+            items: const [TipoEquipo.Contador, TipoEquipo.Caracol, TipoEquipo.Cosechadora],
+            value: segmento,
+            onChanged: onSegmentoChanged,
+          ),
+
+          const Padding(padding: EdgeInsets.symmetric(vertical: 24.0), child: Divider(thickness: 1.5, color: Colors.black12)),
+
+          // La asistencia técnica se pide por repuesto ("Por determinar"),
+          // no para todo el requerimiento.
+          DatosRepuestoSection(
+            lineas: lineasRepuestoVenta,
+            archivosPorLinea: archivosPorLinea,
+            onLineasActualizadas: onLineasActualizadas,
+          ),
+
+          const SizedBox(height: 32),
+
+          SizedBox(
+            width: double.infinity,
+            height: 55,
+            child: ElevatedButton(
+              onPressed: isProcessing ? null : onSubmit,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF005A9C),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: isProcessing
+                  ? const CircularProgressIndicator(color: Colors.orange)
+                  : const Text('REGISTRAR REQUERIMIENTO', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

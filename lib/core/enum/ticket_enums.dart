@@ -39,6 +39,7 @@ enum EstadoTicket {
   enCamino,            
   recepcionFisica,
   revisionGarantia,
+  cotizandoRepuesto,   // Venta de Repuesto sin stock: Compras cotiza
   comercial,
   cotizado,
   costos,
@@ -67,6 +68,14 @@ enum LugarAtencion {
   noAplica
 }
 
+// 🆕 Medio de contacto para Venta de Repuesto (reemplaza al "Lugar de
+// recepción" / Sede en ese flujo, ya que no hay equipo que recibir).
+enum MedioContacto {
+  whatsapp,
+  correo,
+  celular,
+}
+
 extension EstadoTicketExtension on EstadoTicket {
   String get nombreLegible {
     switch (this) {
@@ -78,6 +87,8 @@ extension EstadoTicketExtension on EstadoTicket {
         return 'Evaluación técnica';
       case EstadoTicket.revisionGarantia:
         return 'Revisión garantía';
+      case EstadoTicket.cotizandoRepuesto:
+        return 'Cotizando repuesto';
       case EstadoTicket.comercial:
         return 'Comercial';
       case EstadoTicket.cotizado:

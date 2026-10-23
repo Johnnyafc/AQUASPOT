@@ -4,6 +4,8 @@ import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_blo
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_event.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/AsignacionCostosPage.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/pages/creacion_codigos_venta_page.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/services/creacion_codigos_venta_service.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/ticket_entity.dart'; // ⚙️ Necesario para el extension getter fechaInicioEstadoActual
 import 'package:aquaspot_postventa/features/tickets/presentation/widgets/tiempo_en_curso_widget.dart';
 import 'package:aquaspot_postventa/core/theme/ticket_visual_theme.dart';
@@ -80,6 +82,15 @@ class _BandejaCostosPageState extends State<BandejaCostosPage> {
                       '${ticket.clienteId.trim().isNotEmpty ? 'Cliente: ${ticket.clienteId} | ' : ''}'
                       'Contacto: ${ticket.nombreContacto} | Máquina: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}',
                     ),
+                    // 🧾 Venta con repuestos fuera del sistema: crear códigos.
+                    if (CreacionCodigosVentaService.requiereCreacionCodigos(ticket)) ...[
+                      const SizedBox(height: 4),
+                      InsigniaSuave(
+                        color: Colors.teal,
+                        icono: Icons.qr_code_2,
+                        texto: 'CREAR ${CreacionCodigosVentaService.indicesPendientes(ticket).length} CÓDIGO(S) DE REPUESTO',
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     TiempoEnCursoWidget(
                       desde: ticket.fechaInicioEstadoActual,
@@ -97,7 +108,9 @@ class _BandejaCostosPageState extends State<BandejaCostosPage> {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => AsignacionCostosPage(ticket: ticket),
+                    builder: (_) => CreacionCodigosVentaService.requiereCreacionCodigos(ticket)
+                        ? CreacionCodigosVentaPage(ticket: ticket)
+                        : AsignacionCostosPage(ticket: ticket),
                   ),
                 ),
               );

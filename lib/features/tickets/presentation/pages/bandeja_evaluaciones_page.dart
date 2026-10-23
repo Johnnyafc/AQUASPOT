@@ -13,6 +13,7 @@ import '../../domain/entities/ticket_entity.dart'; // ⚙️ Necesario para el e
 import '../widgets/tiempo_en_curso_widget.dart';
 import 'detalle_ticket_page.dart';
 import 'evaluacion_tecnica_page.dart';
+import 'evaluacion_venta_repuesto_page.dart';
 import '../../../../core/theme/ticket_visual_theme.dart';
 
 class BandejaEvaluacionesPage extends StatefulWidget {
@@ -131,7 +132,18 @@ class _BandejaEvaluacionesPageState extends State<BandejaEvaluacionesPage> {
                     ),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                     onTap: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => EvaluacionTecnicaPage(ticket: ticket)));
+                      // 🔧 Venta de Repuesto con líneas → evaluación de venta (supervisor).
+                      // Ventas antiguas sin líneas siguen con la evaluación anterior.
+                      final esVentaConLineas = ticket.tipoRequerimiento == TipoRequerimiento.ventaRepuesto &&
+                          ticket.lineasRepuestoVenta.isNotEmpty;
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => esVentaConLineas
+                              ? EvaluacionVentaRepuestoPage(ticket: ticket)
+                              : EvaluacionTecnicaPage(ticket: ticket),
+                        ),
+                      );
                     },
                   ),
                 );

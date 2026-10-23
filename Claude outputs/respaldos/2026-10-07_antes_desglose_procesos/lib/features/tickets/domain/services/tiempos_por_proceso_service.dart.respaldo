@@ -1,0 +1,178 @@
+// lib/features/tickets/domain/services/tiempos_por_proceso_service.dart
+//
+// ⏱️ Tiempo que cada PROCESO del flujo le dedicó a UN ticket, para el
+// dashboard "Tiempo promedio por proceso". Devuelve, por ticket, el total
+// de horas de cada proceso (y de cada persona dentro del proceso); el
+// dashboard luego promedia ENTRE TICKETS (cada ticket cuenta una sola vez
+// por proceso, sin importar cuántos eventos registró).
+//
+// Dos formas de medir, según cómo se creó el ticket:
+//
+// 1. Tickets con etiquetas (su evento de creación tiene `proceso`): cada
+//    proceso se mide en su propio carril, desde la acción que lo HABILITÓ
+//    (o su propio INICIO) hasta su FIN. Así Compras, Validación Bodega,
+//    Despacho y Taller se miden bien aunque trabajen en paralelo. Si un
+//    proceso se repite (ej. Comercial recotiza tras una modificación), se
+//    suman los ciclos.
+//
+// 2. Tickets antiguos (sin etiquetas): el tramo entre dos eventos seguidos
+//    se asigna al proceso del evento de llegada, clasificado por el texto
+//    de la acción (mismo criterio que antes, con correcciones de lectura).
+//    No se modifica nada en Firestore.
+
+import '../../../../core/enum/proceso_auditoria.dart';
+import '../entities/evento_auditoria_entity.dart';
+
+/// Horas de un proceso en un ticket, atribuidas a una persona.
+class TiempoProcesoTicket {
+  final String proceso;        // Nombre de la barra del dashboard
+  final String usuarioNombre;
+  final String usuarioRol;
+  final double horas;
+
+  const TiempoProcesoTicket({
+    required this.proceso,
+    required this.usuarioNombre,
+    required this.usuarioRol,
+    required this.horas,
+  });
+}
+
+class TiemposPorProcesoService {
+  static const String etiquetaSinClasificar = 'Sin clasificar';
+  static const String etiquetaOtro = 'Otro';
+
+  /// true si el ticket se creó con etiquetas (se mide por carriles).
+  static bool usaEtiquetas(List<EventoAuditoriaEntity> historial) {
+    if (historial.isEmpty) return false;
+    final primero = [...historial]..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    return primero.first.proceso != null;
+  }
+
+  /// Total de horas por (proceso, persona) dentro de un ticket.
+  static List<TiempoProcesoTicket> calcular(List<EventoAuditoriaEntity> historial) {
+    if (historial.length < 2) return const [];
+    final eventos = [...historial]..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    final acumulado = <String, _Acumulado>{};
+
+    void sumar(String proceso, EventoAuditoriaEntity e, DateTime desde) {
+      final horas = e.timestamp.difference(desde).inMinutes / 60.0;
+      if (horas <= 0) return;
+      final clave = '$proceso|${e.usuarioNombre}';
+      acumulado.putIfAbsent(clave, () => _Acumulado(proceso, e.usuarioNombre, e.usuarioRol)).horas += horas;
+    }
+
+    if (usaEtiquetas(eventos)) {
+      _calcularPorCarriles(eventos, sumar);
+    } else {
+      _calcularSecuencial(eventos, sumar);
+    }
+
+    return acumulado.values
+        .map((a) => TiempoProcesoTicket(
+              proceso: a.proceso,
+              usuarioNombre: a.usuarioNombre,
+              usuarioRol: a.usuarioRol,
+              horas: double.parse(a.horas.toStringAsFixed(2)),
+            ))
+        .toList();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 1. Carriles (tickets con etiquetas)
+  // ---------------------------------------------------------------------------
+  static void _calcularPorCarriles(
+    List<EventoAuditoriaEntity> eventos,
+    void Function(String proceso, EventoAuditoriaEntity e, DateTime desde) sumar,
+  ) {
+    final abiertos = <ProcesoAuditoria, DateTime>{};
+    // Aperturas provisionales: Costos deja visible el ticket en Despacho,
+    // pero solo cuenta desde ahí si Bodega actúa antes de que otro proceso
+    // le habilite trabajo (repuestos que ya estaban en stock).
+    final provisionales = <ProcesoAuditoria>{};
+    DateTime? anterior;
+
+    for (final e in eventos) {
+      final p = e.proceso;
+      if (p == null) {
+        // Evento sin etiqueta en un ticket nuevo: se hace visible como
+        // "Sin clasificar" (tramo desde el evento anterior).
+        if (anterior != null) sumar(etiquetaSinClasificar, e, anterior);
+        anterior = e.timestamp;
+        continue;
+      }
+
+      // Una acción propia del proceso confirma su apertura provisional.
+      provisionales.remove(p);
+
+      if (e.hito == HitoProceso.inicio) {
+        abiertos.putIfAbsent(p, () => e.timestamp);
+      } else if (e.hito == HitoProceso.fin) {
+        final desde = abiertos.remove(p) ?? anterior;
+        final etiqueta = p.etiquetaDashboard;
+        if (desde != null && etiqueta != null) sumar(etiqueta, e, desde);
+      }
+
+      for (final h in e.habilita) {
+        if (!abiertos.containsKey(h)) {
+          abiertos[h] = e.timestamp;
+          if (p == ProcesoAuditoria.costos) provisionales.add(h);
+        } else if (provisionales.remove(h)) {
+          // Estaba abierto solo provisionalmente y el proceso no actuó:
+          // empieza a contar desde esta habilitación real.
+          abiertos[h] = e.timestamp;
+        }
+      }
+
+      anterior = e.timestamp;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 2. Secuencial (tickets antiguos, clasificados por texto)
+  // ---------------------------------------------------------------------------
+  static void _calcularSecuencial(
+    List<EventoAuditoriaEntity> eventos,
+    void Function(String proceso, EventoAuditoriaEntity e, DateTime desde) sumar,
+  ) {
+    for (var i = 1; i < eventos.length; i++) {
+      final proceso = procesoPorTexto(eventos[i].accion);
+      if (proceso != null) sumar(proceso, eventos[i], eventos[i - 1].timestamp);
+    }
+  }
+
+  /// Clasifica una acción antigua por su texto. null = fuera de los promedios.
+  /// ⚠️ El orden de los checks importa (una acción puede mencionar varias
+  /// palabras clave).
+  static String? procesoPorTexto(String accion) {
+    final a = accion.toUpperCase();
+    if (a.startsWith('ADMIN:')) return null;
+    if (a.contains('GUABO')) return 'Recepción';
+    if (a.startsWith('SUPERVISOR DECLAR') || a.startsWith('SUPERVISOR RESTABLEC')) return 'Evaluación Técnica';
+    if (a.contains('COTIZACIÓN DE REPUESTO') || a.contains('REPUESTO SIN STOCK')) return 'Compras';
+    if (a.contains('GARANT')) return 'Revisión Garantía';
+    if (a.contains('RECEP')) return 'Recepción';
+    if (a.contains('EVALUACI')) return 'Evaluación Técnica';
+    if (a.startsWith('APROBACIÓN COMERCIAL') || a.startsWith('SOLICITUD DE MODIFICACI')) return 'Proforma enviada';
+    if (a.startsWith('REVISIÓN COMERCIAL COMPLETADA')) return 'Revisión de pagos';
+    if (a.contains('COTIZA') || a.contains('COMERCIAL')) return 'En cotización';
+    if (a.contains('COSTO')) return 'Costos';
+    if (a.startsWith('ORDEN DE COMPRA VALIDADA EN BODEGA')) return 'Despacho';
+    if (a.contains('COMPRA') && (a.contains('VALIDACI') || a.contains('VALIDADA'))) return 'Validación Bodega';
+    if (a.contains('COMPRA')) return 'Compras';
+    if (a.startsWith('TALLER:') || a.startsWith('INFORME TÉCNICO') || a.startsWith('TÉCNICOS ASIGNADOS')) return 'Proceso de Trabajo';
+    if (a.contains('BODEGA') || a.contains('DESPACHO')) return 'Despacho';
+    if (a.contains('TALLER') || a.contains('TRABAJO')) return 'Proceso de Trabajo';
+    if (a.contains('FACTURA') || a.contains('ENTREGA') || a.contains('GUÍA') || a.contains('GUIA')) return 'Entrega';
+    if (a.startsWith('ANULACI')) return null;
+    return etiquetaOtro;
+  }
+}
+
+class _Acumulado {
+  final String proceso;
+  final String usuarioNombre;
+  final String usuarioRol;
+  double horas = 0;
+  _Acumulado(this.proceso, this.usuarioNombre, this.usuarioRol);
+}

@@ -1,0 +1,191 @@
+# Aquaspot Postventa — Contexto del proyecto
+
+App Flutter/Firebase de gestión de postventa (tickets de reparación, garantía,
+venta de repuestos, etc.) de Aquaspot. Arquitectura limpia por features
+(`lib/features/<feature>/{data,domain,presentation}`), BLoC para estado,
+Firestore como backend. Rama de trabajo actual: `aquaspot_optimizado`.
+
+Este archivo resume el contexto acumulado en una sesión larga de trabajo con
+Claude (vía Cowork) para que una sesión de Claude Code en esta misma carpeta
+arranque con la misma memoria, sin tener que repetir todo desde cero.
+
+## Reglas fijas (NO negociables, confirmadas explícitamente por el dueño del proyecto)
+
+1. **Nunca hacer `git commit` sin una autorización explícita e inequívoca en
+   ese mismo turno.** No asumir que "implementar" implica "commitear". Esperar
+   a que el usuario pruebe el cambio y confirme antes de ofrecer commitear.
+2. **Nunca editar o escribir código sin aprobación explícita en ese turno.**
+   Para cambios de alcance abierto o decisiones de arquitectura, primero
+   plantear el plan en palabras y esperar confirmación antes de tocar archivos.
+3. **Problema conocido de fin de línea (CRLF/LF):** ~242 archivos aparecen
+   como "modificados" en `git status` porque el git de este entorno no tiene
+   `core.autocrlf` configurado igual que el git de Windows del usuario. **Nunca
+   tocar, normalizar, ni hacer `git add -A` / `git add .`** — eso arrastraría
+   esos falsos positivos. Al hacer `git add`, listar siempre los archivos
+   exactos que de verdad se editaron.
+4. Cada commit debe ser independiente y descriptivo; nunca usar `--amend`
+   salvo pedido explícito.
+5. Identidad git local ya configurada en este repo (NO global):
+   `user.name = Johnnyafc`, `user.email = johfcede@espol.edu.ec` (coincide
+   con el autor real de los commits anteriores del proyecto).
+6. **No hay Flutter/Dart SDK disponible en los entornos donde corre Claude**
+   (ni en el contenedor en la nube de Cowork, ni en el puente al equipo del
+   usuario) — se confirmó que la red de esos entornos bloquea
+   `storage.googleapis.com` y `pub.dev`, de donde Flutter necesita descargar
+   su motor/SDK. **No se puede compilar, analizar (`flutter analyze`) ni
+   correr la app desde ahí.** El usuario compila y corre con Antigravity (o
+   ahora, Claude Code en su propia máquina) y reporta los errores de vuelta.
+7. Toda edición debe ser quirúrgica: leer el archivo antes de tocarlo,
+   verificar que el string a reemplazar es único antes de escribir, revisar
+   balance de llaves/paréntesis/corchetes después, y revisar el `git diff`
+   para confirmar que el cambio quedó aislado a lo pedido.
+
+## Estado del repositorio (al momento de escribir esto)
+
+Commit más reciente: `0f1c1f0` — "feat: trazabilidad grafica por proceso en
+Detalle de Ticket" (esta versión del feature de trazabilidad quedó OBSOLETA,
+ver abajo).
+
+Hay cambios sin commitear (reales, sin contar el ruido CRLF) en:
+- `lib/core/enum/ticket_enums.dart`
+- `lib/features/auth/presentation/pages/main_menu_page.dart`
+- `lib/features/tickets/domain/services/trazabilidad_grafica_service.dart`
+- `lib/features/tickets/presentation/widgets/trazabilidad_grafica_widget.dart`
+- `lib/features/tickets/presentation/pages/creacion_ticket_page.dart`
+- `lib/features/tickets/presentation/widgets/sections/datos_cliente_section.dart`
+- `test/tiempos_operativos_trazabilidad_test.dart` (modificado antes de esta
+  sesión, no se ha investigado por qué)
+
+Y archivos nuevos sin trackear:
+- `lib/features/tickets/domain/entities/linea_repuesto_venta_entity.dart`
+- `lib/features/tickets/presentation/widgets/sections/datos_repuesto_section.dart`
+- `lib/features/tickets/presentation/widgets/sections/asistencia_tecnica_section.dart`
+- `lib/features/tickets/presentation/widgets/venta_repuesto_form_widget.dart`
+
+Ninguno de estos cambios se ha commiteado todavía — están pendientes de que
+el usuario los pruebe en caliente (hot reload / Antigravity) y confirme.
+
+## Feature 1: Trazabilidad por evento ("Tiempos por Proceso")
+
+En `detalle_ticket_page.dart` se agregó una tarjeta nueva "Tiempos por
+Proceso" ANTES de la tarjeta existente "Trazabilidad y Auditoría" (que NO se
+debe tocar, sigue igual). La tarjeta nueva usa
+`TrazabilidadGraficaWidget(ticket: ticket)`.
+
+Modelo de datos — importante, fue corregido a mitad de la sesión:
+- **Versión inicial (equivocada, commiteada en `0f1c1f0`):** clasificaba los
+  eventos del historial en "etapas de negocio" (Evaluación Técnica, Garantía,
+  Comercial, Costos, Compras, Bodega, etc.) con reglas de palabras clave.
+  Problema: cualquier texto de evento que no calzara con una regla
+  desaparecía silenciosamente del cálculo, y un ticket sin evento de
+  "recepción" (ingreso presencial) se quedaba trabado mostrando solo una fila.
+- **Versión corregida (actual, en el working tree, NO commiteada):** cada
+  evento del `historialEventos`, ordenado cronológicamente, tiene su propia
+  duración = su timestamp menos el del evento inmediatamente anterior (o la
+  creación si es el primero). Sin agrupar, sin clasificar, sin perder nada —
+  "todo lo que está en el historial aparece". Atribuido a quien ejecutó la
+  acción (`usuarioNombre` + `usuarioRol`). Confirmado explícitamente por el
+  usuario: "Si, exacto, eso es lo que necesito."
+
+Archivos: `trazabilidad_grafica_service.dart` (el cálculo,
+`TrazabilidadCalculator.calcular`) y `trazabilidad_grafica_widget.dart` (la
+UI: barras + fila "esperando" si el ticket sigue abierto + detalle
+expandible por fila).
+
+**Pendiente:** el usuario todavía no ha confirmado en la app real que esta
+versión corregida funciona bien. No commitear hasta que lo confirme.
+
+## Feature 2: Venta de Repuesto (en construcción activa)
+
+`TipoRequerimiento.ventaRepuesto` ya existía como opción en el selector de
+"Crear Requerimiento", pero mostraba una caja de "módulo en construcción".
+Se está construyendo su formulario real, reutilizando widgets ya existentes
+donde se pudo (pedido explícito del usuario: "usa los widgets que ya se
+crearon para los formularios, para optimizar la aplicación").
+
+Diseño acordado con el usuario, sección por sección:
+
+1. **Selector de Requerimiento** — sin cambios, el mismo de siempre
+   (`selector_requerimiento_widget.dart`).
+2. **"1. Datos del Cliente"** — reutiliza `DatosClienteSection` (el mismo
+   widget de Reparación/Garantía), extendido con un modo nuevo `esVenta`:
+   cambia el título (sin "y Sede") y reemplaza el dropdown de Sede por uno
+   nuevo "Medio de contacto" (`MedioContacto`: whatsapp, correo, celular —
+   enum nuevo en `ticket_enums.dart`). El resto de campos (cliente, campamento,
+   contacto, correo, teléfono) igual que siempre. Este modo es opt-in
+   (`esVenta = false` por defecto) — no afecta a Reparación/Garantía.
+3. **"2. Datos del Repuesto"** — widget nuevo `DatosRepuestoSection`: un
+   buscador (`Autocomplete`) que filtra el inventario actual
+   (`InventarioBloc`, ya provisto globalmente en `main.dart`) por nombre o
+   código, un campo de cantidad (NO bloquea aunque el stock esté en 0, es
+   solo informativo), botón "+ Agregar", y la lista de líneas ya agregadas
+   (repuesto + cantidad) con opción de quitarlas. Permite varios repuestos
+   por venta. A propósito NO filtra por bodega todavía (ver "Decisiones
+   pendientes" abajo).
+4. **Sección "¿Necesita asistencia de Servicio Técnico?"** — widget nuevo
+   `AsistenciaTecnicaSection`: un `SwitchListTile`, apagado por defecto (el
+   formulario queda igual si no se activa). Al activarlo, muestra:
+   - `CameraManagerWidget` **reutilizado tal cual** (el mismo que usa
+     Reparación para "Evidencia Fotográfica" — foto + video, cámara o
+     galería). Cero cambios a ese widget.
+   - Un botón "Adjuntar Nota de Voz" que reutiliza el mismo patrón de
+     `FilePicker` que ya usa la carga de Excel en Bodega
+     (`gestion_stock_bodega_page.dart`), aquí con extensiones de audio
+     (mp3, m4a, wav, aac, ogg) — el usuario adjunta una nota de voz ya
+     grabada con la app de su teléfono, NO se graba audio dentro de la app
+     (no existe ningún paquete de grabación en el proyecto, se decidió no
+     agregarlo).
+5. **Botón "Registrar Venta"** — por ahora solo valida localmente (cliente
+   elegido, medio de contacto elegido, al menos un repuesto agregado) y
+   muestra un mensaje de confirmación. **Todavía NO guarda nada en
+   Firestore** — ver decisiones pendientes.
+
+Todo esto se arma en un widget hermano de `TicketForm` llamado
+`VentaRepuestoFormWidget` (no vive dentro de `TicketForm`, para no tocar nada
+de lo que ya usan Reparación/Garantía). En `creacion_ticket_page.dart`, el
+`build()` bifurca: si `state.tipoSeleccionado == TipoRequerimiento.ventaRepuesto`
+renderiza `VentaRepuestoFormWidget`, si no, el `TicketForm` de siempre
+(código original intacto en esa rama).
+
+### Decisiones pendientes para Venta de Repuesto (el usuario las fue
+dejando abiertas a propósito, hay que retomarlas con él, no asumir)
+
+- **¿Cómo se guarda la venta?** ¿Reutiliza el pipeline de `CrearTicketEvent`
+  / `TicketEntity` / Firestore (como Reparación/Garantía), con campos nuevos
+  opcionales (medioContacto, líneas de repuestos, asistencia técnica)? ¿O es
+  una colección/entidad completamente aparte? El usuario dijo "Ya vamos a
+  definir, solo entiende el código" y later "Después planteamos" — osea, no
+  está decidido.
+- **¿Qué pasa con el ticket después de creado?** ¿Se cierra solo al
+  registrarse, o pasa por revisión de algún rol? No decidido.
+- **No descuenta stock al registrar** — confirmado explícitamente por el
+  usuario ("eso simplemente es un requerimiento, es un registro nomás").
+- **Problema de fondo sin resolver — bodega como parte de la llave del
+  inventario:** hoy `InventarioRemoteDataSourceImpl.guardarLoteInventario`
+  usa el `código` como ID único del documento en Firestore
+  (`_coleccion.doc(codigo)`). Si en el futuro se carga un Excel con el mismo
+  código en una bodega distinta, el documento se sobre-escribe/mezcla en vez
+  de crear un registro separado — no hay forma de diferenciar por bodega hoy.
+  El usuario pidió explícitamente NO vincular bodega todavía en el formulario
+  de venta ("no vinculemos a ninguna bodega aún... al momento de subir tiene
+  que hacerse referencia con el código y la bodega, solo allí lo
+  diferenciaremos") — queda como tarea aparte, a resolver en el pipeline de
+  carga de Excel (`guardarLoteInventario` + el parser), no en este formulario.
+
+## Otros cambios sueltos sin commitear
+
+- `main_menu_page.dart`: se agregó la tarjeta "Inventario y Stock Bodega"
+  (que ya existía para el rol Bodega, navega a `GestionStockBodegaPage`)
+  también al bloque de módulos del rol Compras — mismo widget, mismo
+  destino, solo duplicado el `_buildCardOption(...)` en el bloque
+  `if (isAdmin || operador.rol == RolUsuario.compras)`.
+
+## Cómo seguir trabajando
+
+- Antes de commitear CUALQUIER cosa de lo anterior, pedir confirmación
+  explícita al usuario — no asumir que "ya está listo" equivale a luz verde
+  para el commit.
+- Si compilas/corres la app (algo que Claude Code SÍ puede hacer en esta
+  máquina, a diferencia de Cowork) y encuentras errores de compilación en
+  alguno de los archivos nuevos/modificados de arriba, corrígelos ahí mismo
+  con el mismo cuidado quirúrgico de la regla 7.

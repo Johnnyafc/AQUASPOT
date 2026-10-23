@@ -70,11 +70,48 @@ export const enrutadorNotificacionesPush = onDocumentUpdated(
     switch (estadoNuevo) {
       
       case "recepcionFisica":
+        // 🛒 Venta de Repuesto con asistencia técnica: no hay equipo que
+        // recibir, el supervisor evalúa la venta.
+        if (ticketAhora.tipoRequerimiento === "ventaRepuesto") {
+          await dispararAlarmaFiltroSegmento(
+            ["supervisor"],
+            segmentoDestino,
+            "🔧 Evaluación de Venta de Repuesto",
+            `Hay una evaluación de venta de repuesto: Ticket #${ticketId} - ${cliente}.`
+          );
+          // 🔀 Compras en paralelo: repuestos conocidos sin stock (o fuera del
+          // sistema) que Compras puede cotizar mientras se evalúa el resto.
+          // Misma regla que RuteoVentaRepuestoService.requiereGestionCompras.
+          const lineasVenta = Array.isArray(ticketAhora.lineasRepuestoVenta) ? ticketAhora.lineasRepuestoVenta : [];
+          const pendientesCompras = lineasVenta.filter((l: any) =>
+            l && !l.porDeterminar && !l.cotizadaPorCompras &&
+            (l.existeEnSistema === false || (Number(l.stockDisponibleAlEvaluar) || 0) < (Number(l.cantidad) || 0))
+          ).length;
+          if (pendientesCompras > 0) {
+            await dispararAlarmaFiltroSegmento(
+              ["compras"],
+              segmentoDestino,
+              "🛒 Cotizar Repuesto (en paralelo)",
+              `Ticket #${ticketId}: ${pendientesCompras} repuesto(s) sin stock para cotizar mientras se evalúa el resto.`
+            );
+          }
+          break;
+        }
         await dispararAlarmaFiltroSegmento(
           ["supervisor"], // ⚙️ CALIBRADO A MINÚSCULAS
           segmentoDestino, 
           "📦 Equipo en Recepción Física", 
           `El equipo ${equipo} de ${cliente} ha ingresado a recepción.`
+        );
+        break;
+
+      case "cotizandoRepuesto":
+        // 🛒 Venta de Repuesto sin stock suficiente: Compras debe cotizar.
+        await dispararAlarmaFiltroSegmento(
+          ["compras"],
+          segmentoDestino,
+          "🛒 Cotizar Repuesto",
+          `Ticket #${ticketId}: Venta de repuesto sin stock. Adjunte la cotización.`
         );
         break;
 
@@ -97,10 +134,37 @@ export const enrutadorNotificacionesPush = onDocumentUpdated(
         break;
 
       case "cotizado":
+        // 🧾 Venta de Repuesto que vuelve de Costos con los códigos creados:
+        // Comercial ya puede registrar la OV.
+        const codigosCreados = (Array.isArray(ticketAhora.lineasRepuestoVenta) ? ticketAhora.lineasRepuestoVenta : [])
+          .some((l: any) => l && l.codigoCreadoPorCostos);
+        if (ticketAhora.tipoRequerimiento === "ventaRepuesto" && ticketAntes.estadoActual === "costos" && codigosCreados) {
+          await dispararAlarmaFiltroSegmento(
+            ["comercial"],
+            segmentoDestino,
+            "🧾 Códigos de repuesto creados",
+            `Ticket #${ticketId} - ${cliente}: Costos creó los códigos. Ya puede registrar la Orden de Venta.`
+          );
+          break;
+        }
         // Estación de tránsito silenciosa (Sin alarma)
         return;
 
       case "costos":
+        // 🧾 Venta de Repuesto: Costos solo crea los códigos de los repuestos
+        // que no están en el sistema (aún no hay OV: Compras no interviene).
+        // Misma regla que CreacionCodigosVentaService.requiereCreacionCodigos.
+        const pendientesCodigo = (Array.isArray(ticketAhora.lineasRepuestoVenta) ? ticketAhora.lineasRepuestoVenta : [])
+          .filter((l: any) => l && l.fichaCreacion && !l.codigoCreadoPorCostos).length;
+        if (ticketAhora.tipoRequerimiento === "ventaRepuesto" && pendientesCodigo > 0) {
+          await dispararAlarmaFiltroSegmento(
+            ["costos"],
+            segmentoDestino,
+            "🧾 Crear códigos de repuesto",
+            `Ticket #${ticketId} - ${cliente}: el cliente aceptó la proforma. Cree ${pendientesCodigo} código(s) de repuesto.`
+          );
+          break;
+        }
         // 🚀 DISPARO DUAL: Dos actuadores independientes para distintos departamentos
         await dispararAlarmaFiltroSegmento(
           ["costos"], 
@@ -125,9 +189,25 @@ export const enrutadorNotificacionesPush = onDocumentUpdated(
         );
         break;
 
-      case "bodega":
-        // Estación de tránsito silenciosa (Sin alarma)
+      case "bodega": {
+        // 📦 Requerimientos SIN ítems de despacho (antiguos / validación
+        // simple): llegan "de golpe" a Bodega -> un solo aviso.
+        // Los que sí tienen ítems ya se avisan por cada llegada parcial
+        // (ver notificarRepuestosDisponiblesBodega), así no hay doble aviso.
+        const items = Array.isArray(ticketAhora.itemsDespachoBodega) ? ticketAhora.itemsDespachoBodega : [];
+        const repuestosTaller = Array.isArray(ticketAhora.evaluacionTecnica?.repuestosTaller)
+          ? ticketAhora.evaluacionTecnica.repuestosTaller
+          : [];
+        if (items.length === 0 && repuestosTaller.length === 0) {
+          await dispararAlarmaFiltroSegmento(
+            ["bodega"],
+            segmentoDestino,
+            "📦 Requerimiento en Bodega",
+            `Ticket #${ticketId} listo para despacho.`
+          );
+        }
         return;
+      }
 
       case "procesoTrabajo":
         await dispararAlarmaFiltroSegmento(
@@ -148,11 +228,118 @@ export const enrutadorNotificacionesPush = onDocumentUpdated(
         break;
 
       case "entrega":
+        // 🛒 Venta de Repuesto: Bodega finalizó el picking, los repuestos ya
+        // están listos para que el cliente los retire.
+        if (ticketAhora.tipoRequerimiento === "ventaRepuesto") {
+          await dispararAlarmaFiltroSegmento(
+            ["comercial"],
+            segmentoDestino,
+            "📦 Repuestos listos para retirar en Bodega",
+            `Ticket #${ticketId} - ${cliente}: picking finalizado. Los repuestos solicitados están listos para retiro.`
+          );
+          break;
+        }
+        return;
+
       case "finalizado":
       case "anulado":
       default:
         // Estados inactivos / silenciosos
         return; 
+    }
+  }
+);
+
+// ============================================================================
+// 📦 MÓDULO 2.1: LLEGADAS PARCIALES DE REPUESTOS -> BODEGA
+// Cada vez que Compras valida repuestos NUEVOS (aumenta la cantidad de ítems
+// con validadoPorCompras = true), avisa a Bodega cuáles llegaron. No depende
+// de un cambio de estado (el ticket puede seguir en Compras), por eso es una
+// función aparte del enrutador.
+// ============================================================================
+export const notificarRepuestosDisponiblesBodega = onDocumentUpdated(
+  "tickets/{ticketId}",
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+
+    const antes = snap.before.data();
+    const ahora = snap.after.data();
+    if (!antes || !ahora) return;
+
+    // Un picking de Bodega también guarda itemsDespachoBodega (y marca como
+    // habilitados los repuestos con stock): no es una validación de Compras.
+    const pickingsAntes = Array.isArray(antes.historialDespachos) ? antes.historialDespachos.length : 0;
+    const pickingsAhora = Array.isArray(ahora.historialDespachos) ? ahora.historialDespachos.length : 0;
+    if (pickingsAhora > pickingsAntes) return;
+
+    const itemsAntes: any[] = Array.isArray(antes.itemsDespachoBodega) ? antes.itemsDespachoBodega : [];
+    const itemsAhora: any[] = Array.isArray(ahora.itemsDespachoBodega) ? ahora.itemsDespachoBodega : [];
+
+    // Solo cuenta lo que validó Compras: Compras siempre registra
+    // fechaValidadoCompras; Bodega (picking o sincronización de stock) solo
+    // marca validadoPorCompras para los repuestos con stock, sin fecha.
+    const validadosAntes = new Set(
+      itemsAntes
+        .filter((i) => i?.validadoPorCompras === true && i?.fechaValidadoCompras)
+        .map((i) => String(i.codigo ?? ""))
+    );
+    const nuevos = itemsAhora.filter(
+      (i) =>
+        i?.validadoPorCompras === true &&
+        !!i?.fechaValidadoCompras &&
+        !validadosAntes.has(String(i.codigo ?? ""))
+    );
+    if (nuevos.length === 0) return; // Guardado sin validaciones nuevas: sin aviso.
+
+    const ticketId = event.params.ticketId;
+    const segmentoDestino = (ahora.equipo || "indefinido").toLowerCase().trim();
+    const codigos = nuevos.map((i) => i.codigo).filter((c) => !!c).join(", ");
+
+    await dispararAlarmaFiltroSegmento(
+      ["bodega"],
+      segmentoDestino,
+      "📦 Repuestos disponibles para hacer picking",
+      `Ticket #${ticketId}: Compras validó ${nuevos.length} repuesto(s) listos para picking: ${codigos}`
+    );
+  }
+);
+
+// ============================================================================
+// 📦 MÓDULO 2.2: PICKING PARCIAL LISTO -> PROCESO DE TRABAJO
+// Cada vez que Bodega confirma un picking (se agrega un registro nuevo a
+// historialDespachos), avisa al supervisor del equipo que ya puede enviar a
+// un técnico a retirar esos repuestos.
+// ============================================================================
+export const notificarPickingListoParaRetiro = onDocumentUpdated(
+  "tickets/{ticketId}",
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+
+    const antes = snap.before.data();
+    const ahora = snap.after.data();
+    if (!antes || !ahora) return;
+
+    const despachosAntes: any[] = Array.isArray(antes.historialDespachos) ? antes.historialDespachos : [];
+    const despachosAhora: any[] = Array.isArray(ahora.historialDespachos) ? ahora.historialDespachos : [];
+
+    const idsAntes = new Set(despachosAntes.map((d) => String(d?.id ?? "")));
+    const nuevos = despachosAhora.filter((d) => !idsAntes.has(String(d?.id ?? "")));
+    if (nuevos.length === 0) return; // Sin pickings nuevos: sin aviso.
+
+    const ticketId = event.params.ticketId;
+    const segmentoDestino = (ahora.equipo || "indefinido").toLowerCase().trim();
+
+    for (const picking of nuevos) {
+      const items: any[] = Array.isArray(picking?.items) ? picking.items : [];
+      const codigo = String(picking?.id ?? "").replace(`${ticketId}-`, "");
+      await dispararAlarmaFiltroSegmento(
+        ["supervisor"],
+        segmentoDestino,
+        "🛠️ Repuestos listos para retiro",
+        `Ticket #${ticketId} · ${codigo}: ${items.length} repuesto(s) listos en Bodega. Puede enviar a un técnico a retirarlos.`
+      );
     }
   }
 );
@@ -285,6 +472,11 @@ export const orquestadorNotificacionesTicket = onDocumentWritten(
     try {
       // 🟢 ESTADO A: INGRESO / RECEPCIÓN
       if (estadoNuevo === "recepcionFisica") {
+        // 🛒 Venta de Repuesto: no se envía acuse de recepción al cliente.
+        if (docAfter.tipoRequerimiento === "ventaRepuesto") {
+          logger.info(`[Ticket ${ticketId}] Venta de repuesto en evaluación: sin correo de recepción.`);
+          return;
+        }
         
         // Rama 1: Operación en Campo
         if (lugarAtencion === "campo") {
@@ -312,6 +504,21 @@ export const orquestadorNotificacionesTicket = onDocumentWritten(
           subject: `Acuse de Recepción Técnica - Ticket #${ticketId}`,
           html: _generarPlantillaRecepcion(nombreContacto, urlPdf, docAfter) 
         });
+        return;
+      }
+
+      // 🛒 VENTA DE REPUESTO FINALIZADA (guía y factura subidas): el cliente
+      // ya retiró sus repuestos → correo de agradecimiento (no el de "equipo listo").
+      if (docAfter.tipoRequerimiento === "ventaRepuesto") {
+        if (estadoNuevo === "finalizado" && estadoAnterior !== "finalizado") {
+          logger.info(`Despachando agradecimiento por RETIRO DE REPUESTOS para ticket ${ticketId}`);
+          await transporter.sendMail({
+            from: '"Soporte Técnico" <ingenieria2@aquaspot.ec>',
+            to: emailCliente,
+            subject: `✅ Gracias por su compra - Repuestos retirados - Ticket #${ticketId}`,
+            html: _generarPlantillaVentaRetirada(nombreContacto, ticketId, docAfter)
+          });
+        }
         return;
       }
 
@@ -412,6 +619,42 @@ function _generarPlantillaRecepcion(nombre: string, urlPdf: string, datos: any):
             
             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
             <p style="font-size: 12px; color: #777; text-align: center;">Atentamente,<br>Departamento de Soporte Técnico</p>
+        </div>
+    </div>
+  `;
+}
+
+function _generarPlantillaVentaRetirada(nombre: string, ticketId: string, datos: any): string {
+  const lineas: any[] = Array.isArray(datos.lineasRepuestoVenta) ? datos.lineasRepuestoVenta : [];
+  const filas = lineas.map((l: any) => `
+                <tr>
+                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${l.codigo || "-"}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #eee;">${l.descripcion || l.descripcionCliente || "-"}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">${l.cantidad ?? ""} ${l.unidad || ""}</td>
+                </tr>`).join("");
+
+  return `
+    <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: auto; border: 1px solid #ddd; border-radius: 8px;">
+        <div style="background-color: #28a745; padding: 20px; text-align: center;">
+            <h2 style="color: white; margin: 0;">✅ ¡Gracias por su compra!</h2>
+        </div>
+        <div style="padding: 30px;">
+            <p>Estimado/a <strong>${nombre}</strong>,</p>
+            <p>Le confirmamos que los repuestos de su requerimiento <strong>#${ticketId}</strong> fueron retirados y su pedido ha sido completado.</p>
+            ${filas ? `
+            <h3 style="border-bottom: 2px solid #28a745; padding-bottom: 5px; margin-top: 30px;">Repuestos entregados</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                <tr>
+                    <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Código</th>
+                    <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Descripción</th>
+                    <th style="padding: 8px; text-align: right; border-bottom: 2px solid #ddd;">Cantidad</th>
+                </tr>${filas}
+            </table>` : ""}
+            <p style="font-size: 15px; text-align: center; margin-top: 30px;">
+                Agradecemos su confianza en <strong>Aquaspot</strong>. Quedamos a su disposición para cualquier requerimiento adicional.
+            </p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+            <p style="font-size: 12px; color: #777; text-align: center;">Atentamente,<br>Departamento de Postventa</p>
         </div>
     </div>
   `;

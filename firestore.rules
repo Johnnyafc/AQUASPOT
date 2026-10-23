@@ -100,6 +100,19 @@ service cloud.firestore {
     }
 
     // =====================================================================
+    // 🧾 6.1 HISTORIAL DE CORRECCIONES DEL PLAN MAESTRO
+    // (pantalla "Revisión de Códigos del Plan Maestro")
+    // =====================================================================
+    match /historial_plan_maestro/{cambioId} {
+      // Solo Supervisores y Administradores registran, consultan y marcan
+      // como deshecho un cambio; nunca se elimina (trazabilidad).
+      allow read, create, update: if request.auth != null && (
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol in ['supervisor', 'admin', 'SUPERVISOR', 'ADMIN']
+      );
+      allow delete: if false;
+    }
+
+    // =====================================================================
     // 📦 7. INVENTARIO Y STOCK DE BODEGA
     // =====================================================================
     match /inventario_bodega/{itemId} {

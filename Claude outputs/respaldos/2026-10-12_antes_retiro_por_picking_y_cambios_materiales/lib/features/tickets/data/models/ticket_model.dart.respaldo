@@ -1,0 +1,437 @@
+import 'tiempos_operativos_model.dart';
+import 'item_despacho_bodega_model.dart';
+import 'registro_despacho_model.dart';
+import 'orden_recepcion_repuestos_model.dart';
+import 'linea_repuesto_venta_model.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:aquaspot_postventa/features/tickets/data/models/GestionComprasModel.dart';
+import 'package:aquaspot_postventa/features/tickets/data/models/evidencia_trabajo_model.dart';
+import 'package:aquaspot_postventa/features/tickets/data/models/proforma_model.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/item_compra_entity.dart';
+import '../../domain/entities/ticket_entity.dart';
+import '../../../../core/enum/ticket_enums.dart'; 
+import 'evaluacion_tecnica_model.dart';
+import 'evento_auditoria_model.dart';
+import 'item_compra_model.dart'; // 🔌 CONECTOR SOLDADO
+import '../../../fallas/data/models/metrica_falla_model.dart';
+
+class TicketModel extends TicketEntity {
+  const TicketModel({
+    required super.id,
+    required super.estadoActual,
+    required super.sede,
+    required super.clienteId,
+    required super.campamento,
+    required super.nombreContacto,
+    required super.telefonoContacto,
+    required super.emailContacto,
+    required super.equipo,
+    super.equipoDetalle,
+    required super.fallaReportada,
+    super.accesoriosRecibidos,
+    super.numeroSerie, 
+    super.evaluacionTecnica,
+    super.fotosUrls = const [],
+    super.pdfActaUrl,
+    required super.historialEventos,
+    required super.tipoRequerimiento,
+    required super.lugarAtencion,
+    super.esRegistroCompleto = false, 
+    super.notasRecepcion,
+    super.proforma,
+    super.marca = 'NO ESPECIFICADA',
+    super.codigoProyecto,
+    super.codigoOrdenVenta = const [],
+    super.codigoOrdenCompra = const [],
+    super.itemsCompra = const [], 
+    super.procesoTrabajoUrls = const [],
+    super.isCostosCompletado = false,
+    super.isComprasCompletado = false,
+    super.numeroOrdenVenta,
+    super.gestionCompras,
+    super.evidenciaTrabajo,
+    super.responsableFacturacion,
+    super.tipoGarantia,
+    super.esGarantia,
+    super.horometro,
+    super.urlsEvidenciasGarantia,
+    super.fueModificado,
+    super.urlFactura,
+    super.urlGuiaRemision,
+    super.trabajoIniciado,
+    super.noRequiereCompras = false,
+    super.motivoNoRequiereCompras,
+    super.supervisorNoRequiereCompras,
+    super.fechaNoRequiereCompras,
+    super.itemsDespachoBodega = const [],
+    super.historialDespachos = const [],
+    super.tiemposOperativos,
+    super.tecnicosAsignados = const [],
+    super.diagnosticoFallas = const [],
+    super.rondaDiagnosticoFallas = 0,
+    super.urlInformeTecnico,
+    super.ordenesRecepcion = const [],
+    super.materialesValidadosEnTaller = false,
+    super.supervisorValidoMateriales,
+    super.fechaValidacionMaterialesTaller,
+    super.medioContacto,
+    super.lineasRepuestoVenta = const [],
+    super.necesitaAsistenciaTecnica = false,
+    super.urlsAudiosAsistencia = const [],
+    super.urlsCotizacionCompras = const [],
+    super.inconsistenciasRevisadas = const [],
+    super.estadoDespacho,
+    super.pickingIniciadoPor,
+    super.pickingIniciadoEn,
+    super.pickingFinalizadoPor,
+    super.pickingFinalizadoEn,
+  });
+
+  static DateTime? _fechaOpcional(dynamic v) {
+    if (v is Timestamp) return v.toDate();
+    if (v is String) return DateTime.tryParse(v);
+    return null;
+  }
+
+  factory TicketModel.fromJson(Map<String, dynamic> json) {
+    return TicketModel(
+      id: json['id'] ?? '',
+      estadoActual: EstadoTicket.values.firstWhere(
+        (e) => e.name == json['estadoActual'],
+        orElse: () => EstadoTicket.creado,
+      ),
+      sede: Sede.values.firstWhere(
+        (e) => e.name == json['sede'],
+        orElse: () => Sede.DURAN,
+      ),
+      clienteId: json['clienteId'] ?? '',
+      campamento: json['campamento'] ?? '',
+      nombreContacto: json['nombreContacto'] ?? '',
+      telefonoContacto: json['telefonoContacto'] ?? '',
+      emailContacto: json['emailContacto'] ?? '',
+      equipoDetalle: json['equipoDetalle'] as String?,
+      equipo: TipoEquipo.values.firstWhere(
+        (e) => e.name == json['equipo'],
+        orElse: () => TipoEquipo.Cosechadora,
+      ),
+      accesoriosRecibidos: json['accesoriosRecibidos'] != null 
+          ? Map<String, bool>.from(json['accesoriosRecibidos'] as Map)
+          : null,
+      fallaReportada: json['fallaReportada'] ?? '',
+      numeroSerie: json['numeroSerie'] ?? (json['evaluacionTecnica'] != null ? json['evaluacionTecnica']['serieEquipo'] : null),
+      evaluacionTecnica: json['evaluacionTecnica'] != null
+          ? EvaluacionTecnicaModel.fromJson(json['evaluacionTecnica'])
+          : null,
+      fotosUrls: List<String>.from(json['fotosUrls'] ?? []),
+      pdfActaUrl: json['pdfActaUrl'],
+      historialEventos: (json['historialEventos'] as List?)
+              ?.map((e) => EventoAuditoriaModel.fromJson(e))
+              .toList() ??
+          [],
+      tipoRequerimiento: TipoRequerimiento.values.firstWhere(
+        (e) => e.name == json['tipoRequerimiento'],
+        orElse: () => TipoRequerimiento.ninguno,
+      ),
+      lugarAtencion: LugarAtencion.values.firstWhere(
+        (e) => e.name == json['lugarAtencion'],
+        orElse: () => LugarAtencion.noAplica,
+      ),
+      esRegistroCompleto: json['esRegistroCompleto'] ?? false,
+      esGarantia: json['esGarantia'] ?? false,
+      fueModificado: json['fueModificado'] ?? false,
+      notasRecepcion: json['notasRecepcion'],
+      proforma: json['proforma'] != null
+          ? ProformaModel.fromJson(json['proforma'])
+          : null,
+      
+      // 🔌 LECTURA DE SENSORES INDUSTRIALES (Tolerancia a fallos)
+      marca: json['marca'] as String? ?? 'NO ESPECIFICADA',
+      codigoProyecto: json['codigoProyecto'] as String?,
+      codigoOrdenVenta: json['codigoOrdenVenta'] != null ? List<String>.from(json['codigoOrdenVenta']) : const [],
+      codigoOrdenCompra: json['codigoOrdenCompra'] != null ? List<String>.from(json['codigoOrdenCompra']) : const [],
+      
+      // 🚀 REPARACIÓN: Mapeo estricto a ItemCompraModel
+      itemsCompra: json['itemsCompra'] != null 
+          ? (json['itemsCompra'] as List).map((e) => ItemCompraModel.fromJson(e)).toList() 
+          : const [],
+          
+      procesoTrabajoUrls: json['procesoTrabajoUrls'] != null ? List<String>.from(json['procesoTrabajoUrls']) : const [],
+      isCostosCompletado: json['isCostosCompletado'] as bool? ?? false,
+      isComprasCompletado: json['isComprasCompletado'] as bool? ?? false,
+      trabajoIniciado: json['trabajoIniciado'] as bool? ?? false,
+      numeroOrdenVenta: json['numeroOrdenVenta'],
+      gestionCompras: json['gestionCompras'] != null 
+          ? GestionComprasModel.fromJson(json['gestionCompras'] as Map<String, dynamic>) 
+          : null,
+      
+     evidenciaTrabajo: json['evidenciaTrabajo'] != null
+          ? EvidenciaTrabajoModel.fromJson(json['evidenciaTrabajo'] as Map<String, dynamic>)
+          : null,
+      tipoGarantia: json['tipoGarantia'] ?? '',
+      responsableFacturacion: json['responsableFacturacion'] ?? '',
+      horometro: json['horometro'] != null ? (json['horometro'] as num).toDouble() : null,
+      urlsEvidenciasGarantia: json['urlsEvidenciasGarantia'] != null 
+          ? List<String>.from(json['urlsEvidenciasGarantia']) 
+          : [],
+      urlGuiaRemision: json['urlGuiaRemision'] as String?,
+      urlFactura: json['urlFactura'] as String?,
+      noRequiereCompras: json['noRequiereCompras'] as bool? ?? false,
+      motivoNoRequiereCompras: json['motivoNoRequiereCompras'] as String?,
+      supervisorNoRequiereCompras: json['supervisorNoRequiereCompras'] as String?,
+      fechaNoRequiereCompras: json['fechaNoRequiereCompras'] != null
+          ? (json['fechaNoRequiereCompras'] is Timestamp
+              ? (json['fechaNoRequiereCompras'] as Timestamp).toDate()
+              : DateTime.tryParse(json['fechaNoRequiereCompras'].toString()))
+          : null,
+      itemsDespachoBodega: json['itemsDespachoBodega'] != null
+          ? (json['itemsDespachoBodega'] as List)
+              .map((e) => ItemDespachoBodegaModel.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : const [],
+      historialDespachos: json['historialDespachos'] != null
+          ? (json['historialDespachos'] as List)
+              .map((e) => RegistroDespachoModel.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : const [],
+      tiemposOperativos: json['tiemposOperativos'] != null
+          ? TiemposOperativosModel.fromJson(Map<String, dynamic>.from(json['tiemposOperativos'] as Map))
+          : null,
+      tecnicosAsignados: (json['tecnicosAsignados'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      diagnosticoFallas: json['diagnosticoFallas'] != null
+          ? (json['diagnosticoFallas'] as List)
+              .map((e) => DiagnosticoFallaModel.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : const [],
+      urlInformeTecnico: json['urlInformeTecnico'] as String?,
+      ordenesRecepcion: json['ordenesRecepcion'] != null
+          ? (json['ordenesRecepcion'] as List)
+              .map((e) => OrdenRecepcionRepuestosModel.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : const [],
+      materialesValidadosEnTaller: json['materialesValidadosEnTaller'] as bool? ?? false,
+      supervisorValidoMateriales: json['supervisorValidoMateriales'] as String?,
+      fechaValidacionMaterialesTaller: json['fechaValidacionMaterialesTaller'] != null
+          ? (json['fechaValidacionMaterialesTaller'] is Timestamp
+              ? (json['fechaValidacionMaterialesTaller'] as Timestamp).toDate()
+              : DateTime.tryParse(json['fechaValidacionMaterialesTaller'].toString()))
+          : null,
+      medioContacto: MedioContacto.values.cast<MedioContacto?>().firstWhere(
+        (e) => e?.name == json['medioContacto'],
+        orElse: () => null,
+      ),
+      lineasRepuestoVenta: json['lineasRepuestoVenta'] != null
+          ? (json['lineasRepuestoVenta'] as List)
+              .map((e) => LineaRepuestoVentaModel.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : const [],
+      necesitaAsistenciaTecnica: json['necesitaAsistenciaTecnica'] as bool? ?? false,
+      urlsAudiosAsistencia: (json['urlsAudiosAsistencia'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      urlsCotizacionCompras: (json['urlsCotizacionCompras'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      inconsistenciasRevisadas: (json['inconsistenciasRevisadas'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      estadoDespacho: json['estadoDespacho'] as String?,
+      pickingIniciadoPor: json['pickingIniciadoPor'] as String?,
+      pickingIniciadoEn: _fechaOpcional(json['pickingIniciadoEn']),
+      pickingFinalizadoPor: json['pickingFinalizadoPor'] as String?,
+      pickingFinalizadoEn: _fechaOpcional(json['pickingFinalizadoEn']),
+      rondaDiagnosticoFallas: (json['rondaDiagnosticoFallas'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  factory TicketModel.fromEntity(TicketEntity entity) {
+    return TicketModel(
+      id: entity.id,
+      estadoActual: entity.estadoActual,
+      sede: entity.sede,
+      clienteId: entity.clienteId,
+      campamento: entity.campamento,
+      nombreContacto: entity.nombreContacto,
+      telefonoContacto: entity.telefonoContacto,
+      emailContacto: entity.emailContacto,
+      equipo: entity.equipo,
+      equipoDetalle: entity.equipoDetalle,
+      fallaReportada: entity.fallaReportada,
+      accesoriosRecibidos: entity.accesoriosRecibidos,
+      numeroSerie: entity.numeroSerie, 
+      evaluacionTecnica: entity.evaluacionTecnica != null
+          ? EvaluacionTecnicaModel.fromEntity(entity.evaluacionTecnica!)
+          : null,
+      fotosUrls: entity.fotosUrls,
+      pdfActaUrl: entity.pdfActaUrl,
+      historialEventos: entity.historialEventos
+          .map((e) => EventoAuditoriaModel.fromEntity(e))
+          .toList(),
+      tipoRequerimiento: entity.tipoRequerimiento,
+      lugarAtencion: entity.lugarAtencion,
+      esRegistroCompleto: entity.esRegistroCompleto,
+      esGarantia: entity.esGarantia,
+      notasRecepcion: entity.notasRecepcion,
+      proforma: entity.proforma,
+      urlFactura: entity.urlFactura,
+      urlGuiaRemision: entity.urlGuiaRemision,
+      
+      // 🔄 MAPEO DE NUEVOS PINES
+      marca: entity.marca,
+      codigoProyecto: entity.codigoProyecto,
+      codigoOrdenVenta: entity.codigoOrdenVenta,
+      codigoOrdenCompra: entity.codigoOrdenCompra,
+      itemsCompra: entity.itemsCompra,
+      procesoTrabajoUrls: entity.procesoTrabajoUrls,
+      isCostosCompletado: entity.isCostosCompletado,
+      fueModificado: entity.fueModificado,
+      isComprasCompletado: entity.isComprasCompletado,
+      trabajoIniciado: entity.trabajoIniciado,
+      numeroOrdenVenta: entity.numeroOrdenVenta,
+      gestionCompras: entity.gestionCompras != null
+          ? GestionComprasModel.fromEntity(entity.gestionCompras!)
+          : null,
+
+      evidenciaTrabajo: entity.evidenciaTrabajo != null
+          ? EvidenciaTrabajoModel.fromEntity(entity.evidenciaTrabajo!)
+          : null,
+    tipoGarantia:entity.tipoGarantia,
+    responsableFacturacion:entity.responsableFacturacion, 
+    horometro: entity.horometro,  
+    urlsEvidenciasGarantia: entity.urlsEvidenciasGarantia,
+    noRequiereCompras: entity.noRequiereCompras,
+    motivoNoRequiereCompras: entity.motivoNoRequiereCompras,
+    supervisorNoRequiereCompras: entity.supervisorNoRequiereCompras,
+    fechaNoRequiereCompras: entity.fechaNoRequiereCompras,
+      itemsDespachoBodega: entity.itemsDespachoBodega,
+      historialDespachos: entity.historialDespachos,
+      tiemposOperativos: entity.tiemposOperativos != null
+          ? (entity.tiemposOperativos is TiemposOperativosModel
+              ? entity.tiemposOperativos as TiemposOperativosModel
+              : TiemposOperativosModel.fromEntity(entity.tiemposOperativos!))
+          : null,
+      tecnicosAsignados: entity.tecnicosAsignados,
+      diagnosticoFallas: entity.diagnosticoFallas,
+      rondaDiagnosticoFallas: entity.rondaDiagnosticoFallas,
+      urlInformeTecnico: entity.urlInformeTecnico,
+      ordenesRecepcion: entity.ordenesRecepcion,
+      materialesValidadosEnTaller: entity.materialesValidadosEnTaller,
+      supervisorValidoMateriales: entity.supervisorValidoMateriales,
+      fechaValidacionMaterialesTaller: entity.fechaValidacionMaterialesTaller,
+      medioContacto: entity.medioContacto,
+      lineasRepuestoVenta: entity.lineasRepuestoVenta,
+      necesitaAsistenciaTecnica: entity.necesitaAsistenciaTecnica,
+      urlsAudiosAsistencia: entity.urlsAudiosAsistencia,
+      urlsCotizacionCompras: entity.urlsCotizacionCompras,
+      inconsistenciasRevisadas: entity.inconsistenciasRevisadas,
+      estadoDespacho: entity.estadoDespacho,
+      pickingIniciadoPor: entity.pickingIniciadoPor,
+      pickingIniciadoEn: entity.pickingIniciadoEn,
+      pickingFinalizadoPor: entity.pickingFinalizadoPor,
+      pickingFinalizadoEn: entity.pickingFinalizadoEn,
+    );
+
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'estadoActual': estadoActual.name,
+      'sede': sede.name,
+      'clienteId': clienteId,
+      'campamento': campamento,
+      'nombreContacto': nombreContacto,
+      'telefonoContacto': telefonoContacto,
+      'emailContacto': emailContacto,
+      'equipo': equipo.name,
+      'equipoDetalle': equipoDetalle,
+      'fallaReportada': fallaReportada,
+      'numeroSerie': numeroSerie, 
+      'accesoriosRecibidos': accesoriosRecibidos,
+      'evaluacionTecnica': evaluacionTecnica != null
+          ? EvaluacionTecnicaModel.fromEntity(evaluacionTecnica!).toJson()
+          : null,
+      'fotosUrls': fotosUrls,
+      'pdfActaUrl': pdfActaUrl,
+      'historialEventos': historialEventos
+          .map((e) => EventoAuditoriaModel.fromEntity(e).toJson())
+          .toList(),
+      'tipoRequerimiento': tipoRequerimiento.name,
+      'lugarAtencion': lugarAtencion.name,
+      'esRegistroCompleto': esRegistroCompleto,
+      'esGarantia':esGarantia,
+      'notasRecepcion': notasRecepcion,
+      'proforma': proforma != null ? (proforma as ProformaModel).toJson() : null,
+      
+      // 📤 ESCRITURA HACIA FIREBASE
+      'marca': marca,
+      'codigoProyecto': codigoProyecto,
+      'codigoOrdenVenta': codigoOrdenVenta,
+      'codigoOrdenCompra': codigoOrdenCompra,
+      
+      // 🚀 REPARACIÓN: Empaquetado estricto a JSON (Evita Crash en Firebase)
+      'itemsCompra': (itemsCompra as List?)?.map((e) => ItemCompraModel.fromEntity(e as ItemCompraEntity).toJson()).toList() ?? [],
+      'tipoGarantia':tipoGarantia,
+      'responsableFacturacion':responsableFacturacion,
+
+      'procesoTrabajoUrls': procesoTrabajoUrls,
+      'isCostosCompletado': isCostosCompletado,
+      'isComprasCompletado': isComprasCompletado,
+      'fueModificado': fueModificado,
+      'trabajoIniciado': trabajoIniciado,
+       'numeroOrdenVenta': numeroOrdenVenta,
+       'horometro': horometro,
+       'urlsEvidenciasGarantia':urlsEvidenciasGarantia,
+        'gestionCompras': gestionCompras != null 
+          ? (gestionCompras as GestionComprasModel).toJson() 
+          : null,
+
+      'evidenciaTrabajo': evidenciaTrabajo != null
+          ? EvidenciaTrabajoModel.fromEntity(evidenciaTrabajo!).toJson()
+          : null,
+          'urlGuiaRemision': urlGuiaRemision,
+          'urlFactura': urlFactura,
+          'noRequiereCompras': noRequiereCompras,
+          'motivoNoRequiereCompras': motivoNoRequiereCompras,
+          'supervisorNoRequiereCompras': supervisorNoRequiereCompras,
+          'fechaNoRequiereCompras': fechaNoRequiereCompras != null ? Timestamp.fromDate(fechaNoRequiereCompras!) : null,
+      'itemsDespachoBodega': itemsDespachoBodega.map((e) {
+        if (e is ItemDespachoBodegaModel) return e.toJson();
+        return ItemDespachoBodegaModel.fromEntity(e).toJson();
+      }).toList(),
+      'historialDespachos': historialDespachos.map((e) {
+        if (e is RegistroDespachoModel) return e.toJson();
+        return RegistroDespachoModel.fromEntity(e).toJson();
+      }).toList(),
+      'tiemposOperativos': tiemposOperativos != null
+          ? (tiemposOperativos is TiemposOperativosModel
+              ? (tiemposOperativos as TiemposOperativosModel).toJson()
+              : TiemposOperativosModel.fromEntity(tiemposOperativos!).toJson())
+          : null,
+      'tecnicosAsignados': tecnicosAsignados,
+      'diagnosticoFallas': diagnosticoFallas.map((e) {
+        if (e is DiagnosticoFallaModel) return e.toJson();
+        return DiagnosticoFallaModel.fromEntity(e).toJson();
+      }).toList(),
+      // Solo se escribe si ya tiene una ronda: así una copia vieja del
+      // ticket (ronda 0) nunca borra el sello de revisión del servidor.
+      if (rondaDiagnosticoFallas > 0) 'rondaDiagnosticoFallas': rondaDiagnosticoFallas,
+      'urlInformeTecnico': urlInformeTecnico,
+      'ordenesRecepcion': ordenesRecepcion.map((e) {
+        if (e is OrdenRecepcionRepuestosModel) return e.toJson();
+        return OrdenRecepcionRepuestosModel.fromEntity(e).toJson();
+      }).toList(),
+      'materialesValidadosEnTaller': materialesValidadosEnTaller,
+      'supervisorValidoMateriales': supervisorValidoMateriales,
+      'fechaValidacionMaterialesTaller': fechaValidacionMaterialesTaller != null
+          ? Timestamp.fromDate(fechaValidacionMaterialesTaller!)
+          : null,
+      'medioContacto': medioContacto?.name,
+      'lineasRepuestoVenta': lineasRepuestoVenta
+          .map((e) => LineaRepuestoVentaModel.fromEntity(e).toJson())
+          .toList(),
+      'necesitaAsistenciaTecnica': necesitaAsistenciaTecnica,
+      'urlsAudiosAsistencia': urlsAudiosAsistencia,
+      'urlsCotizacionCompras': urlsCotizacionCompras,
+      // ⚠️ 'inconsistenciasRevisadas' NO se escribe aquí a propósito: solo
+      // se agrega con arrayUnion, así una copia desactualizada del ticket
+      // nunca borra una marca de "Revisado".
+      // ⚠️ Tampoco los campos de picking (estadoDespacho, picking*): solo
+      // los escriben Iniciar/Finalizar picking y el despacho, con
+      // actualizaciones puntuales.
+    };
+  }
+}

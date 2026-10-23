@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/enum/ticket_enums.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/entities/item_despacho_bodega_entity.dart';
+import '../../domain/services/flujo_venta_repuesto_service.dart';
 import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_event.dart';
 import '../bloc/ticket_state.dart';
@@ -124,8 +125,11 @@ class _ValidacionBodegaComprasPageState
 
   @override
   Widget build(BuildContext context) {
+    // 🛒 Venta de Repuesto (cualquier equipo): validación por repuesto y
+    // "Transferir a Bodega" (despacho/picking); sin "directo a taller".
     final bool esCaracol = widget.ticket.equipo == TipoEquipo.Caracol ||
-        widget.ticket.equipo.name.toLowerCase().contains('caracol');
+        widget.ticket.equipo.name.toLowerCase().contains('caracol') ||
+        FlujoVentaRepuestoService.validacionPorRepuesto(widget.ticket);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
@@ -390,8 +394,10 @@ class _ValidacionBodegaComprasPageState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Validación Bodega: Repuestos Caracol',
+                        Text(
+                          FlujoVentaRepuestoService.esVenta(widget.ticket)
+                              ? 'Validación Bodega: Repuestos de la venta'
+                              : 'Validación Bodega: Repuestos Caracol',
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.bold,

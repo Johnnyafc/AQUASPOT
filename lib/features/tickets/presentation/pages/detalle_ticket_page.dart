@@ -9,6 +9,7 @@ import '../widgets/full_photo_widget.dart';
 import '../widgets/copy_icon_button_widget.dart';
 import '../widgets/tarjeta_no_requiere_compras_widget.dart';
 import '../widgets/trazabilidad_grafica_widget.dart';
+import '../widgets/cambios_materiales_widget.dart';
 
 class DetalleTicketPage extends StatelessWidget {
   final TicketEntity ticket;
@@ -78,6 +79,10 @@ class DetalleTicketPage extends StatelessWidget {
             const Text("Trazabilidad y Auditoría", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
             const SizedBox(height: 12),
             _buildTimelineCard(context),
+
+            // 🧾 Registro aparte de la auditoría.
+            const SizedBox(height: 24),
+            CambiosMaterialesWidget(cambios: ticket.historialCambiosMateriales),
           ],
         ),
       ),

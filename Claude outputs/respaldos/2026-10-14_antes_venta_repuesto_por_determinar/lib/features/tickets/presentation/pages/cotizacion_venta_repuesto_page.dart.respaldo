@@ -1,0 +1,236 @@
+// lib/features/tickets/presentation/pages/cotizacion_venta_repuesto_page.dart
+//
+// 🛒 Compras: Venta de Repuesto sin stock (estado cotizandoRepuesto).
+// Muestra los repuestos requeridos con su código -- en rojo los que no
+// alcanzaron stock al registrar -- y permite adjuntar la cotización.
+// Al enviar, el requerimiento pasa a comercial (Proforma).
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/theme/ticket_visual_theme.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../../auth/presentation/bloc/auth_state.dart';
+import '../../domain/entities/linea_repuesto_venta_entity.dart';
+import '../../domain/entities/ticket_entity.dart';
+import '../bloc/ticket_bloc.dart';
+import '../bloc/ticket_event.dart';
+import '../bloc/ticket_state.dart';
+
+class CotizacionVentaRepuestoPage extends StatefulWidget {
+  final TicketEntity ticket;
+
+  const CotizacionVentaRepuestoPage({super.key, required this.ticket});
+
+  @override
+  State<CotizacionVentaRepuestoPage> createState() => _CotizacionVentaRepuestoPageState();
+}
+
+class _CotizacionVentaRepuestoPageState extends State<CotizacionVentaRepuestoPage> {
+  final List<PlatformFile> _archivos = [];
+  bool _enviando = false;
+
+  String _fmt(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+
+  Future<void> _seleccionarArchivos() async {
+    final result = await FilePicker.pickFiles(
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'xls', 'xlsx', 'jpg', 'jpeg', 'png'],
+      withData: true,
+    );
+    if (result != null) {
+      setState(() => _archivos.addAll(result.files));
+    }
+  }
+
+  Future<void> _enviar() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Enviar a Proforma'),
+        content: Text('Se adjuntará(n) ${_archivos.length} archivo(s) y ${widget.ticket.id} pasará a Proforma (Comercial).'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Enviar')),
+        ],
+      ),
+    );
+    if (confirmar != true || !mounted) return;
+
+    final authState = context.read<AuthBloc>().state;
+    String nombre = 'SISTEMA';
+    String rol = 'DESCONOCIDO';
+    if (authState is Authenticated) {
+      nombre = authState.usuario.nombre;
+      rol = authState.usuario.rol.name.toUpperCase();
+    }
+
+    setState(() => _enviando = true);
+    context.read<TicketBloc>().add(AdjuntarCotizacionVentaRepuestoEvent(
+      ticket: widget.ticket,
+      archivos: List<PlatformFile>.from(_archivos),
+      nombreUsuario: nombre,
+      rolUsuario: rol,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ticket = widget.ticket;
+    final lineas = ticket.lineasRepuestoVenta;
+    final sinStock = lineas.where((l) => !l.tieneStockSuficiente).length;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Cotizar Repuesto: ${ticket.id}'),
+        backgroundColor: Colors.teal.shade700,
+      ),
+      body: BlocListener<TicketBloc, TicketState>(
+        listener: (context, state) {
+          if (!_enviando) return;
+          if (state.status == TicketStatus.operationSuccess) {
+            _enviando = false;
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.green));
+            Navigator.pop(context);
+          } else if (state.status == TicketStatus.error) {
+            setState(() => _enviando = false);
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.red));
+          }
+        },
+        child: BlocBuilder<TicketBloc, TicketState>(
+          builder: (context, state) {
+            final cargando = _enviando && state.status == TicketStatus.loading;
+            return AbsorbPointer(
+              absorbing: cargando,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  // 👤 Datos del requerimiento
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Cliente: ${ticket.clienteId}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          const SizedBox(height: 6),
+                          Text('Contacto: ${ticket.nombreContacto} • ${ticket.telefonoContacto}'),
+                          if (ticket.medioContacto != null)
+                            Text('Medio de contacto: ${ticket.medioContacto!.name.toUpperCase()}'),
+                          Text('Repuesto de: ${ticket.equipo.name.toUpperCase()}'),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // 📦 Repuestos requeridos
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Repuestos requeridos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          const SizedBox(height: 4),
+                          Text(
+                            sinStock > 0 ? '$sinStock repuesto(s) sin stock suficiente (en rojo).' : 'Todos los repuestos tenían stock.',
+                            style: TextStyle(color: sinStock > 0 ? kTicketError : kTicketTextoSecundario, fontSize: 13),
+                          ),
+                          const Divider(),
+                          if (lineas.isEmpty)
+                            const Text('Sin repuestos registrados.', style: TextStyle(color: Colors.grey)),
+                          ...lineas.map(_filaLinea),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // 📎 Cotización
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text('Cotización', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: _seleccionarArchivos,
+                            icon: const Icon(Icons.attach_file),
+                            label: const Text('Adjuntar cotización (PDF, Excel o imagen)'),
+                          ),
+                          const SizedBox(height: 8),
+                          if (_archivos.isEmpty)
+                            const Text('Sin archivos adjuntos.', style: TextStyle(color: Colors.grey)),
+                          ..._archivos.asMap().entries.map((e) => ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(Icons.description_outlined),
+                                title: Text(e.value.name, overflow: TextOverflow.ellipsis),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.close, color: Colors.redAccent),
+                                  onPressed: () => setState(() => _archivos.removeAt(e.key)),
+                                ),
+                              )),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  SizedBox(
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: _archivos.isEmpty || cargando ? null : _enviar,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal.shade700,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: cargando
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.send),
+                      label: Text(cargando ? state.message : 'ENVIAR A PROFORMA',
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _filaLinea(LineaRepuestoVentaEntity l) {
+    final falta = !l.tieneStockSuficiente;
+    final color = falta ? kTicketError : kTicketTextoPrincipal;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(falta ? Icons.error_outline : Icons.check_circle_outline, color: falta ? kTicketError : kTicketExito, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${l.codigo} — ${l.descripcion}', style: TextStyle(fontWeight: FontWeight.w600, color: color)),
+                Text(
+                  'Cantidad: ${_fmt(l.cantidad)} ${l.unidad} • Stock al registrar: ${_fmt(l.stockDisponibleAlEvaluar ?? 0)}'
+                  '${falta ? ' • Faltan: ${_fmt(l.cantidadFaltante)}' : ''}',
+                  style: TextStyle(fontSize: 12, color: falta ? kTicketError : kTicketTextoSecundario),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

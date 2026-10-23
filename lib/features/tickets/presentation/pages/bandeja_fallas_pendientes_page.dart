@@ -10,6 +10,8 @@
 // de supervisión (ver bandeja_revisiones_garantias_page.dart).
 
 import 'package:aquaspot_postventa/core/enum/segmento_operativo.dart';
+import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
+import 'package:aquaspot_postventa/core/utils/constants.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +20,7 @@ import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_event.dart';
 import '../bloc/ticket_state.dart';
 import '../../../../core/theme/ticket_visual_theme.dart';
+import '../../domain/entities/ticket_entity.dart';
 import 'agregar_diagnostico_falla_page.dart';
 
 class BandejaFallasPendientesPage extends StatefulWidget {
@@ -44,6 +47,14 @@ class _BandejaFallasPendientesPageState extends State<BandejaFallasPendientesPag
 
     // 2. DISPARAMOS EL EVENTO CON EL SEGMENTO ASIGNADO (misma partición que el resto de bandejas de supervisión)
     context.read<TicketBloc>().add(ObtenerHistorialTicketsEvent(segmento: segmentoActivo));
+  }
+
+  // Motivo por el que el ticket sigue en la bandeja, o null si ya está completo.
+  String? _motivoPendiente(TicketEntity t) {
+    if (t.diagnosticoFallas.isEmpty) return 'Sin fallas registradas';
+    if (t.diagnosticoFallas.any((d) => d.razonesProblema.isEmpty)) return 'Faltan razones del problema';
+    if (t.rondaDiagnosticoFallas < rondaRevisionDiagnosticoFallas) return 'Revisar diagnóstico';
+    return null;
   }
 
   @override
@@ -79,47 +90,66 @@ class _BandejaFallasPendientesPageState extends State<BandejaFallasPendientesPag
           }
 
           if (state.status == TicketStatus.loaded || state.status == TicketStatus.operationSuccess) {
-            // ✅ FILTRO: tickets sin ninguna falla diagnosticada todavía, O con
-            // fallas diagnosticadas a las que les falta registrar al menos una razón.
-            // Solo sale de esta bandeja cuando TODAS sus fallas diagnosticadas ya
-            // tienen por lo menos una razón del problema registrada.
+            // ✅ FILTRO: tickets sin ninguna falla diagnosticada todavía, con
+            // fallas a las que les falta al menos una razón, o cuyo diagnóstico
+            // no se ha guardado en la ronda de revisión vigente
+            // (rondaRevisionDiagnosticoFallas). Solo sale de esta bandeja cuando
+            // se guarda en la ronda vigente con todas sus fallas con razón.
+            // Ventas de repuesto y anulados no llevan diagnóstico de fallas.
             final pendientes = state.historial.where((t) {
-              if (t.diagnosticoFallas.isEmpty) return true;
-              return t.diagnosticoFallas.any((d) => d.razonesProblema.isEmpty);
+              if (t.tipoRequerimiento == TipoRequerimiento.ventaRepuesto) return false;
+              if (t.estadoActual == EstadoTicket.anulado) return false;
+              return _motivoPendiente(t) != null;
             }).toList();
 
             if (pendientes.isEmpty) {
               return const Center(child: Text("No hay tickets pendientes de diagnóstico de fallas.", style: TextStyle(color: Colors.grey)));
             }
 
-            return ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: pendientes.length,
-              itemBuilder: (context, index) {
-                final ticket = pendientes[index];
-                return Card(
-                  key: ValueKey(ticket.id),
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(color: Colors.grey.shade300, width: 1),
+            return Column(
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  color: const Color(0xFFF1F5F9),
+                  child: Text(
+                    'Quedan ${pendientes.length} por revisar',
+                    style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF003057)),
                   ),
-                  child: ListTile(
-                    leading: const AvatarSuave(color: kTicketAlerta, icono: Icons.troubleshoot),
-                    title: Text(ticket.id, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text(
-                      'Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}'
-                      '${ticket.clienteId.trim().isNotEmpty ? '\nCliente: ${ticket.clienteId}' : ''}'
-                      '\nContacto: ${ticket.nombreContacto}'
-                      '\nEstado: ${ticket.estadoActual.name}',
-                    ),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onTap: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => AgregarDiagnosticoFallaPage(ticket: ticket)));
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: pendientes.length,
+                    itemBuilder: (context, index) {
+                      final ticket = pendientes[index];
+                      return Card(
+                        key: ValueKey(ticket.id),
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: BorderSide(color: Colors.grey.shade300, width: 1),
+                        ),
+                        child: ListTile(
+                          leading: const AvatarSuave(color: kTicketAlerta, icono: Icons.troubleshoot),
+                          title: Text(ticket.id, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text(
+                            'Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}'
+                            '${ticket.clienteId.trim().isNotEmpty ? '\nCliente: ${ticket.clienteId}' : ''}'
+                            '\nContacto: ${ticket.nombreContacto}'
+                            '\nEstado: ${ticket.estadoActual.nombreLegible}'
+                            '\nPendiente: ${_motivoPendiente(ticket)}',
+                          ),
+                          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                          onTap: () {
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => AgregarDiagnosticoFallaPage(ticket: ticket)));
+                          },
+                        ),
+                      );
                     },
                   ),
-                );
-              },
+                ),
+              ],
             );
           }
 

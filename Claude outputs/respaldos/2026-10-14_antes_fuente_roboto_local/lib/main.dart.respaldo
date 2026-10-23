@@ -1,0 +1,123 @@
+// lib/main.dart
+
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import 'injection_container.dart' as di;
+
+// Importamos los microcontroladores (BLoCs), Eventos y pantallas
+import 'features/auth/presentation/bloc/auth_bloc.dart';
+import 'features/auth/presentation/bloc/auth_event.dart';
+import 'features/tickets/presentation/bloc/ticket_bloc.dart';
+import 'features/catalogo/presentation/bloc/catalogo_bloc.dart';
+import 'features/inventario/presentation/bloc/inventario_bloc.dart';
+import 'features/inventario/presentation/bloc/inventario_event.dart';
+import 'features/auth/presentation/pages/login_page.dart';
+import 'features/auth/presentation/pages/main_menu_page.dart';
+import 'features/tickets/presentation/pages/recepcion_externa_page.dart';
+import 'core/services/notification_service.dart';
+
+// ============================================================================
+// 🔌 RELÉ GLOBAL: Bus de control para accionar la interfaz gráfica desde el backend
+// ============================================================================
+final GlobalKey<ScaffoldMessengerState> actuadorVisualGlobal = GlobalKey<ScaffoldMessengerState>();
+
+void main() async {
+  // Asegura que los motores gráficos estén listos antes de arrancar la nube
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Arranque del motor SCADA (Firebase)
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  
+  // 🚀 ARRANQUE LIMPIO: Desacoplamos la inicialización pesada.
+  // Solo enlazamos el oyente de fondo estático (no bloquea el hilo).
+  NotificationService.inicializarBackgroundHandler();
+  
+  // Energizamos la bornera principal de Inyección de Dependencias
+  await di.init(); 
+
+  runApp(const AquaspotApp());
+}
+
+class AquaspotApp extends StatelessWidget {
+  const AquaspotApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // MultiBlocProvider actúa como un bus de datos global
+    return MultiBlocProvider(
+      providers: [
+        // ⚡ CHISPAZO INICIAL: Energiza el sistema e interroga la memoria caché
+        BlocProvider(
+          create: (_) => di.sl<AuthBloc>()..add(const VerificarSesionEvent()),
+        ),
+        BlocProvider(create: (_) => di.sl<TicketBloc>()),
+        BlocProvider(create: (_) => di.sl<CatalogoBloc>()),
+        BlocProvider(
+          create: (_) => di.sl<InventarioBloc>()..add(const CargarInventarioEvent()),
+        ),
+      ],
+      child: MaterialApp(
+        title: 'Aquaspot Postventa',
+        // ⚠️ ENCLAVAMIENTO CRÍTICO: Conectamos el relé al lienzo gráfico
+        scaffoldMessengerKey: actuadorVisualGlobal, 
+        debugShowCheckedModeBanner: false, 
+        theme: ThemeData(
+          primaryColor: const Color(0xFF005A9C),
+          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF005A9C)),
+          useMaterial3: true,
+        ),
+
+        builder: (context, child) => child ?? const SizedBox.shrink(),
+
+        // ✅ TABLA DE ENRUTAMIENTO INDUSTRIAL
+        initialRoute: (Uri.base.fragment.contains('recepcion-externa') ||
+                Uri.base.path.contains('recepcion-externa'))
+            ? null
+            : '/login',
+        onGenerateRoute: (settings) {
+          final name = settings.name ?? '';
+          final uri = Uri.tryParse(name);
+          if (uri != null && uri.path == '/recepcion-externa') {
+            final token = uri.queryParameters['token'] ?? '';
+            return MaterialPageRoute(
+              settings: settings,
+              builder: (_) => RecepcionExternaPage(token: token),
+            );
+          }
+
+          // Respaldo Web para URLs con fragmento (#/recepcion-externa?token=...)
+          final baseUri = Uri.base;
+          if (baseUri.fragment.contains('recepcion-externa')) {
+            final frag = baseUri.fragment.startsWith('/')
+                ? baseUri.fragment
+                : '/${baseUri.fragment}';
+            final fragUri = Uri.tryParse(frag);
+            final token = fragUri?.queryParameters['token'] ??
+                baseUri.queryParameters['token'] ??
+                '';
+            return MaterialPageRoute(
+              settings: settings,
+              builder: (_) => RecepcionExternaPage(token: token),
+            );
+          } else if (baseUri.path.contains('recepcion-externa')) {
+            final token = baseUri.queryParameters['token'] ?? '';
+            return MaterialPageRoute(
+              settings: settings,
+              builder: (_) => RecepcionExternaPage(token: token),
+            );
+          }
+
+          return null;
+        },
+        routes: {
+          '/login': (context) => const LoginPage(), 
+          '/': (context) => const MainMenuPage(), 
+        },
+      ),
+    );
+  }
+}

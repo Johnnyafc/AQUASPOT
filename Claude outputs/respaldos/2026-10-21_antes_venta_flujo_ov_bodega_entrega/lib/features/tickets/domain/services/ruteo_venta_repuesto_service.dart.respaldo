@@ -1,0 +1,81 @@
+// lib/features/tickets/domain/services/ruteo_venta_repuesto_service.dart
+//
+// 🛒 VENTA DE REPUESTO: a dónde va el requerimiento.
+//
+//   1. Algún repuesto "por determinar"            → Evaluación técnica
+//   2. Todos definidos y con stock suficiente      → Comercial
+//   3. Alguno sin stock o que no existe en sistema → Compras
+//      (y aún no cotizado por Compras)
+//
+// 🔀 En paralelo: si al crear hay repuestos por determinar Y repuestos
+// conocidos sin stock, el ticket queda en Evaluación pero Compras ya cotiza
+// los conocidos (comprasEnParalelo). Cuando ambos terminan, Comercial.
+// Si el repuesto evaluado queda sin stock, Compras lo recibe aparte.
+
+import '../../../../core/enum/proceso_auditoria.dart';
+import '../../../../core/enum/ticket_enums.dart';
+import '../entities/linea_repuesto_venta_entity.dart';
+import '../entities/ticket_entity.dart';
+
+enum DestinoVentaRepuesto { evaluacion, comercial, compras }
+
+class RuteoVentaRepuestoService {
+  /// La línea necesita que Compras la gestione (sin stock o fuera del sistema).
+  /// Las líneas por determinar todavía no: primero pasan por el técnico.
+  static bool requiereGestionCompras(LineaRepuestoVentaEntity l) =>
+      !l.porDeterminar && !l.cotizadaPorCompras && (!l.existeEnSistema || !l.tieneStockSuficiente);
+
+  /// Venta en Evaluación técnica con repuestos que Compras ya puede cotizar.
+  static bool comprasEnParalelo(TicketEntity t) =>
+      t.tipoRequerimiento == TipoRequerimiento.ventaRepuesto &&
+      t.estadoActual == EstadoTicket.recepcionFisica &&
+      t.lineasRepuestoVenta.any(requiereGestionCompras);
+
+  /// Procesos que habilita la creación: Evaluación y, si hay repuestos
+  /// conocidos sin stock, también Compras (en paralelo).
+  static List<ProcesoAuditoria> procesosHabilitadosAlCrear(List<LineaRepuestoVentaEntity> lineas) {
+    final d = destino(lineas);
+    if (d == DestinoVentaRepuesto.evaluacion && lineas.any(requiereGestionCompras)) {
+      return const [ProcesoAuditoria.evaluacion, ProcesoAuditoria.compras];
+    }
+    return [procesoDe(d)];
+  }
+
+  /// Motivo para mostrar en Compras (null si la línea no requiere gestión).
+  static String? motivoGestion(LineaRepuestoVentaEntity l) {
+    if (!requiereGestionCompras(l)) return null;
+    if (!l.existeEnSistema) return 'No existe en el sistema';
+    final faltan = l.cantidadFaltante;
+    final texto = faltan % 1 == 0 ? faltan.toStringAsFixed(0) : faltan.toStringAsFixed(2);
+    return 'Sin stock (faltan $texto)';
+  }
+
+  /// Sin líneas = requerimiento antiguo con asistencia (el técnico define todo).
+  static DestinoVentaRepuesto destino(List<LineaRepuestoVentaEntity> lineas) {
+    if (lineas.isEmpty || lineas.any((l) => l.porDeterminar)) return DestinoVentaRepuesto.evaluacion;
+    if (lineas.any(requiereGestionCompras)) return DestinoVentaRepuesto.compras;
+    return DestinoVentaRepuesto.comercial;
+  }
+
+  static EstadoTicket estadoDe(DestinoVentaRepuesto d) {
+    switch (d) {
+      case DestinoVentaRepuesto.evaluacion:
+        return EstadoTicket.recepcionFisica;
+      case DestinoVentaRepuesto.compras:
+        return EstadoTicket.cotizandoRepuesto;
+      case DestinoVentaRepuesto.comercial:
+        return EstadoTicket.comercial;
+    }
+  }
+
+  static ProcesoAuditoria procesoDe(DestinoVentaRepuesto d) {
+    switch (d) {
+      case DestinoVentaRepuesto.evaluacion:
+        return ProcesoAuditoria.evaluacion;
+      case DestinoVentaRepuesto.compras:
+        return ProcesoAuditoria.compras;
+      case DestinoVentaRepuesto.comercial:
+        return ProcesoAuditoria.comercial;
+    }
+  }
+}

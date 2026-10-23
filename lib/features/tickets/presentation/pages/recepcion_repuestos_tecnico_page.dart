@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/entities/orden_recepcion_repuestos_entity.dart';
 import '../bloc/ticket_bloc.dart';
@@ -7,6 +8,7 @@ import '../bloc/ticket_event.dart';
 import '../bloc/ticket_state.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_state.dart';
+import '../widgets/evidencia_retiro_widget.dart';
 
 class RecepcionRepuestosTecnicoPage extends StatefulWidget {
   final TicketEntity ticket;
@@ -26,6 +28,11 @@ class RecepcionRepuestosTecnicoPage extends StatefulWidget {
 class _RecepcionRepuestosTecnicoPageState
     extends State<RecepcionRepuestosTecnicoPage> {
   final Map<String, TextEditingController> _cantidadesControllers = {};
+  // 📸 Evidencia obligatoria del retiro.
+  List<XFile> _fotosHojaFirmada = [];
+  List<XFile> _fotosMateriales = [];
+
+  bool get _evidenciaCompleta => _fotosHojaFirmada.isNotEmpty && _fotosMateriales.isNotEmpty;
 
   @override
   void initState() {
@@ -176,6 +183,8 @@ class _RecepcionRepuestosTecnicoPageState
             itemsValidados: itemsActualizados,
             nombreTecnico: nombreTecnico,
             rolTecnico: rolTecnico,
+            fotosHojaFirmada: _fotosHojaFirmada,
+            fotosMateriales: _fotosMateriales,
           ),
         );
   }
@@ -288,9 +297,17 @@ class _RecepcionRepuestosTecnicoPageState
               Expanded(
                 child: ListView.separated(
                   padding: const EdgeInsets.all(16),
-                  itemCount: widget.orden.items.length,
+                  itemCount: widget.orden.items.length + (yaFueRecibido ? 0 : 1),
                   separatorBuilder: (_, _) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
+                    if (index == widget.orden.items.length) {
+                      return EvidenciaRetiroWidget(
+                        fotosHojaFirmada: _fotosHojaFirmada,
+                        fotosMateriales: _fotosMateriales,
+                        onHojaFirmadaCambiada: (f) => setState(() => _fotosHojaFirmada = f),
+                        onMaterialesCambiados: (f) => setState(() => _fotosMateriales = f),
+                      );
+                    }
                     final item = widget.orden.items[index];
                     final ctrl = _cantidadesControllers[item.codigo];
                     final text = ctrl?.text.trim() ?? '';
@@ -498,12 +515,14 @@ class _RecepcionRepuestosTecnicoPageState
               if (!yaFueRecibido)
                 Builder(
                   builder: (context) {
-                    final bool puedeConfirmar = _estanTodosContados && !_hayExcesos;
+                    final bool puedeConfirmar = _estanTodosContados && !_hayExcesos && _evidenciaCompleta;
                     final String textoBoton = _hayExcesos
                         ? 'HAY CANTIDADES QUE EXCEDEN EL MÁXIMO ALISTADO'
                         : !_estanTodosContados
                             ? 'Debe ingresar el conteo físico de todos los repuestos'
-                            : _esTotalmenteConforme
+                            : !_evidenciaCompleta
+                                ? 'Suba la hoja firmada y la foto de los materiales'
+                                : _esTotalmenteConforme
                                 ? 'Confirmar Recepción Conforme (100%)'
                                 : 'Confirmar Recepción con Discrepancia';
 

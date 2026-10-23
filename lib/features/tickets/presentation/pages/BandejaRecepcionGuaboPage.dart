@@ -1,4 +1,5 @@
 import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
+import 'package:aquaspot_postventa/core/enum/proceso_auditoria.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/ticket_entity.dart';
@@ -238,6 +239,9 @@ void _confirmarRecepcion(BuildContext context, TicketEntity ticket) {
         accionAuditoria: 'EQUIPO ENVIADO DESDE EL GUABO RECIBIDO EN TALLER',
         nombreUsuario: nombreOperario, 
         rolUsuario: rolOperario,       
+        proceso: ProcesoAuditoria.recepcion,
+        hito: HitoProceso.fin,
+        habilita: const [ProcesoAuditoria.evaluacion],
       )
     );
     

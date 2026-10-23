@@ -173,6 +173,17 @@ Stream<String?> escucharEstadoExcel(String ticketId) {
         return 'video/quicktime';
       case 'avi':
         return 'video/x-msvideo';
+      // 🎙️ Audios (notas de voz de Venta de Repuesto)
+      case 'mp3':
+        return 'audio/mpeg';
+      case 'm4a':
+        return 'audio/mp4';
+      case 'aac':
+        return 'audio/aac';
+      case 'wav':
+        return 'audio/wav';
+      case 'ogg':
+        return 'audio/ogg';
       // 📄 Documentos
       case 'pdf':
         return 'application/pdf';
@@ -309,6 +320,85 @@ Stream<String?> escucharEstadoExcel(String ticketId) {
       });
     } catch (e) {
       print("🚨 ERROR CRUDO DE FIREBASE (GUARDA DE ESTADO): $e");
+      if (e is ServerException) rethrow;
+      throw ServerException(e.toString());
+    }
+  }
+
+  @override
+  Future<TicketModel> actualizarEnTransaccion({
+    required String ticketId,
+    required ({Map<String, dynamic> campos, List<Map<String, dynamic>> inventarioNuevos}) Function(TicketModel actual)
+        calcular,
+  }) async {
+    final docRef = firestore.collection('tickets').doc(ticketId);
+    try {
+      await firestore.runTransaction((tx) async {
+        final snap = await tx.get(docRef);
+        final data = snap.data();
+        if (!snap.exists || data == null) {
+          throw ServerException('El ticket $ticketId no existe.');
+        }
+        data['id'] = snap.id;
+        final r = calcular(TicketModel.fromJson(data));
+
+        // Todas las lecturas antes de escribir (regla de las transacciones).
+        final nuevos = <DocumentReference<Map<String, dynamic>>, Map<String, dynamic>>{};
+        for (final inv in r.inventarioNuevos) {
+          final docId = _idInventarioDesdeCodigo((inv['codigo'] as String?) ?? '');
+          if (docId.isEmpty) continue;
+          final ref = firestore.collection('inventario_bodega').doc(docId);
+          final invSnap = await tx.get(ref);
+          if (!invSnap.exists) nuevos[ref] = inv; // nunca se pisa uno existente
+        }
+
+        if (r.campos.isNotEmpty) tx.update(docRef, r.campos); // nada que cambiar: no escribe
+        nuevos.forEach((ref, inv) => tx.set(ref, inv));
+      });
+    } on FirebaseException catch (e) {
+      throw ServerException(e.toString());
+    }
+
+    final snapshot = await docRef.get();
+    final data = snapshot.data();
+    if (data == null) {
+      throw ServerException('El ticket $ticketId no existe tras actualizar.');
+    }
+    data['id'] = snapshot.id;
+    return TicketModel.fromJson(data);
+  }
+
+  @override
+  Future<TicketModel> actualizarCamposConGuardaValidacionSimpleBodega({
+    required String ticketId,
+    required Map<String, dynamic> campos,
+  }) async {
+    try {
+      final docRef = firestore.collection('tickets').doc(ticketId);
+      await firestore.runTransaction((tx) async {
+        final snap = await tx.get(docRef);
+        final data = snap.data();
+        if (!snap.exists || data == null) {
+          throw ServerException('El ticket $ticketId no existe.');
+        }
+        data['id'] = snap.id;
+        if (!TicketModel.fromJson(data).requiereValidacionSimpleBodega) {
+          throw ServerException(
+            'El ticket $ticketId cambió desde que se abrió la bandeja y ya no aplica validación simple. Actualice la bandeja.',
+          );
+        }
+        tx.update(docRef, campos);
+      });
+
+      final snapshot = await docRef.get();
+      final data = snapshot.data();
+      if (data == null) {
+        throw ServerException('El ticket $ticketId no existe tras actualizar campos.');
+      }
+      data['id'] = snapshot.id;
+      return TicketModel.fromJson(data);
+    } catch (e) {
+      print("🚨 ERROR CRUDO DE FIREBASE (VALIDACION SIMPLE BODEGA): $e");
       if (e is ServerException) rethrow;
       throw ServerException(e.toString());
     }

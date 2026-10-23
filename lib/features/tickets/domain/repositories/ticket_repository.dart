@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../core/errors/failures.dart';
 import '../entities/cliente_entity.dart';
 import '../entities/ticket_entity.dart';
+import '../entities/cambio_venta_repuesto.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import '../../../../core/enum/segmento_operativo.dart';
@@ -24,6 +25,11 @@ abstract class ITicketRepository {
     required String ticketId,
     required Map<String, dynamic> campos,
     required List<String> estadosPermitidos,
+  });
+  // NUEVO: validación simple de Despacho Bodega (ver datasource).
+  Future<Either<Failure, TicketEntity>> actualizarCamposConGuardaValidacionSimpleBodega({
+    required String ticketId,
+    required Map<String, dynamic> campos,
   });
 
   // NUEVO: evidencias de despacho de bodega + descuento automatico de
@@ -72,4 +78,13 @@ Future<Either<Failure, String>> subirActaPdfStorage(String ticketId, Uint8List p
   Future<Either<Failure, String>> subirOrdenVenta(XFile file, String ticketId);
   Future<Either<Failure, void>> anularTicket(String ticketId, Map<String, dynamic> data);
   Stream<String?> escucharEstadoProcesamientoExcel(String ticketId);
+
+  // 🛒 Venta de Repuesto: relee el ticket dentro de una transacción, le
+  // aplica la regla [aplicar] (use case) y guarda solo lo que cambió
+  // (líneas, estado, auditoría y enlaces de Compras). Si [aplicar] lanza
+  // CambioVentaRechazado → ValidationFailure. Devuelve el ticket guardado.
+  Future<Either<Failure, TicketEntity>> actualizarVentaRepuestoEnTransaccion({
+    required String ticketId,
+    required CambioVentaRepuesto Function(TicketEntity actual) aplicar,
+  });
 }

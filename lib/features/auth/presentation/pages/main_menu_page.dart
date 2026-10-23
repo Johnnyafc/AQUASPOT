@@ -19,9 +19,13 @@ import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_d
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_recepcion_bodega_page.dart';
 import 'package:aquaspot_postventa/features/inventario/presentation/pages/gestion_stock_bodega_page.dart';
 import 'package:aquaspot_postventa/features/catalogo/presentation/pages/gestion_catalogo_actividades_page.dart';
+import 'package:aquaspot_postventa/features/catalogo/presentation/pages/revision_codigos_plan_maestro_page.dart';
 import 'package:aquaspot_postventa/features/tecnicos/presentation/pages/gestion_tecnicos_page.dart';
 import 'package:aquaspot_postventa/features/fallas/presentation/pages/gestion_metricas_fallas_page.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_fallas_pendientes_page.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/pages/modificar_ticket_page.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/pages/inconsistencias_trazabilidad_page.dart';
+import 'package:aquaspot_postventa/core/utils/constants.dart' show esAdministradorMaestro;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/auth_bloc.dart';
@@ -220,6 +224,23 @@ class _InicioView extends StatelessWidget {
       ));
     }
 
+    // 🔒 Solo la cuenta administradora maestra: cambio de estado de un ticket
+    // con motivo obligatorio (queda en la auditoría como "ADMIN: ...").
+    if (esAdministradorMaestro(operador.email)) {
+      modules.add(_buildCardOption(
+        title: 'Modificar Ticket',
+        icon: Icons.edit_note,
+        color: Colors.deepOrange,
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ModificarTicketPage())),
+      ));
+      modules.add(_buildCardOption(
+        title: 'Inconsistencias de Trazabilidad',
+        icon: Icons.rule,
+        color: Colors.amber.shade800,
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const InconsistenciasTrazabilidadPage())),
+      ));
+    }
+
     // 🔒 ACCESO EXCLUSIVO PARA SUPER ADMINISTRADORES
     if (isAdmin) {
       modules.add(_buildCardOption(
@@ -300,6 +321,15 @@ class _InicioView extends StatelessWidget {
         icon: Icons.menu_book,
         color: const Color(0xFF005A9C),
         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GestionCatalogoActividadesPage())),
+      ));
+
+      // 🔎 Códigos del plan maestro vs inventario (el supervisor de un
+      // equipo solo ve y corrige el suyo).
+      modules.add(_buildCardOption(
+        title: 'Revisión de Códigos del Plan Maestro',
+        icon: Icons.fact_check_outlined,
+        color: const Color(0xFF00796B),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RevisionCodigosPlanMaestroPage())),
       ));
 
       modules.add(_buildCardOption(
@@ -386,6 +416,13 @@ class _InicioView extends StatelessWidget {
         icon: Icons.factory, 
         color: Colors.blue[800]!, 
         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaBodegaPage())),
+      ));
+
+      modules.add(_buildCardOption(
+        title: 'Inventario y Stock Bodega',
+        icon: Icons.inventory_2_outlined,
+        color: const Color(0xFF2E7D32),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GestionStockBodegaPage())),
       ));
     }
 

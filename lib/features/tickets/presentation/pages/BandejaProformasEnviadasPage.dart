@@ -8,6 +8,7 @@ import 'package:aquaspot_postventa/features/tickets/presentation/widgets/tiempo_
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_bloc.dart'; // 🔌 Inyección de módulo de seguridad
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.dart'; // 🔌 Inyección de módulo de seguridad
 import 'package:aquaspot_postventa/core/theme/ticket_visual_theme.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/widgets/codigos_creados_costos_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -240,6 +241,8 @@ class BandejaProformasEnviadasPage extends StatelessWidget {
                           ),
                         ],
                         const SizedBox(height: 8),
+                        // 🧾 Venta: códigos pendientes / "EL CÓDIGO DEL REPUESTO ES: …"
+                        CodigosCreadosCostosWidget(ticket: ticket, compacto: true),
                         // 🆕 Tiempo en vivo en el estado actual (sin backend: se
                         // recalcula contra la hora real del dispositivo).
                         TiempoEnCursoWidget(

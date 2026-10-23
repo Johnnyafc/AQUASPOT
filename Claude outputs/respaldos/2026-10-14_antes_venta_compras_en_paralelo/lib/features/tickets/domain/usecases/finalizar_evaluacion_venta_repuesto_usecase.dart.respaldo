@@ -1,0 +1,62 @@
+// lib/features/tickets/domain/usecases/finalizar_evaluacion_venta_repuesto_usecase.dart
+//
+// 🛒 Evaluación de Venta de Repuesto (supervisor). Recibe las líneas ya
+// definidas (ninguna "por determinar", con stock recalculado y con los
+// enlaces de cotización del proveedor ya subidos), decide el destino con
+// RuteoVentaRepuestoService, arma el evento de auditoría y lo guarda con
+// candado de estado: solo si el ticket sigue en Evaluación (recepcionFisica).
+
+import 'package:dartz/dartz.dart';
+import '../../../../core/enum/proceso_auditoria.dart';
+import '../../../../core/enum/ticket_enums.dart';
+import '../../../../core/errors/failures.dart';
+import '../entities/evento_auditoria_entity.dart';
+import '../entities/linea_repuesto_venta_entity.dart';
+import '../entities/ticket_entity.dart';
+import '../repositories/ticket_repository.dart';
+import '../services/ruteo_venta_repuesto_service.dart';
+
+class FinalizarEvaluacionVentaRepuestoUseCase {
+  final ITicketRepository repository;
+
+  FinalizarEvaluacionVentaRepuestoUseCase(this.repository);
+
+  /// Devuelve el ticket como queda tras guardar (estado, líneas y evento).
+  Future<Either<Failure, TicketEntity>> call({
+    required TicketEntity ticket,
+    required List<LineaRepuestoVentaEntity> lineas,
+    required String nombreUsuario,
+    required String rolUsuario,
+    DateTime? ahora,
+  }) async {
+    if (lineas.isEmpty || lineas.any((l) => l.porDeterminar)) {
+      return const Left(ValidationFailure('Defina todos los repuestos por determinar antes de finalizar.'));
+    }
+
+    final destino = RuteoVentaRepuestoService.destino(lineas);
+    final estadoDestino = RuteoVentaRepuestoService.estadoDe(destino);
+    final evento = EventoAuditoriaEntity(
+      accion: 'EVALUACIÓN DE VENTA DE REPUESTO COMPLETADA',
+      usuarioNombre: nombreUsuario,
+      usuarioRol: rolUsuario,
+      timestamp: ahora ?? DateTime.now(),
+      proceso: ProcesoAuditoria.evaluacion,
+      hito: HitoProceso.fin,
+      habilita: [RuteoVentaRepuestoService.procesoDe(destino)],
+    );
+
+    final result = await repository.guardarEvaluacionVentaRepuesto(
+      ticketId: ticket.id,
+      lineas: lineas,
+      estadoDestino: estadoDestino,
+      evento: evento,
+      estadoRequerido: EstadoTicket.recepcionFisica,
+    );
+
+    return result.map((_) => ticket.copyWith(
+          lineasRepuestoVenta: lineas,
+          estadoActual: estadoDestino,
+          historialEventos: [...ticket.historialEventos, evento],
+        ));
+  }
+}

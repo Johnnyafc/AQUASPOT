@@ -1,0 +1,682 @@
+// lib/features/tickets/presentation/services/generador_excel_indicadores_postventa.dart
+//
+// 📊 Excel de "Indicadores de Postventa" (botón del Dashboard): una hoja por
+// indicador (columnas = meses) y una hoja de detalle por indicador con los
+// tickets que entraron en el cálculo. Los números salen de
+// IndicadoresPostventaService.
+
+import 'dart:typed_data';
+import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xlsio;
+import 'package:syncfusion_officechart/officechart.dart' as chart;
+import '../../domain/services/indicadores_postventa_service.dart';
+
+typedef _Svc = IndicadoresPostventaService;
+
+const _mesesCortos = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const _ordenEquipos = ['Caracol', 'Contador', 'Cosechadora', 'Otros'];
+const _ordenLugares = [_Svc.taller, _Svc.campo, _Svc.sinLugar];
+
+String _mes(DateTime m) => '${_mesesCortos[m.month - 1]}-${m.year}';
+String _fecha(DateTime d) =>
+    '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year} '
+    '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+double _pct(num parte, num total) => total == 0 ? 0 : parte / total;
+String _dia(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+/// Encabezado de la columna de un mes. Si el rango elegido lo corta, indica
+/// los días incluidos, p. ej. "sep-2026 (15 al 30)".
+String _mesColumna(IndicadoresPostventa d, DateTime m) {
+  final ultimoDelMes = DateTime(m.year, m.month + 1, 0).day;
+  final primero = (d.desde.year == m.year && d.desde.month == m.month) ? d.desde.day : 1;
+  final ultimo = (d.hasta.year == m.year && d.hasta.month == m.month) ? d.hasta.day : ultimoDelMes;
+  return (primero == 1 && ultimo == ultimoDelMes) ? _mes(m) : '${_mes(m)} ($primero al $ultimo)';
+}
+
+/// Nombre de una falla con su subcategoría: "Cableado · Cables sulfatados".
+String _nombreFalla(FallaDiagnosticada f) => f.subcategoria.isEmpty ? f.falla : '${f.subcategoria} · ${f.falla}';
+
+/// Escritura secuencial sobre una hoja (fila actual + estilos comunes).
+class _Hoja {
+  final xlsio.Worksheet sheet;
+  int fila = 1;
+  int maxColumna = 1;
+
+  _Hoja(this.sheet);
+
+  xlsio.Range _celda(int f, int c) {
+    if (c > maxColumna) maxColumna = c;
+    return sheet.getRangeByIndex(f, c);
+  }
+
+  void texto(int c, String valor, {bool negrita = false, String? fondo}) {
+    final r = _celda(fila, c)..setText(valor);
+    r.cellStyle.bold = negrita;
+    if (fondo != null) r.cellStyle.backColor = fondo;
+  }
+
+  void numero(int c, num valor, {String formato = '0', bool negrita = false}) {
+    final r = _celda(fila, c)..setNumber(valor.toDouble());
+    r.numberFormat = formato;
+    r.cellStyle.bold = negrita;
+  }
+
+  void porcentaje(int c, double valor, {bool negrita = false}) => numero(c, valor, formato: '0.0%', negrita: negrita);
+
+  void titulo(String valor) {
+    final r = _celda(fila, 1)..setText(valor);
+    r.cellStyle.bold = true;
+    r.cellStyle.fontSize = 14;
+    r.cellStyle.fontColor = '#1F3864';
+    fila++;
+  }
+
+  void linea(String valor, {bool negrita = false}) {
+    texto(1, valor, negrita: negrita);
+    fila++;
+  }
+
+  void subtitulo(String valor) {
+    final r = _celda(fila, 1)..setText(valor);
+    r.cellStyle.bold = true;
+    r.cellStyle.fontSize = 12;
+    r.cellStyle.fontColor = '#005A9C';
+    fila++;
+  }
+
+  void encabezados(List<String> valores, {int desde = 1}) {
+    for (var i = 0; i < valores.length; i++) {
+      texto(desde + i, valores[i], negrita: true, fondo: '#D9E1F2');
+    }
+    fila++;
+  }
+
+  void saltar([int n = 1]) => fila += n;
+
+  // Gráficos nativos de Excel de esta hoja (se asignan al cerrar la hoja).
+  chart.ChartCollection? _graficos;
+  static const int _altoGrafico = 18; // filas que ocupa cada pastel
+
+  /// 🍩 Pastel (dona, como en el Dashboard) con su tabla de datos al lado:
+  /// columnas A–C = Categoría | Cantidad | %, gráfico en E–L. Los ceros no
+  /// se dibujan. Avanza las filas que ocupa el bloque.
+  void pastel(String titulo, List<(String, num)> datos) {
+    final valores = datos.where((d) => d.$2 > 0).toList();
+    texto(1, titulo, negrita: true);
+    fila++;
+    if (valores.isEmpty) {
+      linea('Sin datos en el período.');
+      saltar();
+      return;
+    }
+    final total = valores.fold<num>(0, (s, d) => s + d.$2);
+    final inicio = fila;
+    encabezados(['Categoría', 'Cantidad', '%']);
+    for (final (categoria, valor) in valores) {
+      texto(1, categoria);
+      numero(2, valor);
+      porcentaje(3, _pct(valor, total));
+      fila++;
+    }
+    final fin = fila - 1;
+
+    _grafico(
+      titulo: titulo,
+      filaDatosIni: inicio,
+      filaDatosFin: fin,
+      colDatos: 1,
+      arriba: inicio - 1,
+      abajo: inicio - 1 + _altoGrafico,
+      izquierda: 5,
+      derecha: 12,
+    );
+
+    // El bloque ocupa lo que sea más alto: la tabla o el gráfico.
+    final finBloque = inicio - 1 + _altoGrafico;
+    if (fila <= finBloque) fila = finBloque + 1;
+    saltar();
+  }
+
+  /// Dona nativa de Excel con los datos de [colDatos] (categoría) y
+  /// [colDatos]+1 (cantidad), en el rectángulo indicado (filas/columnas 1-based).
+  void _grafico({
+    required String titulo,
+    required int filaDatosIni,
+    required int filaDatosFin,
+    required int colDatos,
+    required int arriba,
+    required int abajo,
+    required int izquierda,
+    required int derecha,
+  }) {
+    final grafico = (_graficos ??= chart.ChartCollection(sheet)).add();
+    grafico.chartType = chart.ExcelChartType.doughnut;
+    grafico.dataRange = sheet.getRangeByIndex(filaDatosIni, colDatos, filaDatosFin, colDatos + 1);
+    grafico.isSeriesInRows = false;
+    grafico.chartTitle = titulo;
+    grafico.hasLegend = true;
+    grafico.legend!.position = chart.ExcelLegendPosition.right;
+    grafico.series[0].dataLabels.isValue = true;
+    grafico.topRow = arriba;
+    grafico.bottomRow = abajo;
+    grafico.leftColumn = izquierda;
+    grafico.rightColumn = derecha;
+  }
+
+  static const int _altoGraficoGrilla = 16; // filas del pastel bajo su tabla
+  static const int _colBloqueDerecho = 8; // bloque izquierdo A–F, derecho H–M
+
+  /// Pasteles de 2 en 2 por fila. Cada bloque: título, tabla
+  /// Categoría | Cantidad | % y debajo la dona.
+  void pastelesEnGrilla(List<(String, List<(String, num)>)> pasteles) {
+    for (var i = 0; i < pasteles.length; i += 2) {
+      final alto1 = _bloqueGrilla(fila, 1, pasteles[i].$1, pasteles[i].$2);
+      final alto2 = i + 1 < pasteles.length
+          ? _bloqueGrilla(fila, _colBloqueDerecho, pasteles[i + 1].$1, pasteles[i + 1].$2)
+          : 0;
+      fila += (alto1 > alto2 ? alto1 : alto2) + 1;
+    }
+  }
+
+  /// Escribe un bloque de la grilla desde la fila [f0] y columna [c0];
+  /// devuelve cuántas filas ocupa. No mueve la fila actual.
+  int _bloqueGrilla(int f0, int c0, String titulo, List<(String, num)> datos) {
+    final valores = datos.where((d) => d.$2 > 0).toList();
+    final total = valores.fold<num>(0, (s, d) => s + d.$2);
+    final guardada = fila;
+    fila = f0;
+    texto(c0, titulo, negrita: true);
+    fila++;
+    encabezados(['Categoría', 'Cantidad', '%'], desde: c0);
+    final inicio = fila;
+    for (final (categoria, valor) in valores) {
+      texto(c0, categoria);
+      numero(c0 + 1, valor);
+      porcentaje(c0 + 2, _pct(valor, total));
+      fila++;
+    }
+    final fin = fila - 1;
+    _grafico(
+      titulo: titulo,
+      filaDatosIni: inicio,
+      filaDatosFin: fin,
+      colDatos: c0,
+      arriba: fila,
+      abajo: fila + _altoGraficoGrilla,
+      izquierda: c0,
+      derecha: c0 + 6,
+    );
+    final alto = fila + _altoGraficoGrilla - f0 + 1;
+    fila = guardada;
+    return alto;
+  }
+
+  void ajustarColumnas() {
+    for (var c = 1; c <= maxColumna; c++) {
+      sheet.autoFitColumn(c);
+      // Los textos largos del encabezado (Criterio, Granularidad) se leen
+      // igual porque las celdas de al lado están vacías; sin este tope la
+      // columna A crecería y empujaría tablas y gráficos a la derecha.
+      final r = sheet.getRangeByIndex(1, c);
+      if (r.columnWidth > 45) r.columnWidth = 45;
+    }
+    cerrar();
+  }
+
+  /// Asigna los gráficos a la hoja (sin tocar los anchos de columna).
+  void cerrar() {
+    if (_graficos != null) sheet.charts = _graficos;
+  }
+}
+
+class GeneradorExcelIndicadoresPostventa {
+  static Uint8List generar(IndicadoresPostventa datos) {
+    final workbook = xlsio.Workbook(1);
+    final periodo = '${_dia(datos.desde)} a ${_dia(datos.hasta)}';
+    // ⚠️ Las hojas con gráficos no llevan espacios en el nombre: la librería
+    // de gráficos no los pone entre comillas y Excel marcaría el archivo.
+    var primera = true;
+    _Hoja hoja(String nombre) {
+      final sheet = primera ? (workbook.worksheets[0]..name = nombre) : workbook.worksheets.addWithName(nombre);
+      primera = false;
+      return _Hoja(sheet);
+    }
+
+    _hojaIndicador1(hoja('Indicador_1'), datos, periodo);
+    _hojaIndicador2(hoja('Indicador_2'), datos, periodo);
+    _hojaIndicador3(hoja('Indicador_3'), datos, periodo);
+    _hojaIndicadorAdicional(hoja('Indicador_Adicional'), datos, periodo);
+    _detalle1(hoja('Detalle I1'), datos);
+    _detalle2(hoja('Detalle I2'), datos);
+    _detalle3(hoja('Detalle I3'), datos);
+    _detalleAdicional(hoja('Detalle IA'), datos);
+
+    final bytes = workbook.saveAsStream();
+    workbook.dispose();
+    return Uint8List.fromList(bytes);
+  }
+
+  /// Solo el título grande: "INDICADOR … — EQUIPO (dd/mm/aaaa a dd/mm/aaaa)".
+  static void _cabecera(_Hoja h, IndicadoresPostventa d, String titulo, String periodo) {
+    final equipo = d.equipo == null ? '' : ' — ${d.equipo!.toUpperCase()}';
+    h.titulo('$titulo$equipo ($periodo)');
+    h.saltar();
+  }
+
+  static List<String> _lugaresPresentes(Iterable<String> lugares) =>
+      _ordenLugares.where((l) => l != _Svc.sinLugar || lugares.contains(_Svc.sinLugar)).toList();
+
+  static List<String> _equiposPresentes(Iterable<String> equipos) {
+    final set = equipos.toSet();
+    return [
+      ..._ordenEquipos.where(set.contains),
+      ...(set.difference(_ordenEquipos.toSet()).toList()..sort()),
+    ];
+  }
+
+  // ------------------------------------------------------------- Indicador 1
+  static void _hojaIndicador1(_Hoja h, IndicadoresPostventa d, String periodo) {
+    _cabecera(h, d, 'INDICADOR 1 — N.º de servicios técnicos realizados por tipo', periodo);
+    final lugares = _lugaresPresentes(d.servicios.map((s) => s.lugar));
+
+    void tabla(String subtitulo, String nombreGrupo, String Function(ServicioRealizado) grupo, List<String> grupos) {
+      h.subtitulo(subtitulo);
+      h.encabezados([nombreGrupo, 'Lugar', for (final m in d.meses) _mesColumna(d, m), 'Total']);
+      for (final g in grupos) {
+        for (final lugar in [...lugares, 'Total']) {
+          final filas = d.servicios.where((s) => grupo(s) == g && (lugar == 'Total' || s.lugar == lugar));
+          final esTotal = lugar == 'Total';
+          h.texto(1, g, negrita: esTotal);
+          h.texto(2, lugar, negrita: esTotal);
+          for (var i = 0; i < d.meses.length; i++) {
+            h.numero(3 + i, filas.where((s) => s.mes == d.meses[i]).length, negrita: esTotal);
+          }
+          h.numero(3 + d.meses.length, filas.length, negrita: true);
+          h.saltar();
+        }
+      }
+      // Total general por lugar.
+      for (final lugar in [...lugares, 'Total']) {
+        final filas = d.servicios.where((s) => lugar == 'Total' || s.lugar == lugar);
+        h.texto(1, 'TOTAL', negrita: true, fondo: '#F2F2F2');
+        h.texto(2, lugar, negrita: true, fondo: '#F2F2F2');
+        for (var i = 0; i < d.meses.length; i++) {
+          h.numero(3 + i, filas.where((s) => s.mes == d.meses[i]).length, negrita: true);
+        }
+        h.numero(3 + d.meses.length, filas.length, negrita: true);
+        h.saltar();
+      }
+      h.saltar();
+    }
+
+    final tipos = (d.servicios.map((s) => s.tipo).toSet().toList()..sort());
+    final equipos = _equiposPresentes(d.servicios.map((s) => s.equipo));
+
+    h.subtitulo('Gráficos del período');
+    h.pastel('Servicios por tipo de requerimiento', _conteo(d.servicios.map((s) => s.tipo)));
+    h.pastel('Servicios: Taller vs Campo', [for (final l in lugares) (l, d.servicios.where((s) => s.lugar == l).length)]);
+    // Reporte de un solo equipo: el desglose por equipo no aplica.
+    if (d.equipo == null) {
+      h.pastel('Servicios por tipo de equipo', [for (final e in equipos) (e, d.servicios.where((s) => s.equipo == e).length)]);
+    }
+
+    tabla('Por tipo de requerimiento', 'Tipo', (s) => s.tipo, tipos);
+    if (d.equipo == null) tabla('Por tipo de equipo', 'Equipo', (s) => s.equipo, equipos);
+    if (d.servicios.isEmpty) h.linea('Sin servicios realizados en el período.');
+    h.ajustarColumnas();
+  }
+
+  // ------------------------------------------------------------- Indicador 2
+  static void _hojaIndicador2(_Hoja h, IndicadoresPostventa d, String periodo) {
+    _cabecera(h, d, 'INDICADOR 2 — Lead time de atención del servicio de Postventa', periodo);
+    final lugares = _lugaresPresentes(d.leadTimes.map((l) => l.lugar));
+
+    h.subtitulo('Gráficos del período');
+    h.pastel('Tickets finalizados: Taller vs Campo',
+        [for (final l in lugares) (l, d.leadTimes.where((t) => t.lugar == l).length)]);
+    h.pastel('Tickets por rango de lead time', [
+      for (final (nombre, desde, hasta) in _rangosLeadTime)
+        (nombre, d.leadTimes.where((t) => t.dias > desde && t.dias <= hasta).length),
+    ]);
+
+    h.subtitulo('Lead time por mes');
+    h.encabezados(['Lugar', 'Métrica', for (final m in d.meses) _mesColumna(d, m), 'Período']);
+
+    for (final lugar in [...lugares, 'Total']) {
+      final delLugar = d.leadTimes.where((l) => lugar == 'Total' || l.lugar == lugar).toList();
+      final porMes = [for (final m in d.meses) ResumenLeadTime.de(delLugar.where((l) => l.mes == m))];
+      final periodoRes = ResumenLeadTime.de(delLugar);
+      final metricas = <(String, num? Function(ResumenLeadTime?), String)>[
+        ('Lead time promedio (días)', (r) => r?.promedio, '0.0'),
+        ('N.º de tickets finalizados', (r) => r?.tickets ?? 0, '0'),
+        ('Mínimo (días)', (r) => r?.minimo, '0.0'),
+        ('Máximo (días)', (r) => r?.maximo, '0.0'),
+      ];
+      final esTotal = lugar == 'Total';
+      for (final (nombre, valor, formato) in metricas) {
+        h.texto(1, lugar, negrita: esTotal);
+        h.texto(2, nombre, negrita: esTotal);
+        for (var i = 0; i < porMes.length; i++) {
+          final v = valor(porMes[i]);
+          if (v == null) {
+            h.texto(3 + i, '—');
+          } else {
+            h.numero(3 + i, v, formato: formato, negrita: esTotal);
+          }
+        }
+        final vp = valor(periodoRes);
+        if (vp == null) {
+          h.texto(3 + porMes.length, '—');
+        } else {
+          h.numero(3 + porMes.length, vp, formato: formato, negrita: true);
+        }
+        h.saltar();
+      }
+      h.saltar();
+    }
+    if (d.leadTimes.isEmpty) h.linea('Sin tickets finalizados en el período.');
+    h.ajustarColumnas();
+  }
+
+  // ------------------------------------------------------------- Indicador 3
+  static void _hojaIndicador3(_Hoja h, IndicadoresPostventa d, String periodo) {
+    _cabecera(h, d, 'INDICADOR 3 — % de recurrencia de fallas por sistema y tipo de equipo', periodo);
+    if (d.fallas.isEmpty) {
+      h.linea('Sin fallas diagnosticadas en el período.');
+      h.ajustarColumnas();
+      return;
+    }
+
+    final cabMeses = [for (final m in d.meses) ...['${_mesColumna(d, m)} cant.', '${_mesColumna(d, m)} %'], 'Total cant.', 'Total %'];
+
+    for (final equipo in _equiposPresentes(d.fallas.map((f) => f.equipo))) {
+      final delEquipo = d.fallas.where((f) => f.equipo == equipo).toList();
+      final tickets = delEquipo.map((f) => f.ticket.id).toSet().length;
+      h.subtitulo('${equipo.toUpperCase()} — ${delEquipo.length} falla(s) en $tickets ticket(s)');
+
+      _cascadaFallas(h, delEquipo, equipo);
+
+      int enMes(Iterable<FallaDiagnosticada> l, DateTime m) => l.where((f) => f.mes == m).length;
+
+      h.subtitulo('Tablas mes a mes — ${equipo.toUpperCase()}');
+
+      // A. Fallas por sistema (% sobre las fallas del equipo en ese mes).
+      h.linea('A. Fallas por sistema', negrita: true);
+      h.encabezados(['Sistema', ...cabMeses]);
+      final sistemas = _ordenarPorCantidad(delEquipo.map((f) => f.sistema));
+      for (final s in sistemas) {
+        final delSistema = delEquipo.where((f) => f.sistema == s);
+        h.texto(1, s);
+        var c = 2;
+        for (final m in d.meses) {
+          final n = enMes(delSistema, m);
+          h.numero(c++, n);
+          h.porcentaje(c++, _pct(n, enMes(delEquipo, m)));
+        }
+        h.numero(c++, delSistema.length, negrita: true);
+        h.porcentaje(c, _pct(delSistema.length, delEquipo.length), negrita: true);
+        h.saltar();
+      }
+      h.texto(1, 'Total', negrita: true, fondo: '#F2F2F2');
+      var c = 2;
+      for (final m in d.meses) {
+        h.numero(c++, enMes(delEquipo, m), negrita: true);
+        h.porcentaje(c++, enMes(delEquipo, m) == 0 ? 0 : 1, negrita: true);
+      }
+      h.numero(c++, delEquipo.length, negrita: true);
+      h.porcentaje(c, 1, negrita: true);
+      h.saltar(2);
+
+      // B. Razones de falla por sistema (% sobre las marcas del sistema).
+      h.linea('B. Razones de falla (causa raíz) por sistema', negrita: true);
+      h.encabezados(['Sistema', 'Razón', ...cabMeses]);
+      for (final s in sistemas) {
+        final delSistema = delEquipo.where((f) => f.sistema == s).toList();
+        int marcas(Iterable<FallaDiagnosticada> l, {String? razon, DateTime? mes}) => l
+            .where((f) => mes == null || f.mes == mes)
+            .fold(0, (n, f) => n + (razon == null ? f.razones.length : (f.razones.contains(razon) ? 1 : 0)));
+        final razones = _ordenarPorCantidad(delSistema.expand((f) => f.razones));
+        if (razones.isEmpty) {
+          h.texto(1, s);
+          h.texto(2, 'Sin razones registradas');
+          h.saltar();
+          continue;
+        }
+        for (final r in razones) {
+          h.texto(1, s);
+          h.texto(2, r);
+          var col = 3;
+          for (final m in d.meses) {
+            final n = marcas(delSistema, razon: r, mes: m);
+            h.numero(col++, n);
+            h.porcentaje(col++, _pct(n, marcas(delSistema, mes: m)));
+          }
+          final total = marcas(delSistema, razon: r);
+          h.numero(col++, total, negrita: true);
+          h.porcentaje(col, _pct(total, marcas(delSistema)), negrita: true);
+          h.saltar();
+        }
+      }
+      h.saltar();
+
+      // C. Fallas más frecuentes del equipo.
+      h.linea('C. Fallas más frecuentes', negrita: true);
+      h.encabezados(['Falla', 'Sistema · Subcategoría', ...cabMeses]);
+      final claves = _ordenarPorCantidad(delEquipo.map((f) => '${f.falla}|${f.sistema}|${f.subcategoria}'));
+      for (final k in claves) {
+        final partes = k.split('|');
+        final deFalla = delEquipo.where((f) => '${f.falla}|${f.sistema}|${f.subcategoria}' == k);
+        h.texto(1, partes[0]);
+        h.texto(2, partes[2].isEmpty ? partes[1] : '${partes[1]} · ${partes[2]}');
+        var col = 3;
+        for (final m in d.meses) {
+          final n = enMes(deFalla, m);
+          h.numero(col++, n);
+          h.porcentaje(col++, _pct(n, enMes(delEquipo, m)));
+        }
+        h.numero(col++, deFalla.length, negrita: true);
+        h.porcentaje(col, _pct(deFalla.length, delEquipo.length), negrita: true);
+        h.saltar();
+      }
+      h.saltar(2);
+    }
+    h.ajustarColumnas();
+  }
+
+  // ----------------------------------------------------- Indicador adicional
+  // Igual que el Indicador 1, pero con TODOS los tickets creados en el rango
+  // (por fecha de creación), anulados incluidos y diferenciados. Sin ventas.
+  static void _hojaIndicadorAdicional(_Hoja h, IndicadoresPostventa d, String periodo) {
+    _cabecera(h, d, 'INDICADOR ADICIONAL — N.º de tickets creados por tipo', periodo);
+    final creados = d.creados;
+    final lugares = _lugaresPresentes(creados.map((c) => c.lugar));
+    const estados = [_Svc.finalizado, _Svc.enProceso, _Svc.anulado];
+    final tipos = creados.map((c) => c.tipo).toSet().toList()..sort();
+    final anulados = creados.where((c) => c.estado == _Svc.anulado).length;
+
+    h.subtitulo('Gráficos del período');
+    h.linea('${creados.length} ticket(s) creado(s) · $anulados anulado(s)', negrita: true);
+    h.pastel('Tickets creados por tipo de requerimiento', _conteo(creados.map((c) => c.tipo)));
+    h.pastel('Tickets creados: Taller vs Campo', [for (final l in lugares) (l, creados.where((c) => c.lugar == l).length)]);
+    h.pastel('Tickets creados por estado actual', [for (final e in estados) (e, creados.where((c) => c.estado == e).length)]);
+
+    void filaConteo(String col1, String col2, Iterable<TicketCreado> filas, {bool negrita = false, String? fondo}) {
+      h.texto(1, col1, negrita: negrita, fondo: fondo);
+      h.texto(2, col2, negrita: negrita, fondo: fondo);
+      for (var i = 0; i < d.meses.length; i++) {
+        h.numero(3 + i, filas.where((c) => c.mes == d.meses[i]).length, negrita: negrita);
+      }
+      h.numero(3 + d.meses.length, filas.length, negrita: true);
+      h.saltar();
+    }
+
+    // Por tipo: Taller / Campo / Total y, aparte, cuántos de ese total son anulados.
+    h.subtitulo('Por tipo de requerimiento');
+    h.encabezados(['Tipo', 'Lugar', for (final m in d.meses) _mesColumna(d, m), 'Total']);
+    for (final tipo in tipos) {
+      final delTipo = creados.where((c) => c.tipo == tipo);
+      for (final lugar in lugares) {
+        filaConteo(tipo, lugar, delTipo.where((c) => c.lugar == lugar));
+      }
+      filaConteo(tipo, 'Total', delTipo, negrita: true);
+      filaConteo(tipo, '   de los cuales anulados', delTipo.where((c) => c.estado == _Svc.anulado));
+    }
+    for (final lugar in lugares) {
+      filaConteo('TOTAL', lugar, creados.where((c) => c.lugar == lugar), negrita: true, fondo: '#F2F2F2');
+    }
+    filaConteo('TOTAL', 'Total', creados, negrita: true, fondo: '#F2F2F2');
+    filaConteo('TOTAL', '   de los cuales anulados', creados.where((c) => c.estado == _Svc.anulado),
+        negrita: true, fondo: '#F2F2F2');
+    h.saltar();
+
+    // Por estado actual.
+    h.subtitulo('Por estado actual');
+    h.encabezados(['Estado', '', for (final m in d.meses) _mesColumna(d, m), 'Total']);
+    for (final e in estados) {
+      filaConteo(e, '', creados.where((c) => c.estado == e));
+    }
+    filaConteo('Total', '', creados, negrita: true, fondo: '#F2F2F2');
+
+    if (creados.isEmpty) h.linea('Sin tickets creados en el período.');
+    h.ajustarColumnas();
+  }
+
+  // ------------------------------------------- Cascada de fallas (por equipo)
+  // Nivel 1: fallas por sistema. Nivel 2: por sistema, sus fallas
+  // ("Subcategoría · Falla"). Nivel 3: por falla, sus razones. Todo en
+  // pasteles de 2 en 2 (también los de una sola porción, al 100 %).
+  static void _cascadaFallas(_Hoja h, List<FallaDiagnosticada> delEquipo, String equipo) {
+    String pctTexto(num parte, num total) => '${(_pct(parte, total) * 100).toStringAsFixed(0)} %';
+
+    h.linea('Nivel 1 · Fallas por sistema', negrita: true);
+    h.pastelesEnGrilla([('${equipo.toUpperCase()}: fallas por sistema', _conteo(delEquipo.map((f) => f.sistema)))]);
+
+    for (final sistema in _ordenarPorCantidad(delEquipo.map((f) => f.sistema))) {
+      final delSistema = delEquipo.where((f) => f.sistema == sistema).toList();
+      h.subtitulo('$sistema — ${delSistema.length} falla(s) · ${pctTexto(delSistema.length, delEquipo.length)} del equipo');
+
+      // Nivel 2: fallas del sistema.
+      h.pastelesEnGrilla([('$sistema: fallas', _conteo(delSistema.map(_nombreFalla)))]);
+
+      // Nivel 3: razones de cada falla.
+      final nivel3 = <(String, List<(String, num)>)>[];
+      final sinRazones = <String>[];
+      for (final falla in _ordenarPorCantidad(delSistema.map(_nombreFalla))) {
+        final deFalla = delSistema.where((f) => _nombreFalla(f) == falla).toList();
+        final razones = _conteo(deFalla.expand((f) => f.razones));
+        if (razones.isEmpty) {
+          sinRazones.add('$sistema · $falla: sin razones registradas (${deFalla.length} falla(s))');
+        } else {
+          nivel3.add(('$sistema · $falla: razones', razones));
+        }
+      }
+      if (nivel3.isNotEmpty || sinRazones.isNotEmpty) {
+        h.linea('Razones por falla', negrita: true);
+        h.pastelesEnGrilla(nivel3);
+        for (final l in sinRazones) {
+          h.linea(l);
+        }
+      }
+      h.saltar();
+    }
+    h.saltar();
+  }
+
+  /// Rangos de lead time del pastel del Indicador 2: (nombre, más de, hasta) días.
+  static const List<(String, double, double)> _rangosLeadTime = [
+    ('0 a 7 días', -1, 7),
+    ('8 a 15 días', 7, 15),
+    ('16 a 30 días', 15, 30),
+    ('Más de 30 días', 30, double.infinity),
+  ];
+
+  /// (valor, cantidad) ordenado de mayor a menor, para los pasteles.
+  static List<(String, num)> _conteo(Iterable<String> valores) {
+    final lista = valores.toList();
+    return [for (final v in _ordenarPorCantidad(lista)) (v, lista.where((x) => x == v).length)];
+  }
+
+  static List<String> _ordenarPorCantidad(Iterable<String> valores) {
+    final conteo = <String, int>{};
+    for (final v in valores) {
+      conteo[v] = (conteo[v] ?? 0) + 1;
+    }
+    return conteo.keys.toList()
+      ..sort((a, b) => conteo[b] != conteo[a] ? conteo[b]!.compareTo(conteo[a]!) : a.compareTo(b));
+  }
+
+  // ---------------------------------------------------------------- Detalles
+  static void _detalle1(_Hoja h, IndicadoresPostventa d) {
+    h.titulo('Detalle Indicador 1 — Servicios realizados');
+    h.encabezados(['Mes', 'Ticket', 'Cliente', 'Equipo', 'Tipo', 'Lugar', 'Estado actual', 'Fin de Proceso de Trabajo']);
+    final lista = [...d.servicios]..sort((a, b) => a.fechaFinTrabajo.compareTo(b.fechaFinTrabajo));
+    for (final s in lista) {
+      h.texto(1, _mes(s.mes));
+      h.texto(2, s.ticket.id);
+      h.texto(3, s.ticket.clienteId);
+      h.texto(4, s.equipo);
+      h.texto(5, s.tipo);
+      h.texto(6, s.lugar);
+      h.texto(7, s.ticket.estadoActual.name);
+      h.texto(8, _fecha(s.fechaFinTrabajo));
+      h.saltar();
+    }
+    h.ajustarColumnas();
+  }
+
+  static void _detalle2(_Hoja h, IndicadoresPostventa d) {
+    h.titulo('Detalle Indicador 2 — Lead time de tickets finalizados');
+    h.encabezados(['Mes', 'Ticket', 'Cliente', 'Equipo', 'Tipo', 'Lugar', 'Creación', 'Finalización', 'Días']);
+    final lista = [...d.leadTimes]..sort((a, b) => a.fechaFinalizacion.compareTo(b.fechaFinalizacion));
+    for (final l in lista) {
+      h.texto(1, _mes(l.mes));
+      h.texto(2, l.ticket.id);
+      h.texto(3, l.ticket.clienteId);
+      h.texto(4, l.ticket.equipo.name);
+      h.texto(5, _Svc.etiquetaTipo(l.ticket));
+      h.texto(6, l.lugar);
+      h.texto(7, _fecha(l.fechaCreacion));
+      h.texto(8, _fecha(l.fechaFinalizacion));
+      h.numero(9, l.dias, formato: '0.0');
+      h.saltar();
+    }
+    h.ajustarColumnas();
+  }
+
+  static void _detalle3(_Hoja h, IndicadoresPostventa d) {
+    h.titulo('Detalle Indicador 3 — Fallas diagnosticadas');
+    h.encabezados(['Mes', 'Ticket', 'Cliente', 'Equipo', 'Creación', 'Sistema', 'Subcategoría', 'Falla', 'Razones']);
+    final lista = [...d.fallas]..sort((a, b) => a.fechaCreacion.compareTo(b.fechaCreacion));
+    for (final f in lista) {
+      h.texto(1, _mes(f.mes));
+      h.texto(2, f.ticket.id);
+      h.texto(3, f.ticket.clienteId);
+      h.texto(4, f.equipo);
+      h.texto(5, _fecha(f.fechaCreacion));
+      h.texto(6, f.sistema);
+      h.texto(7, f.subcategoria);
+      h.texto(8, f.falla);
+      h.texto(9, f.razones.join(', '));
+      h.saltar();
+    }
+    h.ajustarColumnas();
+  }
+
+  static void _detalleAdicional(_Hoja h, IndicadoresPostventa d) {
+    h.titulo('Detalle Indicador adicional — Tickets creados en el rango');
+    h.encabezados(['Mes', 'Ticket', 'Cliente', 'Equipo', 'Tipo', 'Lugar', 'Creación', 'Estado', 'Estado actual (detalle)']);
+    final lista = [...d.creados]..sort((a, b) => a.fechaCreacion.compareTo(b.fechaCreacion));
+    for (final c in lista) {
+      h.texto(1, _mes(c.mes));
+      h.texto(2, c.ticket.id);
+      h.texto(3, c.ticket.clienteId);
+      h.texto(4, c.ticket.equipo.name);
+      h.texto(5, c.tipo);
+      h.texto(6, c.lugar);
+      h.texto(7, _fecha(c.fechaCreacion));
+      h.texto(8, c.estado, negrita: c.estado == _Svc.anulado);
+      h.texto(9, c.ticket.estadoActual.name);
+      h.saltar();
+    }
+    h.ajustarColumnas();
+  }
+}

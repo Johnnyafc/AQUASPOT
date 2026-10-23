@@ -20,6 +20,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/copy_icon_button_widget.dart';
 import '../widgets/tarjeta_no_requiere_compras_widget.dart';
+import '../../domain/services/estado_despacho_service.dart';
 
 class SubirEvidenciaTrabajoPage extends StatefulWidget {
   final TicketEntity ticket;
@@ -858,6 +859,18 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
           content: Text(
             '⚠️ Para finalizar el trabajo, se requiere que al menos un lote de repuestos haya sido recibido en taller y validado su consumo por el supervisor.',
           ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // 📦 PICKING: no se finaliza el trabajo mientras Bodega no haya
+    // despachado todos los materiales (picking finalizado).
+    if (!EstadoDespachoService.materialesDespachados(liveTicket)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Bodega aún no despacha todos los materiales (picking sin finalizar). No se puede finalizar el trabajo.'),
           backgroundColor: Colors.red,
         ),
       );

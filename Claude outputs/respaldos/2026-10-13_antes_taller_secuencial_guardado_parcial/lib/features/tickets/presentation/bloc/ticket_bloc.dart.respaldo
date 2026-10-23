@@ -1,0 +1,3958 @@
+import '../../domain/services/calculador_tiempos_operativos.dart';
+// lib/features/tickets/presentation/bloc/ticket_bloc.dart
+
+import 'dart:typed_data';
+import 'package:aquaspot_postventa/core/errors/exceptions.dart';
+import 'package:aquaspot_postventa/features/tickets/data/models/proforma_model.dart';
+import 'package:aquaspot_postventa/features/tickets/data/models/ticket_model.dart';
+import 'package:aquaspot_postventa/features/tickets/data/models/evento_auditoria_model.dart';
+import 'package:aquaspot_postventa/features/tickets/data/models/item_despacho_bodega_model.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../../core/enum/proceso_auditoria.dart';
+import '../../../../core/utils/constants.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/evaluacion_tecnica_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/actividad_registrada_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/repuesto_registrado_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/evidencia_trabajo_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/gestion_compras_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/proforma_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/item_despacho_bodega_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/registro_despacho_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/orden_recepcion_repuestos_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/repositories/ticket_repository.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/SubirOrdenVentaUseCase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_documento_comercial_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_documento_evaluacion_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_orden_compra_usecase.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../../../core/errors/failures.dart';
+import '../../domain/usecases/crear_ticket_usecase.dart';
+import '../../domain/usecases/notificar_y_generar_acta_usecase.dart';
+import '../../domain/usecases/obtener_clientes_usecase.dart';
+import '../../domain/usecases/obtener_tickets_usecase.dart'; 
+import '../../domain/usecases/ActualizarTicketUseCase.dart'; 
+import '../../domain/usecases/subir_evidencia_usecase.dart'; 
+import '../../domain/usecases/subir_acta_pdf_usecase.dart';
+import '../../domain/usecases/generar_acta_pdf_usecase.dart'; 
+import '../../domain/entities/evento_auditoria_entity.dart';
+import '../../domain/entities/ticket_entity.dart';
+import '../../../../core/enum/ticket_enums.dart';
+import 'dart:async';
+import 'ticket_event.dart';
+import '../../domain/entities/cambio_material_entity.dart';
+import '../../domain/services/estado_despacho_service.dart';
+import '../../domain/services/retiro_picking_service.dart';
+import '../../../../core/services/acceso_temporal_bodega_service.dart';
+import 'ticket_state.dart'; // Asegúrate de estar importando el nuevo TicketState unificado
+
+class TicketBloc extends Bloc<TicketEvent, TicketState> {
+  final ObtenerClientesUseCase obtenerClientes;
+  final CrearTicketUseCase crearTicket;
+  final NotificarYGenerarActaUseCase notificarYGenerarActa;
+  final ObtenerTicketsUseCase obtenerTickets; 
+  final ActualizarTicketUseCase actualizarTicket;
+  final SubirEvidenciaUseCase subirEvidenciaUseCase; 
+  final SubirActaPdfUseCase subirActaPdfUseCase;
+  final GenerarActaPdfUseCase generarActaPdfUseCase;
+  final NotificarYGenerarActaUseCase notificarYGenerarActaUseCase;
+  final SubirDocumentoEvaluacionUseCase subirDocumentoEvaluacionUseCase;
+  final SubirDocumentoComercialUseCase subirDocumentoComercialUseCase;
+  final SubirOrdenVentaUseCase subirOrdenVentaUseCase;
+  final SubirOrdenCompraUseCase subirOrdenCompraUseCase;
+  final ITicketRepository ticketRepository;
+  
+  TicketBloc({
+    required this.subirDocumentoEvaluacionUseCase,
+    required this.obtenerClientes,
+    required this.crearTicket,
+    required this.notificarYGenerarActa,
+    required this.obtenerTickets,
+    required this.actualizarTicket,
+    required this.subirEvidenciaUseCase,
+    required this.subirActaPdfUseCase,
+    required this.generarActaPdfUseCase,
+    required this.notificarYGenerarActaUseCase,
+    required this.subirDocumentoComercialUseCase,
+    required this.subirOrdenVentaUseCase,
+    required this.subirOrdenCompraUseCase,
+    required this.ticketRepository,
+  }) : super(const TicketState()) { // Inicializamos con el estado base unificado
+    on<ObtenerClientesEvent>(_onObtenerClientes);
+    on<CrearTicketEvent>(_onCrearTicket);
+    on<CrearVentaRepuestoEvent>(_onCrearVentaRepuesto);
+    on<AdjuntarCotizacionVentaRepuestoEvent>(_onAdjuntarCotizacionVentaRepuesto);
+    on<ValidarDespachoSimpleBodegaEvent>(_onValidarDespachoSimpleBodega);
+    on<MarcarInconsistenciaRevisadaEvent>(_onMarcarInconsistenciaRevisada);
+    on<ActualizarEvaluacionEvent>(_onActualizarEvaluacion);
+    on<NotificarYGenerarActaEvent>(_onNotificarYGenerarActa);
+    on<ObtenerHistorialTicketsEvent>(_onObtenerHistorialTickets);
+    on<ConfirmarRecepcionEvent>(_onConfirmarRecepcion);
+    on<SubirEvidenciaEvent>(_onSubirEvidencia);
+    on<SeleccionarTipoRequerimientoEvent>(_onSeleccionarTipoRequerimiento);
+    on<SeleccionarLugarAtencionEvent>(_onSeleccionarLugarAtencion);
+    on<ProcesarEvaluacionDocumentalEvent>(_onProcesarEvaluacionDocumental);
+    on<ReversarAComercialEvent>(_onReversarAComercial);
+    on<ProcesarCotizacionEvent>(_onProcesarCotizacion);
+    on<AprobarProformaComercialEvent>(_onAprobarProformaComercial);
+    on<CompletarFaseCostosEvent>(_onCompletarCostos);
+    on<CompletarFaseComprasEvent>(_onCompletarCompras);
+    on<ConsumirRepuestosBodegaEvent>(_onConsumirRepuestosBodega);
+    on<CompletarProcesoTrabajoEvent>(_onCompletarProcesoTrabajo);
+    on<AnularTicketEvent>(_onAnularTicket);
+    on<ProcesarGestionComprasEvent>(_onProcesarGestionCompras);
+    on<ProcesarBodegaEvent>(_onProcesarBodega);
+    on<ProcesarEvidenciaTrabajoEvent>(_onProcesarEvidenciaTrabajo);
+    on<ActualizarEstadoTicketEvent>(_onActualizarEstadoTicket);
+    on<SeleccionarTipoGarantiaEvent>(_onSeleccionarTipoGarantia);
+    on<ResetearRequerimientoEvent>(_onResetearTodo);
+    on<DictaminarGarantiaEvent>(_onDictaminarGarantia); 
+    on<ProcesarFacturacionEvent>(_onProcesarFacturacion);  
+    on<ProcesarEntregaGuiaEvent>(_onProcesarEntregaGuia);
+    on<ProcesarEntregaFacturaEvent>(_onProcesarEntregaFactura); 
+    on<IniciarTrabajoFisicoEvent>(_onIniciarTrabajoFisico);
+    on<ReportarIncidenciaComercialEvent>(_onReportarIncidencia);
+    on<DeclararNoRequiereComprasEvent>(_onDeclararNoRequiereCompras);
+    on<GuardarValidacionBodegaComprasEvent>(_onGuardarValidacionBodegaCompras);
+    on<SincronizarStockDespachoBodegaEvent>(_onSincronizarStockDespachoBodega);
+    on<RegistrarDespachoBodegaEvent>(_onRegistrarDespachoBodega);
+    on<IniciarPickingEvent>(_onIniciarPicking);
+    on<FinalizarPickingEvent>(_onFinalizarPicking);
+    on<SincronizarEstadoDespachoEvent>(_onSincronizarEstadoDespacho);
+    on<ActualizarEvidenciasDespachoEvent>(_onActualizarEvidenciasDespacho);
+    on<AsignarTecnicosTrabajoEvent>(_onAsignarTecnicosTrabajo);
+    on<GuardarDiagnosticoFallasEvent>(_onGuardarDiagnosticoFallas);
+    on<SubirInformeTecnicoEvent>(_onSubirInformeTecnico);
+    on<AsignarTecnicoRecepcionBodegaEvent>(_onAsignarTecnicoRecepcionBodega);
+    on<AnularOrdenRecepcionEvent>(_onAnularOrdenRecepcion);
+    on<ConfirmarRecepcionRepuestosTecnicoEvent>(_onConfirmarRecepcionRepuestosTecnico);
+    on<ValidarMaterialesRecibidosSupervisorEvent>(_onValidarMaterialesRecibidosSupervisor);
+    on<ValidarConsumoOrdenTallerEvent>(_onValidarConsumoOrdenTaller);
+    on<ForzarCambioEstadoAdminEvent>(_onForzarCambioEstadoAdmin);
+  }
+
+ 
+
+
+ Future<void> _onProcesarEvidenciaTrabajo(
+  ProcesarEvidenciaTrabajoEvent event, 
+  Emitter<TicketState> emit
+) async {
+  // 📦 PICKING: no se finaliza el trabajo con materiales sin despachar.
+  if (!EstadoDespachoService.materialesDespachados(event.ticket)) {
+    emit(state.copyWith(
+      status: TicketStatus.error,
+      message: 'Bodega aún no despacha todos los materiales (picking sin finalizar). No se puede finalizar el trabajo.',
+    ));
+    return;
+  }
+
+  emit(state.copyWith(
+    status: TicketStatus.loading,
+    message: 'Transmitiendo evidencia multimedia (Esto puede demorar)...'
+  ));
+
+  List<String> fotosSubidas = [];
+  List<String> videosSubidos = [];
+  bool huboFalla = false;
+  String mensajeError = '';
+
+  // 1. SUBIDA DE FOTOS
+  for (final foto in event.fotos) {
+    // ⚠️ Reemplace 'subirArchivoUseCase' por el nombre de su UseCase real
+    final result = await subirDocumentoEvaluacionUseCase(foto, event.ticket.id, 'evidencia_trabajo/fotos');
+    result.fold(
+      (failure) { huboFalla = true; mensajeError = failure.message; },
+      (url) => fotosSubidas.add(url),
+    );
+    if (huboFalla) break;
+  }
+
+  // 2. SUBIDA DE VIDEOS (Si no fallaron las fotos)
+  if (!huboFalla) {
+    for (final video in event.videos) {
+      final result = await subirDocumentoEvaluacionUseCase(video, event.ticket.id, 'evidencia_trabajo/videos');
+      result.fold(
+        (failure) { huboFalla = true; mensajeError = failure.message; },
+        (url) => videosSubidos.add(url),
+      );
+      if (huboFalla) break;
+    }
+  }
+
+  if (huboFalla) {
+    emit(state.copyWith(status: TicketStatus.error, message: 'Falla de telemetría: $mensajeError'));
+    return; // Aborto de emergencia
+  }
+
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Consolidando base de datos...'));
+
+  // 3. ENSAMBLAJE DE ENTIDADES Y AUDITORÍA
+  final evidencia = EvidenciaTrabajoEntity(
+    fotosUrls: fotosSubidas,
+    videosUrls: videosSubidos,
+    notasTecnicas: event.notasTecnicas,
+    nombreTecnico: event.nombreTecnico,
+  );
+
+    String resumenFallas = '';
+    if (event.ticket.diagnosticoFallas.isNotEmpty) {
+      resumenFallas = ' FALLAS: [${event.ticket.diagnosticoFallas.map((f) => f.falla).join(", ")}].';
+    }
+
+    final eventoAuditoria = EventoAuditoriaEntity(
+      accion: 'TALLER: EVIDENCIA REGISTRADA. TÉCNICOS: ${event.nombreTecnico.toUpperCase()}.$resumenFallas EQUIPO LISTO.',
+      usuarioNombre: event.nombreUsuario, 
+      usuarioRol: event.rolUsuario,
+      timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.taller,
+      hito: HitoProceso.fin,
+      habilita: const [ProcesoAuditoria.revisionPagos],
+    );
+
+  final ahoraEvidencia = DateTime.now();
+  final tiemposFinalizados = CalculadorTiemposOperativos.registrarFinTrabajoTaller(
+    ticket: event.ticket,
+    timestamp: ahoraEvidencia,
+  );
+
+  // 4. MUTACIÓN DEL TICKET
+  final ticketActualizado = event.ticket.copyWith(
+    evidenciaTrabajo: evidencia,
+    estadoActual: EstadoTicket.validacionFacturacion, // 🚀 TRASPASO AL SIGUIENTE ESTADO LOGICO
+    tiemposOperativos: tiemposFinalizados,
+    historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+    // Diagnóstico hecho en vivo: queda sellado con la ronda vigente para
+    // que no caiga en la bandeja de revisión de fallas.
+    rondaDiagnosticoFallas: event.ticket.diagnosticoFallas.isNotEmpty ? rondaRevisionDiagnosticoFallas : null,
+  );
+
+  // 5. PERSISTENCIA Y HOT SWAP
+  final dbResult = await actualizarTicket(ticketActualizado);
+
+  dbResult.fold(
+    (failure) => emit(state.copyWith(status: TicketStatus.error, message: 'Error al actualizar Firestore')),
+    (ticketGuardado) {
+      final listaActualizada = state.historial.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+      final listaTickets = state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+      emit(state.copyWith(
+        status: TicketStatus.operationSuccess,
+        message: 'Evidencia procesada correctamente.',
+        historial: listaActualizada,
+        tickets: listaTickets,
+        currentTicket: ticketGuardado,
+      ));
+    }
+  );
+}
+
+
+Future<void> _onIniciarTrabajoFisico(
+    IniciarTrabajoFisicoEvent event, 
+    Emitter<TicketState> emit
+  ) async {
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Energizando línea de trabajo...'));
+
+    final eventoAuditoria = EventoAuditoriaEntity(
+      accion: 'INICIO DE TRABAJO EN CAMPO / TALLER',
+      usuarioNombre: event.nombreUsuario, 
+      usuarioRol: event.rolUsuario,
+      timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.taller,
+      hito: HitoProceso.inicio,
+    );
+
+    final ahora = DateTime.now();
+    final nuevosTiempos = CalculadorTiemposOperativos.registrarInicioTrabajoTaller(
+      ticket: event.ticket,
+      timestamp: ahora,
+    );
+
+    // 🚀 MUTACIÓN: Encendemos la baliza y registramos métrica taller
+    final ticketActualizado = event.ticket.copyWith(
+      trabajoIniciado: true,
+      tiemposOperativos: nuevosTiempos,
+      historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+    );
+
+    final dbResult = await actualizarTicket(ticketActualizado);
+
+    dbResult.fold(
+      (failure) => emit(state.copyWith(status: TicketStatus.error, message: 'Falla al iniciar trabajo: ${_mapFailureToMessage(failure)}')),
+      (ticketGuardado) {
+        final listaActualizada = state.historial.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+        final listaTickets = state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: 'Baliza encendida. Trabajo en proceso.',
+          historial: listaActualizada,
+        tickets: listaTickets,
+          currentTicket: ticketGuardado,
+        ));
+      }
+    );
+  }
+
+
+
+
+// =========================================================
+  // ⚙️ SUBRUTINA 1: PROCESAMIENTO DE GUÍA DE REMISIÓN
+  // =========================================================
+  Future<void> _onProcesarEntregaGuia(
+    ProcesarEntregaGuiaEvent event, 
+    Emitter<TicketState> emit
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Energizando circuito: Transmitiendo Guía de Remisión a Storage...'
+    ));
+
+    String urlSubida = '';
+    bool huboFalla = false;
+    String mensajeError = '';
+
+    final result = await subirDocumentoEvaluacionUseCase(
+      event.guiaRemision, 
+      event.ticket.id, 
+      'despachos/guias'
+    );
+
+    result.fold(
+      (failure) { huboFalla = true; mensajeError = failure.message; },
+      (url) => urlSubida = url,
+    );
+
+    if (huboFalla) {
+      emit(state.copyWith(status: TicketStatus.error, message: 'Falla de telemetría al subir Guía: $mensajeError'));
+      return; 
+    }
+
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Consolidando enclavamiento en base de datos...'));
+
+    final eventoAuditoria = EventoAuditoriaEntity(
+      accion: 'CARGA DE GUÍA DE REMISIÓN. Obs: ${event.observacion.isEmpty ? "Sin observaciones" : event.observacion}',
+      usuarioNombre: event.nombreUsuario, 
+      usuarioRol: event.rolUsuario,
+      timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.entrega,
+      hito: (event.ticket.urlFactura?.isNotEmpty ?? false) && event.ticket.estadoActual == EstadoTicket.entrega ? HitoProceso.fin : HitoProceso.avance,
+    );
+
+    final ticketPaso1 = event.ticket.copyWith(urlGuiaRemision: urlSubida);
+
+    // 🚀 LECTURA DE SENSORES Y ENCLAVAMIENTO FÍSICO
+    final bool tieneGuia = ticketPaso1.urlGuiaRemision != null && ticketPaso1.urlGuiaRemision!.isNotEmpty;
+    final bool tieneFactura = ticketPaso1.urlFactura != null && ticketPaso1.urlFactura!.isNotEmpty;
+
+    // 🛑 REGLA INQUEBRANTABLE: Subir un papel NO mueve la máquina. 
+    // Mantenemos la inercia física del equipo.
+    EstadoTicket estadoResultante = ticketPaso1.estadoActual;
+    String mensajeHMI = 'Guía anexada. El equipo continúa en estación: ${estadoResultante.name.toUpperCase()}';
+
+    // ⚠️ COMPUERTA AND (3 Vías): Solo finaliza si YA estaba en Entrega Y tiene ambos papeles.
+    if (tieneGuia && tieneFactura && ticketPaso1.estadoActual == EstadoTicket.entrega) {
+      estadoResultante = EstadoTicket.finalizado;
+      mensajeHMI = '✅ Despacho Finalizado: Circuito cerrado (Guía + Factura en rampa).';
+    }
+
+    final ticketActualizado = ticketPaso1.copyWith(
+      estadoActual: estadoResultante,
+      historialEventos: [...ticketPaso1.historialEventos, eventoAuditoria],
+    );
+
+    final dbResult = await actualizarTicket(ticketActualizado);
+
+    dbResult.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error, 
+        message: 'Falla en escritura de BD: ${_mapFailureToMessage(failure)}'
+      )),
+      (ticketGuardado) {
+        final listaActualizada = state.historial.map((t) => 
+          t.id == ticketGuardado.id ? ticketGuardado : t
+        ).toList();
+        final listaTickets = state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: mensajeHMI,
+          historial: listaActualizada,
+          tickets: listaTickets,
+          currentTicket: ticketGuardado,
+        ));
+      }
+    );
+  }
+
+  // =========================================================
+  // ⚙️ SUBRUTINA 2: PROCESAMIENTO DE FACTURA COMERCIAL
+  // =========================================================
+  Future<void> _onProcesarEntregaFactura(
+    ProcesarEntregaFacturaEvent event, 
+    Emitter<TicketState> emit
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Energizando circuito: Transmitiendo Factura a Storage...'
+    ));
+
+    String urlSubida = '';
+    bool huboFalla = false;
+    String mensajeError = '';
+
+    final result = await subirDocumentoEvaluacionUseCase(
+      event.factura, 
+      event.ticket.id, 
+      'despachos/facturas'
+    );
+
+    result.fold(
+      (failure) { huboFalla = true; mensajeError = failure.message; },
+      (url) => urlSubida = url,
+    );
+
+    if (huboFalla) {
+      emit(state.copyWith(status: TicketStatus.error, message: 'Falla de telemetría al subir Factura: $mensajeError'));
+      return;
+    }
+
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Consolidando enclavamiento en base de datos...'));
+
+    final eventoAuditoria = EventoAuditoriaEntity(
+      accion: 'CARGA DE FACTURA. Obs: ${event.observacion.isEmpty ? "Sin observaciones" : event.observacion}',
+      usuarioNombre: event.nombreUsuario, 
+      usuarioRol: event.rolUsuario,
+      timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.entrega,
+      hito: (event.ticket.urlGuiaRemision?.isNotEmpty ?? false) && event.ticket.estadoActual == EstadoTicket.entrega ? HitoProceso.fin : HitoProceso.avance,
+    );
+
+    final ticketPaso1 = event.ticket.copyWith(urlFactura: urlSubida);
+
+    // 🚀 LECTURA DE SENSORES Y ENCLAVAMIENTO FÍSICO
+    final bool tieneGuia = ticketPaso1.urlGuiaRemision != null && ticketPaso1.urlGuiaRemision!.isNotEmpty;
+    final bool tieneFactura = ticketPaso1.urlFactura != null && ticketPaso1.urlFactura!.isNotEmpty;
+    
+    // 🛑 REGLA INQUEBRANTABLE: Subir un papel NO mueve la máquina.
+    EstadoTicket estadoResultante = ticketPaso1.estadoActual;
+    String mensajeHMI = 'Factura anexada. El equipo continúa en estación: ${estadoResultante.name.toUpperCase()}';
+
+    // ⚠️ COMPUERTA AND (3 Vías): Solo finaliza si YA estaba en Entrega Y tiene ambos papeles.
+    if (tieneGuia && tieneFactura && ticketPaso1.estadoActual == EstadoTicket.entrega) {
+      estadoResultante = EstadoTicket.finalizado;
+      mensajeHMI = '✅ Despacho Finalizado: Circuito cerrado (Guía + Factura en rampa).';
+    }
+
+    final ticketActualizado = ticketPaso1.copyWith(
+      estadoActual: estadoResultante,
+      historialEventos: [...ticketPaso1.historialEventos, eventoAuditoria],
+    );
+
+    final dbResult = await actualizarTicket(ticketActualizado);
+
+    dbResult.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error, 
+        message: 'Falla en escritura de BD: ${_mapFailureToMessage(failure)}'
+      )),
+      (ticketGuardado) {
+        final listaActualizada = state.historial.map((t) => 
+          t.id == ticketGuardado.id ? ticketGuardado : t
+        ).toList();
+        final listaTickets = state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: mensajeHMI,
+          historial: listaActualizada,
+          tickets: listaTickets,
+          currentTicket: ticketGuardado,
+        ));
+      }
+    );
+  }
+// =========================================================
+  // ⚙️ SUBRUTINA: PROCESAMIENTO DE FACTURACIÓN (SECCIÓN COMERCIAL)
+  // =========================================================
+  Future<void> _onProcesarFacturacion(
+    ProcesarFacturacionEvent event, 
+    Emitter<TicketState> emit
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Consolidando base de datos. Transfiriendo equipo a rampa de despacho...'
+    ));
+
+    try {
+      final ticketOriginal = state.historial.firstWhere(
+        (t) => t.id == event.ticketId,
+        orElse: () => throw Exception('Anomalía: El ticket no existe en el árbol de estado local.'),
+      );
+      
+      // 1. EL PLC LEE LOS REGISTROS ANTES DE MOVER EL EQUIPO
+      final bool tieneGuia = ticketOriginal.urlGuiaRemision != null && ticketOriginal.urlGuiaRemision!.isNotEmpty;
+      final bool tieneFactura = ticketOriginal.urlFactura != null && ticketOriginal.urlFactura!.isNotEmpty;
+
+      // 2. ESTADOS Y MENSAJES POR DEFECTO (Asumimos parada en rampa de entrega)
+      EstadoTicket nuevoEstado = EstadoTicket.entrega;
+      String accionAuditoria = 'REVISIÓN COMERCIAL COMPLETADA. EQUIPO TRANSFERIDO A DESPACHO LOGÍSTICO.';
+      String mensajeHMI = 'Facturación procesada. Equipo en rampa de entrega.';
+
+      // 🚀 3. SENSOR DE CROSS-DOCKING (La validación automática que usted pide)
+      // Si el equipo ya tenía los papeles listos desde antes, no lo detenemos en despacho.
+      if (tieneGuia && tieneFactura) {
+        nuevoEstado = EstadoTicket.finalizado;
+        accionAuditoria = 'REVISIÓN COMERCIAL COMPLETADA Y GUIA CON FACTURACIÓN DETECTADA. TICKET FINALIZADO.';
+        mensajeHMI = '✅ Equipo transferido a despacho y finalizado automáticamente por tener documentos completos.';
+      }
+
+      // 4. TROQUELADO Y ENSAMBLAJE
+      final eventoAuditoria = EventoAuditoriaEntity(
+        accion: accionAuditoria,
+        usuarioNombre: event.nombreUsuario, 
+        usuarioRol: event.rolUsuario,
+        timestamp: DateTime.now(),
+        proceso: ProcesoAuditoria.revisionPagos,
+        hito: HitoProceso.fin,
+        habilita: nuevoEstado == EstadoTicket.entrega ? const [ProcesoAuditoria.entrega] : const [],
+      );
+
+      final ticketActualizado = ticketOriginal.copyWith(
+        estadoActual: nuevoEstado, 
+        historialEventos: [...ticketOriginal.historialEventos, eventoAuditoria],
+      );
+
+      // 5. PERSISTENCIA
+      final dbResult = await actualizarTicket(ticketActualizado);
+
+      dbResult.fold(
+        (failure) => emit(state.copyWith(
+          status: TicketStatus.error, 
+          message: 'Error al actualizar Firestore: ${failure.message}'
+        )),
+        (ticketGuardado) {
+          final listaActualizada = state.historial
+              .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+              .toList();
+          final listaTickets = state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+              
+          emit(state.copyWith(
+            status: TicketStatus.operationSuccess,
+            message: mensajeHMI,
+            historial: listaActualizada,
+            tickets: listaTickets,
+            currentTicket: ticketGuardado,
+          ));
+        }
+      );
+    } catch (e) {
+      emit(state.copyWith(
+        status: TicketStatus.error, 
+        message: 'Falla interna del sistema: $e'
+      ));
+    }
+  }
+
+
+void _onSeleccionarTipoGarantia(SeleccionarTipoGarantiaEvent event, Emitter<TicketState> emit) {
+    // Mutamos el estado inyectando el tipo de garantía
+    emit(state.copyWith(tipoGarantia: event.tipo));
+
+  }
+
+  void _onResetearTodo(ResetearRequerimientoEvent event, Emitter<TicketState> emit) {
+    // Purgamos la memoria de selección devolviendo los enums a su valor neutral
+    emit(state.copyWith(
+      tipoSeleccionado: TipoRequerimiento.ninguno,
+      lugarAtencion: LugarAtencion.pendiente,
+      tipoGarantia: TipoGarantia.pendiente, 
+    ));
+  }
+
+  
+
+void _onSeleccionarTipoRequerimiento(
+    SeleccionarTipoRequerimientoEvent event,
+    Emitter<TicketState> emit,
+  ) {
+    LugarAtencion nuevoLugar = LugarAtencion.noAplica;
+
+    // ⚙️ ENCLAVAMIENTO DE SEGURIDAD:
+    // Si el operador selecciona Reparación o Garantía, forzamos el lugar a 'pendiente'
+    // Esto es lo que acciona el panel dinámico para que se abra el submenú de Taller/Campo.
+    if (event.tipo == TipoRequerimiento.reparacion || 
+        event.tipo == TipoRequerimiento.reclamoGarantia) {
+      nuevoLugar = LugarAtencion.pendiente;
+    }
+
+    // Si el operador presiona el botón "Volver" (selecciona TipoRequerimiento.ninguno),
+    // el lugar vuelve automáticamente a 'noAplica' y se resetea todo.
+    
+    emit(state.copyWith(
+      tipoSeleccionado: event.tipo,
+      lugarAtencion: nuevoLugar,
+    ));
+  }
+
+void _onSeleccionarLugarAtencion(
+    SeleccionarLugarAtencionEvent event,
+    Emitter<TicketState> emit,
+  ) {
+    // Este es un simple bypass. Guarda si es Taller o Campo y cierra el submenú.
+    emit(state.copyWith(
+      lugarAtencion: event.lugar,
+    ));
+  }
+
+  
+Future<void> _onReversarAComercial(
+    ReversarAComercialEvent event, 
+    Emitter<TicketState> emit
+  ) async {
+    // 1. BALIZA DE CARGA
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Reversando ticket a estado comercial...'
+    ));
+
+    // 2. ENSAMBLAJE DE LA AUDITORÍA (Con la observación obligatoria)
+    final eventoAuditoria = EventoAuditoriaEntity(
+      accion: 'SOLICITUD DE MODIFICACIÓN: ${event.observacion.toUpperCase()}',
+      usuarioNombre: event.nombreUsuario, 
+      usuarioRol: event.rolUsuario,
+      timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.aprobacionCliente,
+      hito: HitoProceso.fin,
+      habilita: const [ProcesoAuditoria.comercial],
+    );
+
+    // 3. MUTACIÓN DEL TICKET (El Troquelado)
+   final ticketActualizado = event.ticketActual.copyWith(
+  estadoActual: EstadoTicket.comercial, 
+  fueModificado: true, // ⚠️ FLAG DE HARDWARE ACTIVADO
+  historialEventos: [...event.ticketActual.historialEventos, eventoAuditoria],
+);
+
+    // 4. PERSISTENCIA EN FIRESTORE
+    final dbResult = await actualizarTicket(ticketActualizado);
+
+    dbResult.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error, 
+        message: 'Error al reversar el ticket: ${_mapFailureToMessage(failure)}'
+      )),
+      (ticketGuardado) {
+        // 5. HOT SWAP: Actualizamos la memoria RAM (Lazo cerrado para el HMI)
+        final listaActualizada = state.historial.map((t) => 
+          t.id == ticketGuardado.id ? ticketGuardado : t
+        ).toList();
+        final listaTickets = state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+
+        // 6. EMISIÓN DE SEÑAL DE ÉXITO
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: '✅ Ticket retornado a comercial para modificación.',
+          historial: listaActualizada,
+          tickets: listaTickets,
+          currentTicket: ticketGuardado,
+        ));
+      }
+    );
+  }
+
+
+
+Future<void> _onSubirEvidencia(SubirEvidenciaEvent event, Emitter<TicketState> emit) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading, 
+      message: 'Transmitiendo archivo pesado al Storage...'
+    ));
+
+    // Asumiendo que tu evento tiene event.file y event.ticketId
+    final result = await subirEvidenciaUseCase(event.file, event.ticketId);
+
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: _mapFailureToMessage(failure)
+      )),
+      (urlDescarga) => emit(state.copyWith(
+        status: TicketStatus.evidenceUploaded,
+        message: 'Foto procesada y almacenada.',
+        evidenciaUrl: urlDescarga, // ⚙️ Inyectamos la URL para que la UI la pinte inmediatamente
+      )),
+    );
+  }
+
+Future<void> _onDictaminarGarantia(
+  DictaminarGarantiaEvent event, 
+  Emitter<TicketState> emit
+) async {
+  emit(state.copyWith(
+    status: TicketStatus.loading,
+    message: 'Registrando dictamen de garantía en el sistema...'
+  ));
+
+  // 1. Auditoría del evento (Bitácora)
+  final accionTexto = event.esGarantia 
+      ? 'GARANTÍA APROBADA POR INGENIERÍA' 
+      : 'GARANTÍA RECHAZADA - PASA A FACTURACIÓN CLIENTE';
+
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: accionTexto,
+    usuarioNombre: event.nombreUsuario, 
+    usuarioRol: event.rolUsuario,
+    timestamp: DateTime.now(),
+    proceso: ProcesoAuditoria.garantia,
+    hito: HitoProceso.fin,
+    habilita: event.esGarantia && event.ticket.tipoGarantia == 'servicio' ? const [ProcesoAuditoria.costos, ProcesoAuditoria.compras] : const [ProcesoAuditoria.comercial],
+  );
+
+  // ==========================================
+  // 2. MÁQUINA DE ESTADOS: LÓGICA DE ENRUTAMIENTO Y FACTURACIÓN
+  // ==========================================
+  EstadoTicket estadoDestino = EstadoTicket.comercial; 
+  String nuevoResponsable;
+
+  if (event.esGarantia) {
+    // Si se aprueba: ruteamos según el tipo de garantía
+    if (event.ticket.tipoGarantia == 'servicio') {
+      estadoDestino = EstadoTicket.costos; // Desvío al departamento de costos
+      nuevoResponsable = 'tallerInterno';
+    } else {
+      nuevoResponsable = 'agrispotsa'; // Máquina nueva u otros (AGRISPOTSA)
+    }
+  } else {
+    // 🛑 Si se rechaza la garantía: la responsabilidad pasa de forma innegociable al cliente
+    nuevoResponsable = 'cliente';
+    estadoDestino = EstadoTicket.comercial;
+  }
+
+  // ==========================================
+  // 3. Mutación del ticket (Troquelado en memoria)
+  // ==========================================
+  final ticketActualizado = event.ticket.copyWith(
+    esGarantia: event.esGarantia,
+    estadoActual: estadoDestino,
+    responsableFacturacion: nuevoResponsable,
+    historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+  );
+
+  // ==========================================
+  // 4. Persistencia en la Base de Datos
+  // ==========================================
+  final dbResult = await actualizarTicket(ticketActualizado);
+
+  dbResult.fold(
+    (failure) => emit(state.copyWith(
+      status: TicketStatus.error, 
+      message: 'Error al registrar dictamen: ${_mapFailureToMessage(failure)}'
+    )),
+    (ticketGuardado) {
+      // HOT SWAP del ticket en la memoria global
+      final listaActualizada = state.historial.map((t) => 
+        t.id == ticketGuardado.id ? ticketGuardado : t
+      ).toList();
+      final listaTickets = state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+
+      emit(state.copyWith(
+        status: TicketStatus.operationSuccess,
+        message: 'Dictamen registrado y ruteado correctamente.',
+        historial: listaActualizada,
+        tickets: listaTickets,
+        currentTicket: ticketGuardado,
+      ));
+    }
+  );
+}
+
+
+
+
+
+Future<void> _onProcesarEvaluacionDocumental(
+  ProcesarEvaluacionDocumentalEvent event, 
+  Emitter<TicketState> emit
+) async {
+  emit(state.copyWith(
+    status: TicketStatus.loading,
+    message: 'Transmitiendo documentos técnicos a la nube...'
+  ));
+
+  String? urlExcelSubido;
+  List<String> urlsPdfsSubidos = [];
+  List<String> urlsPdfsGarantiaSubidos = []; // 🔌 Tubería para los respaldos de OV
+  bool huboFalla = false;
+  String mensajeError = '';
+
+  // ==========================================
+  // 1A. SUBIDA DEL CANAL EXCLUSIVO (PROFORMA EXCEL)
+  // ==========================================
+  if (event.proformaExcel != null) {
+    final result = await subirDocumentoEvaluacionUseCase(event.proformaExcel!, event.ticket.id, 'evaluaciones/proformas');
+    
+    result.fold(
+      (failure) {
+        huboFalla = true;
+        mensajeError = _mapFailureToMessage(failure);
+      },
+      (url) => urlExcelSubido = url,
+    );
+
+    if (huboFalla) {
+      emit(state.copyWith(status: TicketStatus.error, message: 'Falla al subir Proforma: $mensajeError'));
+      return; // 🛑 Aborto de emergencia
+    }
+  }
+
+  // ==========================================
+  // 1B. SUBIDA DEL CANAL GENERAL (EVIDENCIA PDF)
+  // ==========================================
+  if (event.documentosPdf.isNotEmpty) {
+    for (final file in event.documentosPdf) {
+      final result = await subirDocumentoEvaluacionUseCase(file, event.ticket.id, 'evaluaciones/generales');
+      
+      result.fold(
+        (failure) {
+          huboFalla = true;
+          mensajeError = _mapFailureToMessage(failure);
+        },
+        (url) => urlsPdfsSubidos.add(url),
+      );
+
+      if (huboFalla) {
+        emit(state.copyWith(status: TicketStatus.error, message: 'Falla al subir PDF: $mensajeError'));
+        return; // 🛑 Aborto de emergencia
+      }
+    }
+  }
+
+  // ==========================================
+  // 1C. SUBIDA DE RESPALDOS DE GARANTÍA (OV)
+  // ==========================================
+  if (event.documentosPdfGarantia != null && event.documentosPdfGarantia!.isNotEmpty) {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Subiendo respaldo documental de Orden de Venta...'
+    ));
+
+    for (final file in event.documentosPdfGarantia!) {
+      // Mandamos esto a una ruta específica para trazabilidad de auditoría
+      final result = await subirDocumentoEvaluacionUseCase(file, event.ticket.id, 'evaluaciones/garantias');
+      
+      result.fold(
+        (failure) {
+          huboFalla = true;
+          mensajeError = _mapFailureToMessage(failure);
+        },
+        (url) => urlsPdfsGarantiaSubidos.add(url),
+      );
+
+      if (huboFalla) {
+        emit(state.copyWith(status: TicketStatus.error, message: 'Falla al subir PDF de Garantía: $mensajeError'));
+        return; // 🛑 Aborto de emergencia
+      }
+    }
+  }
+
+  // ==========================================
+  // 1D. SUBIDA DEL PDF DE REVISIÓN TÉCNICA ANTIGUA (GARANTÍA SERVICIO)
+  // ==========================================
+  String? urlRevisionAntiguaSubida;
+  if (event.documentoRevisionAntigua != null) {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Subiendo PDF de revisión técnica antigua...'
+    ));
+
+    final result = await subirDocumentoEvaluacionUseCase(
+      event.documentoRevisionAntigua!, 
+      event.ticket.id, 
+      'evaluaciones/revision_antigua'
+    );
+    
+    result.fold(
+      (failure) {
+        huboFalla = true;
+        mensajeError = _mapFailureToMessage(failure);
+      },
+      (url) => urlRevisionAntiguaSubida = url,
+    );
+
+    if (huboFalla) {
+      emit(state.copyWith(status: TicketStatus.error, message: 'Falla al subir PDF de Revisión Técnica Antigua: $mensajeError'));
+      return; // 🛑 Aborto de emergencia
+    }
+  }
+
+  emit(state.copyWith(
+    status: TicketStatus.loading,
+    message: 'Ensamblando reporte y consolidando base de datos...'
+  ));
+
+  // ==========================================
+  // 1.5 PROCESAMIENTO ESTRUCTURADO DE ACTIVIDADES Y REPUESTOS (Plan Maestro)
+  // ==========================================
+  List<ActividadRegistradaEntity> actividadesRegistradas = [];
+  List<RepuestoRegistradoEntity> repuestosTallerConsolidados = [];
+  List<RepuestoRegistradoEntity> repuestosComercialConsolidados = [];
+  double? totalHorasHombre;
+
+  if (event.actividadesSeleccionadas != null && event.actividadesSeleccionadas!.isNotEmpty) {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Subiendo evidencias fotográficas de actividades...',
+    ));
+
+    double sumaHH = 0.0;
+    final Map<String, RepuestoRegistradoEntity> mapaTaller = {};
+    final Map<String, RepuestoRegistradoEntity> mapaComercial = {};
+
+    for (final actSel in event.actividadesSeleccionadas!) {
+      sumaHH += actSel.horasHombre;
+
+      // 1. Subir fotos de la actividad a Storage
+      final List<String> fotosUrls = [];
+      for (final foto in actSel.fotos) {
+        final uploadResult = await subirEvidenciaUseCase(foto, event.ticket.id);
+        uploadResult.fold(
+          (failure) => null,
+          (url) => fotosUrls.add(url),
+        );
+      }
+
+      // 2. Registrar la actividad estructurada
+      actividadesRegistradas.add(
+        ActividadRegistradaEntity(
+          codigo: actSel.actividad.codigo,
+          nombre: actSel.actividad.nombre,
+          horasHombre: actSel.horasHombre,
+          observacion: actSel.observacion,
+          fotosUrls: fotosUrls,
+          incluye: actSel.textoIncluyeDinamico,
+        ),
+      );
+
+      // 3. Consolidar repuestos internos de taller (sumar cantidades)
+      for (final item in actSel.itemsInternos) {
+        if (item.cantidad <= 0) continue;
+        final cod = item.codigo.trim().toUpperCase();
+        final key = cod.isNotEmpty ? cod : item.descripcion.trim().toUpperCase();
+        if (mapaTaller.containsKey(key)) {
+          final anterior = mapaTaller[key]!;
+          mapaTaller[key] = anterior.copyWith(cantidad: anterior.cantidad + item.cantidad);
+        } else {
+          mapaTaller[key] = RepuestoRegistradoEntity(
+            codigo: item.codigo,
+            descripcion: item.descripcion,
+            unidad: item.unidad,
+            cantidad: item.cantidad,
+          );
+        }
+      }
+
+      // 4. Consolidar repuestos comerciales (sumar cantidades)
+      for (final item in actSel.itemsComerciales) {
+        if (item.cantidad <= 0) continue;
+        final cod = item.codigo.trim().toUpperCase();
+        final key = cod.isNotEmpty ? cod : item.descripcion.trim().toUpperCase();
+        if (mapaComercial.containsKey(key)) {
+          final anterior = mapaComercial[key]!;
+          mapaComercial[key] = anterior.copyWith(cantidad: anterior.cantidad + item.cantidad);
+        } else {
+          mapaComercial[key] = RepuestoRegistradoEntity(
+            codigo: item.codigo,
+            descripcion: item.descripcion,
+            unidad: item.unidad,
+            cantidad: item.cantidad,
+          );
+        }
+      }
+    }
+
+    totalHorasHombre = sumaHH;
+    repuestosTallerConsolidados = mapaTaller.values.toList();
+    repuestosComercialConsolidados = mapaComercial.values.toList();
+  }
+
+  // ==========================================
+  // 2. ENSAMBLAJE DE LAS NUEVAS ENTIDADES (Estructura Determinista)
+  // ==========================================
+  final evaluacion = EvaluacionTecnicaEntity(
+    urlProformaExcel: urlExcelSubido, 
+    urlsAdjuntosPdf: urlsPdfsSubidos, 
+    observacion: event.observacion,
+    // 🚀 INYECCIÓN DE LOS NUEVOS PINES DE GARANTÍA
+    numeroOVGarantia: event.numeroOVGarantia,
+    urlsAdjuntosPdfGarantia: urlsPdfsGarantiaSubidos,
+    urlPdfRevisionTecnicaAntigua: urlRevisionAntiguaSubida,
+    totalHorasHombre: totalHorasHombre,
+    actividades: actividadesRegistradas,
+    repuestosTaller: repuestosTallerConsolidados,
+    repuestosComercial: repuestosComercialConsolidados,
+  );
+
+  String accionAuditoria = 'EVALUACIÓN TÉCNICA Y DOCUMENTAL REGISTRADA';
+  if (event.noRequiereCompras) {
+    accionAuditoria += ' — DECLARADO: NO REQUIERE COMPRAS';
+    if (event.motivoNoRequiereCompras != null && event.motivoNoRequiereCompras!.trim().isNotEmpty) {
+      accionAuditoria += ' (${event.motivoNoRequiereCompras!.trim()})';
+    }
+  }
+
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: accionAuditoria,
+    usuarioNombre: event.nombreUsuario, 
+    usuarioRol: event.rolUsuario,
+    timestamp: DateTime.now(),
+    proceso: ProcesoAuditoria.evaluacion,
+    hito: HitoProceso.fin,
+    habilita: event.ticket.tipoRequerimiento == TipoRequerimiento.reclamoGarantia ? const [ProcesoAuditoria.garantia] : const [ProcesoAuditoria.comercial],
+  );
+
+  // ==========================================
+  // 3. MUTACIÓN DEL TICKET (El Troquelado y Enrutamiento)
+  // ==========================================
+  
+  // ⚙️ RELÉ DE CONMUTACIÓN DE ESTADOS
+  EstadoTicket siguienteEstado = EstadoTicket.comercial; 
+
+  if (event.ticket.tipoRequerimiento == TipoRequerimiento.reclamoGarantia) {
+    siguienteEstado = EstadoTicket.revisionGarantia;
+  }
+
+  // 📦 INICIALIZACIÓN DE ÍTEMS DE DESPACHO PARA BODEGA (Enfoque Caracol y Arquitectura Abierta)
+  List<ItemDespachoBodegaEntity> itemsBodegaIniciales = [];
+  if (repuestosTallerConsolidados.isNotEmpty) {
+    itemsBodegaIniciales = repuestosTallerConsolidados.map((r) {
+      return ItemDespachoBodegaEntity(
+        codigo: r.codigo,
+        descripcion: r.descripcion,
+        unidad: r.unidad,
+        cantidadSolicitada: r.cantidad,
+        stockDisponibleAlEvaluar: 0.0,
+        validadoPorCompras: false,
+        cantidadDespachada: 0.0,
+      );
+    }).toList();
+  }
+
+  final ticketActualizado = event.ticket.copyWith(
+    evaluacionTecnica: evaluacion,
+    itemsDespachoBodega: itemsBodegaIniciales.isNotEmpty ? itemsBodegaIniciales : event.ticket.itemsDespachoBodega,
+    estadoActual: siguienteEstado, 
+    historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+    noRequiereCompras: event.noRequiereCompras,
+    motivoNoRequiereCompras: event.noRequiereCompras ? event.motivoNoRequiereCompras : null,
+    supervisorNoRequiereCompras: event.noRequiereCompras ? event.nombreUsuario : null,
+    fechaNoRequiereCompras: event.noRequiereCompras ? DateTime.now() : null,
+  );
+
+  // ==========================================
+  // 4. PERSISTENCIA EN FIRESTORE
+  // ==========================================
+  // NUEVO: para equipo Caracol, la evaluacion tecnica ademas aparta
+  // (reserva) en inventario_bodega los repuestos de taller -- misma
+  // transaccion, con candado de idempotencia contra doble clic/reintento.
+  // Para el resto de equipos, queda exactamente igual que siempre.
+  final bool esCaracolEvaluacion = ticketActualizado.equipo == TipoEquipo.Caracol;
+
+  if (esCaracolEvaluacion) {
+    final itemsAReservar = repuestosTallerConsolidados
+        .map((r) => <String, dynamic>{'codigo': r.codigo, 'cantidad': r.cantidad})
+        .toList();
+
+    final resultCaracol = await ticketRepository.guardarEvaluacionTecnicaConReservaStock(
+      ticket: ticketActualizado,
+      itemsAReservar: itemsAReservar,
+    );
+
+    resultCaracol.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Error al guardar la evaluación: ${_mapFailureToMessage(failure)}',
+      )),
+      (_) {
+        final listaActualizada = state.historial.map((t) =>
+          t.id == ticketActualizado.id ? ticketActualizado : t
+        ).toList();
+        final listaTickets = state.tickets.map((t) =>
+          t.id == ticketActualizado.id ? ticketActualizado : t
+        ).toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: 'Reporte técnico guardado con éxito.',
+          historial: listaActualizada,
+          tickets: listaTickets,
+          currentTicket: ticketActualizado,
+        ));
+      },
+    );
+    return;
+  }
+
+  final dbResult = await actualizarTicket(ticketActualizado);
+
+  dbResult.fold(
+    (failure) => emit(state.copyWith(
+      status: TicketStatus.error, 
+      message: 'Error al guardar la evaluación: ${_mapFailureToMessage(failure)}'
+    )),
+    (ticketGuardado) {
+      // 5. HOT SWAP: Lazo cerrado para actualizar la HMI
+      final listaActualizada = state.historial.map((t) => 
+        t.id == ticketGuardado.id ? ticketGuardado : t
+      ).toList();
+      final listaTickets = state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+
+      emit(state.copyWith(
+        status: TicketStatus.operationSuccess,
+        message: 'Reporte técnico guardado con éxito.',
+        historial: listaActualizada,
+        tickets: listaTickets,
+        currentTicket: ticketGuardado,
+      ));
+    }
+  );
+}
+
+Future<void> _onProcesarBodega(
+  ProcesarBodegaEvent event, 
+  Emitter<TicketState> emit
+) async {
+  emit(state.copyWith(
+    status: TicketStatus.loading,
+    message: 'Validando orden de compra y liberando equipo...'
+  ));
+
+  // ==========================================
+  // 1. ENSAMBLAJE DE LA AUDITORÍA (Estándar de la Planta)
+  // ==========================================
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: 'ORDEN DE COMPRA VALIDADA EN BODEGA',
+    usuarioNombre: event.nombreUsuario, 
+    usuarioRol: event.rolUsuario,
+    timestamp: DateTime.now(),
+  );
+
+  // ==========================================
+  // 2. MUTACIÓN DEL TICKET (El Troquelado)
+  // ==========================================
+  final ticketActualizado = event.ticket.copyWith(
+    estadoActual: EstadoTicket.procesoTrabajo, // 🚀 TRASPASO DE ESTACIÓN
+    historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+  );
+
+  // ==========================================
+  // 3. PERSISTENCIA EN FIRESTORE
+  // ==========================================
+  final dbResult = await actualizarTicket(ticketActualizado);
+
+  dbResult.fold(
+    (failure) => emit(state.copyWith(
+      status: TicketStatus.error, 
+      message: 'Error al conmutar estado en Bodega: ${_mapFailureToMessage(failure)}'
+    )),
+    (ticketGuardado) {
+      // ==========================================
+      // 4. HOT SWAP: Lazo cerrado para actualizar la HMI
+      // ==========================================
+      final listaActualizada = state.historial.map((t) => 
+        t.id == ticketGuardado.id ? ticketGuardado : t
+      ).toList();
+      final listaTickets = state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+
+      emit(state.copyWith(
+        status: TicketStatus.operationSuccess,
+        message: 'Equipo liberado para proceso de trabajo exitosamente.',
+        historial: listaActualizada,
+        tickets: listaTickets,
+        currentTicket: ticketGuardado,
+      ));
+    }
+  );
+}
+
+Future<void> _onProcesarGestionCompras(
+    ProcesarGestionComprasEvent event, 
+    Emitter<TicketState> emit
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Iniciando escaneo de matriz documental...'
+    ));
+
+    // ⚙️ MATRIZ RECOLECTORA DE TELEMETRÍA (URLs finales)
+    List<String> urlsOrdenesSubidas = [];
+    bool huboFalla = false;
+    String mensajeError = '';
+
+    // ==========================================
+    // 1. SUBIDA DE DOCUMENTOS (Con Bypass Activo)
+    // ==========================================
+    // El motor solo arranca si hay archivos físicos encolados
+    if (event.archivosOrdenCompra.isNotEmpty) {
+      for (int i = 0; i < event.archivosOrdenCompra.length; i++) {
+        final archivoActual = event.archivosOrdenCompra[i];
+        
+        emit(state.copyWith(
+          status: TicketStatus.loading,
+          message: 'Subiendo archivo ${i + 1} de ${event.archivosOrdenCompra.length} al servidor...'
+        ));
+
+        // Inyectamos el archivo actual al Storage
+        final result = await subirOrdenCompraUseCase(
+          archivoActual, 
+          event.ticket.id
+        );
+        
+        result.fold(
+          (failure) {
+            huboFalla = true;
+            mensajeError = _mapFailureToMessage(failure);
+          },
+          (url) => urlsOrdenesSubidas.add(url),
+        );
+
+        // 🛡️ CORTACIRCUITOS: Si un archivo falla por problemas de red, detenemos el bucle
+        if (huboFalla) break;
+      }
+    }
+
+    // ⚙️ VALIDACIÓN RECTIFICADA: 
+    // Ya no fallamos si la matriz de URLs está vacía. Solo fallamos si hubo un error de red real.
+    if (huboFalla) {
+      emit(state.copyWith(
+        status: TicketStatus.error, 
+        message: 'Cortocircuito de red al subir Órdenes de Compra: $mensajeError'
+      ));
+      return; 
+    }
+
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Ensamblando orden y consolidando matriz de datos...'
+    ));
+
+    // ==========================================
+    // 2. ENSAMBLAJE DE LAS NUEVAS ENTIDADES
+    // ==========================================
+    final gestionCompras = GestionComprasEntity(
+      urlsOrdenCompra: urlsOrdenesSubidas, 
+      observacion: event.observacion,
+    );
+
+    // 🧠 ACTUADOR DINÁMICO DE AUDITORÍA:
+    // Identificamos para la trazabilidad industrial si se subieron compras externas
+    // o si se despachará directo desde los inventarios locales de la planta.
+    final String tipoAccionAuditoria = urlsOrdenesSubidas.isEmpty
+        ? 'COMPRAS LIBERADAS (ABASTECIMIENTO DIRECTO DESDE STOCK BODEGA)'
+        : 'ÓRDENES DE COMPRA EXTERNAS REGISTRADAS MÚLTIPLE';
+
+    final eventoAuditoria = EventoAuditoriaEntity(
+      accion: tipoAccionAuditoria,
+      usuarioNombre: event.nombreUsuario, 
+      usuarioRol: event.rolUsuario,
+      timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.compras,
+      hito: HitoProceso.fin,
+      habilita: const [ProcesoAuditoria.validacionBodega],
+    );
+
+    // ==========================================
+    // 3. MUTACIÓN DEL TICKET (El Troquelado)
+    // ==========================================
+    // Permanece en Compras para el paso obligatorio de Validación Bodega (Compras).
+    // Para Caracol, inicializamos validadoPorCompras: true para los ítems que ya cuentan con stock en bodega.
+    List<ItemDespachoBodegaEntity> itemsActualizados = event.itemsActualizados ?? event.ticket.itemsDespachoBodega;
+    if (itemsActualizados.isEmpty && (event.ticket.evaluacionTecnica?.repuestosTaller.isNotEmpty ?? false)) {
+      itemsActualizados = event.ticket.evaluacionTecnica!.repuestosTaller.map((r) {
+        return ItemDespachoBodegaEntity(
+          codigo: r.codigo,
+          descripcion: r.descripcion,
+          unidad: r.unidad,
+          cantidadSolicitada: r.cantidad,
+          stockDisponibleAlEvaluar: 0.0,
+          validadoPorCompras: false,
+          cantidadDespachada: 0.0,
+          fechaSolicitud: event.ticket.historialEventos.isNotEmpty
+              ? event.ticket.historialEventos.first.timestamp
+              : DateTime.now(),
+        );
+      }).toList();
+    } else if (itemsActualizados.isNotEmpty && event.itemsActualizados == null) {
+      itemsActualizados = itemsActualizados.map((item) {
+        final tieneStock = item.stockDisponibleAlEvaluar >= item.cantidadSolicitada;
+        return item.copyWith(
+          validadoPorCompras: item.validadoPorCompras || tieneStock,
+        );
+      }).toList();
+    }
+
+    final ticketActualizado = event.ticket.copyWith(
+      gestionCompras: gestionCompras,
+      estadoActual: EstadoTicket.compras, 
+      isComprasCompletado: true,         
+      itemsDespachoBodega: itemsActualizados,
+      historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+    );
+
+    // ==========================================
+    // 4. PERSISTENCIA EN FIRESTORE
+    // ==========================================
+    final dbResult = await actualizarTicket(ticketActualizado);
+
+    dbResult.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error, 
+        message: 'Falla de escritura al guardar los datos lógicos: ${_mapFailureToMessage(failure)}'
+      )),
+      (ticketGuardado) {
+        final listaActualizada = state.historial.map((t) => 
+          t.id == ticketGuardado.id ? ticketGuardado : t
+        ).toList();
+        final listaTickets = state.tickets.map((t) => 
+          t.id == ticketGuardado.id ? ticketGuardado : t
+        ).toList();
+
+        // Retroalimentación visual dinámica en la HMI
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: urlsOrdenesSubidas.isEmpty 
+              ? 'Liberación local registrada. Pase a Validación Bodega.'
+              : 'Órdenes externas consolidadas. Pase a Validación Bodega.',
+          historial: listaActualizada,
+          tickets: listaTickets,
+          currentTicket: ticketGuardado,
+        ));
+      }
+    );
+  }
+
+Future<void> _onNotificarYGenerarActa(NotificarYGenerarActaEvent event, Emitter<TicketState> emit) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading, 
+      message: 'Disparando webhook y consolidando estado final...'
+    ));
+
+    final result = await notificarYGenerarActa(event.ticket);
+
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: _mapFailureToMessage(failure)
+      )),
+      (ticketCerrado) {
+        // ⚙️ HOT SWAP
+        final listaActualizada = state.tickets.map((t) => 
+          t.id == ticketCerrado.id ? ticketCerrado : t
+        ).toList();
+        final listaHistorial = state.historial.map((t) =>
+          t.id == ticketCerrado.id ? ticketCerrado : t
+        ).toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: 'Operación cerrada y backend notificado.',
+          tickets: listaActualizada,
+          historial: listaHistorial,
+          currentTicket: ticketCerrado,
+        ));
+      },
+    );
+  }
+
+
+/// 🧾 Agrega cambios de materiales al registro aparte de la auditoría
+/// (arrayUnion). Devuelve el ticket releído, o null si no había cambios o falló.
+Future<TicketEntity?> _agregarCambiosMateriales(String ticketId, List<CambioMaterialEntity> cambios) async {
+  if (cambios.isEmpty) return null;
+  final r = await ticketRepository.actualizarCampos(ticketId, {
+    'historialCambiosMateriales': FieldValue.arrayUnion(cambios.map((c) => c.toJson()).toList()),
+  });
+  return r.fold((_) => null, (t) => t);
+}
+
+Future<void> _onActualizarEvaluacion(ActualizarEvaluacionEvent event, Emitter<TicketState> emit) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading, 
+      message: 'Transmitiendo actualización de evaluación al servidor...'
+    ));
+
+    final bool esCaracol = event.ticket.equipo == TipoEquipo.Caracol;
+
+    if (!esCaracol) {
+      // CAMINO ORIGINAL: sin cambios, para cualquier equipo que no sea Caracol.
+      final result = await actualizarTicket(event.ticket);
+      // 🧾 Registro aparte de cambios de materiales (no va en el ticket completo).
+      final conCambios = result.isRight() ? await _agregarCambiosMateriales(event.ticket.id, event.cambiosMateriales) : null;
+
+      result.fold(
+        (failure) => emit(state.copyWith(
+          status: TicketStatus.error,
+          message: _mapFailureToMessage(failure)
+        )),
+        (ticketGuardado) {
+          final ticketActualizado = conCambios ?? ticketGuardado;
+          final listaActualizada = state.tickets.map((t) => 
+            t.id == ticketActualizado.id ? ticketActualizado : t
+          ).toList();
+          final listaHistorial = state.historial.map((t) =>
+            t.id == ticketActualizado.id ? ticketActualizado : t
+          ).toList();
+
+          emit(state.copyWith(
+            status: TicketStatus.operationSuccess,
+            message: 'Evaluación técnica sincronizada con la matriz.',
+            tickets: listaActualizada,
+            historial: listaHistorial,
+            currentTicket: ticketActualizado,
+          ));
+        },
+      );
+      return;
+    }
+
+    // CARACOL: requerimiento editable por comercial. El candado de etapa
+    // (solo comercial/cotizado) se valida en el servidor dentro de una
+    // transaccion -- ver actualizarCamposConGuardaEstado. Solo se tocan los
+    // campos del requerimiento + el evento de auditoria (arrayUnion), nunca
+    // el ticket completo.
+    final evalJson = TicketModel.fromEntity(event.ticket).toJson()['evaluacionTecnica'] as Map<String, dynamic>?;
+
+    final camposCaracol = <String, dynamic>{
+      if (evalJson != null) 'evaluacionTecnica.repuestosTaller': evalJson['repuestosTaller'],
+      if (evalJson != null) 'evaluacionTecnica.repuestosComercial': evalJson['repuestosComercial'],
+      if (evalJson != null) 'evaluacionTecnica.totalHorasHombre': evalJson['totalHorasHombre'],
+      if (event.eventoAuditoria != null)
+        'historialEventos': FieldValue.arrayUnion([
+          EventoAuditoriaModel.fromEntity(event.eventoAuditoria!).toJson(),
+        ]),
+      if (event.cambiosMateriales.isNotEmpty)
+        'historialCambiosMateriales': FieldValue.arrayUnion(event.cambiosMateriales.map((c) => c.toJson()).toList()),
+    };
+
+    // NUEVO: la nueva lista de repuestosTaller se manda tal cual para que
+    // el datasource calcule el delta contra lo que el SERVIDOR tenga
+    // guardado (no contra una copia vieja de este celular) y ajuste
+    // stockReservado -- ver actualizarCamposConGuardaEstadoYAjusteReserva.
+    final repuestosTallerNuevos = (event.ticket.evaluacionTecnica?.repuestosTaller ?? const <RepuestoRegistradoEntity>[])
+        .map((r) => <String, dynamic>{'codigo': r.codigo, 'cantidad': r.cantidad})
+        .toList();
+
+    final resultCaracol = await ticketRepository.actualizarCamposConGuardaEstadoYAjusteReserva(
+      ticketId: event.ticket.id,
+      campos: camposCaracol,
+      estadosPermitidos: const ['comercial', 'cotizado'],
+      repuestosTallerNuevos: repuestosTallerNuevos,
+    );
+
+    resultCaracol.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: _mapFailureToMessage(failure),
+      )),
+      (_) {
+        final ticketMemoria = event.ticket.copyWith(
+          historialCambiosMateriales: [...event.ticket.historialCambiosMateriales, ...event.cambiosMateriales],
+        );
+        final listaActualizada = state.tickets.map((t) =>
+          t.id == event.ticket.id ? ticketMemoria : t
+        ).toList();
+        final listaHistorial = state.historial.map((t) =>
+          t.id == event.ticket.id ? ticketMemoria : t
+        ).toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: 'Requerimiento actualizado.',
+          tickets: listaActualizada,
+          historial: listaHistorial,
+          currentTicket: ticketMemoria,
+        ));
+      },
+    );
+  }
+
+
+  Future<void> _onObtenerHistorialTickets(ObtenerHistorialTicketsEvent event, Emitter<TicketState> emit) async {
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Consultando telemetría histórica...'));
+
+    // Asumo que tu evento o caso de uso tiene la lógica para traer el historial
+    final result = await obtenerTickets(event.segmento); // Pásale los parámetros de segmento si los requiere
+
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: _mapFailureToMessage(failure)
+      )),
+      (listaTickets) => emit(state.copyWith(
+        status: TicketStatus.loaded,
+        historial: listaTickets,
+        tickets: listaTickets,
+      )),
+    );
+  }
+
+
+  Future<void> _onReportarIncidencia(
+    ReportarIncidenciaComercialEvent event, 
+    Emitter<TicketState> emit
+  ) async {
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Registrando anomalía en bitácora...'));
+
+    // 1. ENSAMBLAJE DEL REGISTRO DE AUDITORÍA (Reutilización de entidad)
+    final eventoAuditoria = EventoAuditoriaEntity(
+      accion: 'REPORTE COMERCIAL: ${event.reporteComercial}',
+      usuarioNombre: event.nombreUsuario, 
+      usuarioRol: event.rolUsuario,
+      timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.comercial,
+      hito: HitoProceso.avance,
+    );
+
+    // 2. MUTACIÓN (Se inyecta el historial, el estado actual del ticket NO cambia)
+    final ticketActualizado = event.ticket.copyWith(
+      historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+    );
+
+    // 3. PERSISTENCIA
+    final dbResult = await actualizarTicket(ticketActualizado);
+
+    dbResult.fold(
+      (failure) => emit(state.copyWith(status: TicketStatus.error, message: 'Falla al guardar reporte: ${_mapFailureToMessage(failure)}')),
+      (ticketGuardado) {
+        // ⚙️ LECTURA Y ESCRITURA SOBRE EL BUS PRINCIPAL (historial)
+        final listaActualizada = state.historial.map((t) => 
+          t.id == ticketGuardado.id ? ticketGuardado : t
+        ).toList();
+        final listaTickets = state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+        
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: 'Reporte anexado a la bitácora exitosamente.',
+          historial: listaActualizada, // 🔌 Ahora sí coincide con el borne de su State
+          tickets: listaTickets,
+          currentTicket: ticketGuardado,
+        ));
+      }
+    );
+  }
+
+  
+
+
+
+Future<void> _onProcesarCotizacion(
+    ProcesarCotizacionEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Procesando cotización y subiendo lotes de documentos...'));
+
+    try {
+      List<String> urlsPdf = [];
+      List<String> urlsExcel = [];
+
+      // 1. MOTORES DE SUBIDA EN PARALELO (PDFs)
+      if (event.archivosPdf.isNotEmpty) {
+        // Creamos un array de tareas pendientes
+        final tareasPdf = event.archivosPdf.map(
+          (archivo) => subirDocumentoComercialUseCase(event.ticket.id, archivo, 'proforma_pdf')
+        ).toList();
+
+        // 🚀 Ejecutamos TODAS las subidas al mismo tiempo
+        final resultadosPdf = await Future.wait(tareasPdf);
+        
+        for (var result in resultadosPdf) {
+          result.fold(
+            (failure) => throw ServerException(failure.message), 
+            (url) => urlsPdf.add(url),
+          );
+        }
+      }
+
+      // 2. MOTORES DE SUBIDA EN PARALELO (Excels)
+      if (event.archivosExcel.isNotEmpty) {
+        final tareasExcel = event.archivosExcel.map(
+          (archivo) => subirDocumentoComercialUseCase(event.ticket.id, archivo, 'proforma_excel')
+        ).toList();
+
+        final resultadosExcel = await Future.wait(tareasExcel);
+        
+        for (var result in resultadosExcel) {
+          result.fold(
+            (failure) => throw ServerException(failure.message),
+            (url) => urlsExcel.add(url),
+          );
+        }
+      }
+
+      // 3. ENSAMBLAJE DE LA ENTIDAD COMERCIAL MULTIPLE
+      final nuevaProforma = ProformaEntity(
+        pdfUrls: urlsPdf, // 📦 Inyectamos el arreglo de URLs
+        excelUrls: urlsExcel, // 📦 Inyectamos el arreglo de URLs
+        observacion: event.observacion,
+      );
+
+       final proformaModel = ProformaModel.fromEntity(nuevaProforma);
+     final eventoAuditoria = EventoAuditoriaEntity(
+  accion: (event.cambiosTrasRegreso ?? 0) > 0
+      ? 'COMERCIAL: COTIZACIÓN MODIFICADA TRAS REGRESO (${event.cambiosTrasRegreso} cambio(s) de materiales; detalle en "Cambios de materiales"): ${event.observacion.isNotEmpty ? event.observacion : "Sin observaciones adicionales."}'
+      : 'COTIZACIÓN GENERADA: ${event.observacion.isNotEmpty ? event.observacion : "Sin observaciones adicionales."}',
+  usuarioNombre: event.nombreUsuario,
+  usuarioRol: event.rolUsuario,
+  timestamp: DateTime.now(),
+  proceso: ProcesoAuditoria.comercial,
+  hito: HitoProceso.fin,
+  habilita: const [ProcesoAuditoria.aprobacionCliente],
+);
+
+      final bool esCaracol = event.ticket.equipo == TipoEquipo.Caracol;
+
+      List<ItemDespachoBodegaEntity> itemsBodega = event.ticket.itemsDespachoBodega;
+      if (esCaracol) {
+        // CARACOL: el requerimiento pudo haber sido editado por comercial
+        // (quitar/agregar/cambiar cantidad) despues de que tecnico genero la
+        // evaluacion. Reconstruimos SIEMPRE itemsDespachoBodega desde el
+        // repuestosTaller vigente, para que compras/bodega/proceso de
+        // trabajo vean exactamente lo que comercial dejo. Es seguro porque
+        // este handler solo corre entre comercial y cotizado, antes de que
+        // compras toque el ticket (ReversarAComercial nunca pasa de cotizado).
+        itemsBodega = (event.ticket.evaluacionTecnica?.repuestosTaller ?? []).map((r) {
+          return ItemDespachoBodegaEntity(
+            codigo: r.codigo,
+            descripcion: r.descripcion,
+            unidad: r.unidad,
+            cantidadSolicitada: r.cantidad,
+            stockDisponibleAlEvaluar: 0.0,
+            validadoPorCompras: false,
+            cantidadDespachada: 0.0,
+          );
+        }).toList();
+      } else if (itemsBodega.isEmpty && (event.ticket.evaluacionTecnica?.repuestosTaller.isNotEmpty ?? false)) {
+        // CAMINO ORIGINAL: sin cambios, para cualquier equipo que no sea Caracol.
+        itemsBodega = event.ticket.evaluacionTecnica!.repuestosTaller.map((r) {
+          return ItemDespachoBodegaEntity(
+            codigo: r.codigo,
+            descripcion: r.descripcion,
+            unidad: r.unidad,
+            cantidadSolicitada: r.cantidad,
+            stockDisponibleAlEvaluar: 0.0,
+            validadoPorCompras: false,
+            cantidadDespachada: 0.0,
+          );
+        }).toList();
+      }
+
+      // 4. TROQUELADO Y GUARDADO
+      final ticketActualizado = event.ticket.copyWith(
+        proforma: proformaModel,
+        itemsDespachoBodega: itemsBodega,
+        estadoActual: EstadoTicket.cotizado,
+        historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+      );
+
+      if (esCaracol) {
+        // CARACOL: escritura con candado de etapa (transaccion), solo los
+        // campos que este paso realmente cambia -- nunca el ticket completo.
+        final evalJson = TicketModel.fromEntity(ticketActualizado).toJson()['evaluacionTecnica'] as Map<String, dynamic>?;
+        final camposCaracol = <String, dynamic>{
+          'proforma': proformaModel.toJson(),
+          'itemsDespachoBodega': itemsBodega.map((i) => ItemDespachoBodegaModel.fromEntity(i).toJson()).toList(),
+          'estadoActual': EstadoTicket.cotizado.name,
+          if (evalJson != null) 'evaluacionTecnica.repuestosTaller': evalJson['repuestosTaller'],
+          if (evalJson != null) 'evaluacionTecnica.repuestosComercial': evalJson['repuestosComercial'],
+          'historialEventos': FieldValue.arrayUnion([
+            EventoAuditoriaModel.fromEntity(eventoAuditoria).toJson(),
+          ]),
+          if (event.cambiosMateriales.isNotEmpty)
+            'historialCambiosMateriales': FieldValue.arrayUnion(event.cambiosMateriales.map((c) => c.toJson()).toList()),
+        };
+
+        final resultCaracol = await ticketRepository.actualizarCamposConGuardaEstado(
+          ticketId: event.ticket.id,
+          campos: camposCaracol,
+          estadosPermitidos: const ['comercial', 'cotizado'],
+        );
+
+        resultCaracol.fold(
+          (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+          (_) => emit(state.copyWith(status: TicketStatus.operationSuccess, message: 'Cotización registrada con éxito en el SCADA.')),
+        );
+        return;
+      }
+
+      // CAMINO ORIGINAL: sin cambios, para cualquier equipo que no sea Caracol.
+      final result = await actualizarTicket(ticketActualizado);
+      if (result.isRight()) await _agregarCambiosMateriales(event.ticket.id, event.cambiosMateriales);
+
+      result.fold(
+        (failure) => emit(state.copyWith(status: TicketStatus.error, message: failure.message)),
+        (_) => emit(state.copyWith(status: TicketStatus.operationSuccess, message: 'Cotización registrada con éxito en el SCADA.')),
+      );
+    } on ServerException catch (e) {
+      emit(state.copyWith(status: TicketStatus.error, message: e.message));
+    } catch (e) {
+      emit(state.copyWith(status: TicketStatus.error, message: 'Cortocircuito multihilo en celda de cotización: $e'));
+    }
+  }
+
+
+Future<void> _onCrearTicket(CrearTicketEvent event, Emitter<TicketState> emit) async {
+  // 1. BALIZA DE CARGA
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Asignando número de serie en servidor...'));
+
+  final marcaDeTiempo = DateTime.now();
+
+  // 🏷️ Trazabilidad: la recepción termina al crear solo si el registro nace
+  // completo y no viaja desde El Guabo (mismo criterio que el ruteo de abajo).
+  final String sedeCreacion = event.sede.name.toLowerCase();
+  final bool recepcionCompletaAlCrear = event.esRegistroCompleto &&
+      !((sedeCreacion == 'elguabo' || sedeCreacion == 'el_guabo') && event.lugarAtencion != LugarAtencion.campo);
+  
+  // ⚙️ 2. ZONA DE ENSAMBLAJE BASE
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: 'CREACIÓN DE REQUERIMIENTO',
+    usuarioNombre: event.nombreUsuario,
+    usuarioRol: event.rolUsuario,
+    timestamp: marcaDeTiempo,
+    proceso: ProcesoAuditoria.recepcion,
+    hito: recepcionCompletaAlCrear ? HitoProceso.fin : HitoProceso.inicio,
+    habilita: recepcionCompletaAlCrear ? const [ProcesoAuditoria.evaluacion] : const [],
+  );
+
+  final ticketBase = TicketEntity(
+    id: 'TEMP', // 🔌 Será reemplazado por la Transacción en Firebase
+    // 🚨 Nace SIEMPRE como 'creado' para preparar el salto de estado en el backend
+    estadoActual: EstadoTicket.creado, 
+    sede: event.sede, 
+    clienteId: event.clienteId,
+    campamento: event.campamento,
+    nombreContacto: event.nombreContacto,
+    telefonoContacto: event.telefonoContacto,
+    emailContacto: event.emailContacto,
+    equipo: event.equipo,
+    equipoDetalle: event.equipoDetalle,
+    accesoriosRecibidos: event.accesoriosRecibidos, 
+    fallaReportada: event.fallaReportada,
+    marca: event.marcaEquipo?.name ?? 'NO_ESPECIFICADA',
+    notasRecepcion: event.notasRecepcion,
+    numeroSerie: event.numeroSerie, 
+    historialEventos: [eventoAuditoria],
+    esRegistroCompleto: event.esRegistroCompleto,
+    tipoRequerimiento: event.tipoRequerimiento,
+    lugarAtencion: event.lugarAtencion,
+    fotosUrls: const [], 
+    pdfActaUrl: '',
+    tipoGarantia: event.tipoGarantia,
+    responsableFacturacion: event.resposableFacturacion,
+    
+    // 🔌 INYECCIÓN DE TELEMETRÍA DIRECTA
+    horometro: event.horometro,
+    
+    // 🛑 CORTOCIRCUITO CORREGIDO: Inicia vacío, se llena después de Storage
+    urlsEvidenciasGarantia: const [], 
+  );
+
+  // =========================================================
+  // 🚀 FASE 1: OBTENER EL ID OFICIAL CONSECUTIVO
+  // =========================================================
+  final dbResult = await crearTicket(ticketBase);
+  
+  if (dbResult.isLeft()) {
+    emit(state.copyWith(
+      status: TicketStatus.error, 
+      message: 'Fallo al troquelar el ticket en BD: ${_mapFailureToMessage(dbResult.fold((l) => l, (r) => throw Exception()))}'
+    ));
+    return;
+  }
+
+  // 💎 EXTRACCIÓN DEL TICKET OFICIAL
+  final ticketOficial = dbResult.fold((l) => throw Exception(), (r) => r);
+  final idReal = ticketOficial.id;
+  
+  // 🗄️ BÚFERES DE MEMORIA PARA URLs
+  final List<String> urlsSubidas = [];
+  final List<String> urlsGarantiaSubidas = []; 
+
+  // =========================================================
+  // 📸 FASE 2: SUBIDA DE EVIDENCIAS (Doble Canal)
+  // =========================================================
+  
+  // Canal 1: Evidencias Generales
+  if (event.evidencias.isNotEmpty) {
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Subiendo evidencias a carpeta $idReal...'));
+    
+    for (final file in event.evidencias) {
+      final uploadResult = await subirEvidenciaUseCase(file, idReal); 
+      
+      uploadResult.fold(
+        (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+        (url) => urlsSubidas.add(url),
+      );
+      if (state.status == TicketStatus.error) return; // Parada de emergencia
+    }
+  }
+
+  // 🚜 Canal 2: Evidencias de Garantía (Aislado)
+  if (event.evidenciasGarantia != null && event.evidenciasGarantia!.isNotEmpty) {
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Subiendo telemetría de garantía...'));
+    
+    for (final file in event.evidenciasGarantia!) {
+      // Nota técnica: Idealmente su caso de uso debería aceptar una subcarpeta, ej: '$idReal/garantia'
+      final uploadResult = await subirEvidenciaUseCase(file, idReal); 
+      
+      uploadResult.fold(
+        (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+        (url) => urlsGarantiaSubidas.add(url),
+      );
+      if (state.status == TicketStatus.error) return; // Parada de emergencia
+    }
+  }
+
+  // =========================================================
+  // 🔀 FASE 3: COMPUERTA LÓGICA DE DERIVACIÓN
+  // =========================================================
+  if (event.esRegistroCompleto) {
+    // 1. Sensor de entorno: ¿Es operación en campo?
+    final bool esOperacionEnCampo = event.lugarAtencion == LugarAtencion.campo;
+    
+    String urlPdfFinal = '';
+    Uint8List? bytesGenerados;
+
+    // 2. Válvula de PDF: Solo operamos si NO es campo
+    if (!esOperacionEnCampo) {
+      emit(state.copyWith(status: TicketStatus.loading, message: 'Generando PDF para $idReal...'));
+
+      // A. Fabricación local del PDF en RAM
+      final pdfBytesResult = await generarActaPdfUseCase(
+        ticket: ticketOficial,
+        tipoRequerimiento: event.tipoRequerimiento.name, 
+        descripcion: event.fallaReportada, 
+        evidencias: event.evidencias,
+      );
+
+      pdfBytesResult.fold(
+        (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+        (bytes) => bytesGenerados = bytes,
+      );
+      if (state.status == TicketStatus.error) return;
+
+      // B. Subida del Acta PDF al Storage
+      emit(state.copyWith(status: TicketStatus.loading, message: 'Subiendo PDF al servidor...'));
+      final pdfUploadResult = await subirActaPdfUseCase(idReal, bytesGenerados!);
+      
+      pdfUploadResult.fold(
+        (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+        (url) => urlPdfFinal = url,
+      );
+      if (state.status == TicketStatus.error) return;
+    }
+
+    // 🧠 UNIDAD DE CONTROL LÓGICO: Ruteo Dinámico
+    final stringSede = event.sede.name.toLowerCase();
+    
+    // Si es campo, forzamos el estado a recepcionFisica para detonar el trigger de correo de Firebase
+    final EstadoTicket estadoDestino = (stringSede == 'elguabo' || stringSede == 'el_guabo') && !esOperacionEnCampo
+        ? EstadoTicket.enCamino
+        : EstadoTicket.recepcionFisica;
+
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Cerrando registro de $idReal...'));
+
+    // C. ACTUALIZACIÓN FINAL EN BASE DE DATOS (El detonador de la Cloud Function)
+    final ticketFinalActualizado = ticketOficial.copyWith(
+      fotosUrls: urlsSubidas,
+      pdfActaUrl: urlPdfFinal, // Si fue en campo, pasará vacío ('')
+      estadoActual: estadoDestino, 
+      
+      // 🚀 INYECCIÓN DE URLs DE GARANTÍA YA GENERADAS POR STORAGE
+      urlsEvidenciasGarantia: urlsGarantiaSubidas,
+    );
+
+    final updateResult = await actualizarTicket(ticketFinalActualizado);
+    
+    updateResult.fold(
+      (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+      (ticketGuardado) {
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: esOperacionEnCampo 
+            ? '✅ $idReal registrado. Agendamiento de campo solicitado.'
+            : '✅ $idReal registrado. El servidor despachará el acta.',
+          historial: [ticketGuardado, ...state.historial],
+          tickets: [ticketGuardado, ...state.tickets],
+          currentTicket: ticketGuardado,
+          pdfBytes: bytesGenerados, // Será null si es campo, la UI debe manejar esto
+        ));
+      },
+    );
+
+  } else {
+    // ⚙️ RUTA B: INCOMPLETO
+    if (urlsSubidas.isNotEmpty || urlsGarantiaSubidas.isNotEmpty) {
+      
+      // Aseguramos que cualquier foto subida quede persistida en BD
+      final ticketParcialActualizado = ticketOficial.copyWith(
+        fotosUrls: urlsSubidas,
+        urlsEvidenciasGarantia: urlsGarantiaSubidas,
+      );
+      
+      await actualizarTicket(ticketParcialActualizado);
+      
+      emit(state.copyWith(
+        status: TicketStatus.operationSuccess, 
+        message: '⚠️ $idReal guardado INCOMPLETO. Pendiente taller.',
+        historial: [ticketParcialActualizado, ...state.historial],
+        tickets: [ticketParcialActualizado, ...state.tickets],
+        currentTicket: ticketParcialActualizado,
+      ));
+    } else {
+       emit(state.copyWith(
+        status: TicketStatus.operationSuccess, 
+        message: '⚠️ $idReal guardado INCOMPLETO. Pendiente taller.',
+        historial: [ticketOficial, ...state.historial],
+        tickets: [ticketOficial, ...state.tickets],
+        currentTicket: ticketOficial,
+      ));
+    }
+  }
+}
+
+// 🛒 VENTA DE REPUESTO: mismo número consecutivo que Reparación/Garantía
+// (crearTicket → transacción sobre metadata/contadores), sin acta PDF.
+// Ruteo: asistencia técnica → recepcionFisica; si no, todas las líneas con
+// stock → comercial, al menos una sin stock → cotizandoRepuesto.
+Future<void> _onCrearVentaRepuesto(CrearVentaRepuestoEvent event, Emitter<TicketState> emit) async {
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Asignando número de requerimiento...'));
+
+  final ticketBase = TicketEntity(
+    id: 'TEMP', // 🔌 Será reemplazado por la Transacción en Firebase
+    estadoActual: EstadoTicket.creado,
+    sede: Sede.NINGUNO,
+    clienteId: event.clienteId,
+    campamento: event.campamento,
+    nombreContacto: event.nombreContacto,
+    telefonoContacto: event.telefonoContacto,
+    emailContacto: event.emailContacto,
+    equipo: event.segmento,
+    equipoDetalle: null,
+    accesoriosRecibidos: null,
+    fallaReportada: '',
+    numeroSerie: null,
+    historialEventos: [
+      EventoAuditoriaEntity(
+        accion: 'CREACIÓN DE REQUERIMIENTO',
+        usuarioNombre: event.nombreUsuario,
+        usuarioRol: event.rolUsuario,
+        timestamp: DateTime.now(),
+        proceso: ProcesoAuditoria.recepcion,
+        hito: HitoProceso.fin,
+        habilita: event.necesitaAsistenciaTecnica ? const [ProcesoAuditoria.evaluacion] : event.lineas.every((l) => l.tieneStockSuficiente) ? const [ProcesoAuditoria.comercial] : const [ProcesoAuditoria.compras],
+      ),
+    ],
+    tipoRequerimiento: TipoRequerimiento.ventaRepuesto,
+    lugarAtencion: LugarAtencion.noAplica,
+    esRegistroCompleto: true,
+    medioContacto: event.medioContacto,
+    lineasRepuestoVenta: event.necesitaAsistenciaTecnica ? const [] : event.lineas,
+    necesitaAsistenciaTecnica: event.necesitaAsistenciaTecnica,
+  );
+
+  final dbResult = await crearTicket(ticketBase);
+  if (dbResult.isLeft()) {
+    emit(state.copyWith(
+      status: TicketStatus.error,
+      message: 'Fallo al crear el requerimiento: ${_mapFailureToMessage(dbResult.fold((l) => l, (r) => throw Exception()))}',
+    ));
+    return;
+  }
+  final ticketOficial = dbResult.fold((l) => throw Exception(), (r) => r);
+  final idReal = ticketOficial.id;
+
+  // 📸 Fotos/videos y 🎙️ notas de voz (solo si pidió asistencia técnica).
+  final List<String> urlsEvidencias = [];
+  final List<String> urlsAudios = [];
+
+  if (event.necesitaAsistenciaTecnica) {
+    for (final file in event.evidencias) {
+      emit(state.copyWith(status: TicketStatus.loading, message: 'Subiendo evidencias a $idReal...'));
+      final r = await subirEvidenciaUseCase(file, idReal);
+      r.fold(
+        (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+        (url) => urlsEvidencias.add(url),
+      );
+      if (state.status == TicketStatus.error) return;
+    }
+    for (final audio in event.audios) {
+      emit(state.copyWith(status: TicketStatus.loading, message: 'Subiendo notas de voz a $idReal...'));
+      final r = await subirDocumentoEvaluacionUseCase(audio, idReal, 'audios_asistencia');
+      r.fold(
+        (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+        (url) => urlsAudios.add(url),
+      );
+      if (state.status == TicketStatus.error) return;
+    }
+  }
+
+  final EstadoTicket estadoDestino;
+  if (event.necesitaAsistenciaTecnica) {
+    estadoDestino = EstadoTicket.recepcionFisica;
+  } else if (event.lineas.every((l) => l.tieneStockSuficiente)) {
+    estadoDestino = EstadoTicket.comercial;
+  } else {
+    estadoDestino = EstadoTicket.cotizandoRepuesto;
+  }
+
+  // Cambio de estado separado de la creación: así las Cloud Functions de
+  // cambio de estado (notificaciones) se disparan igual que en Reparación.
+  final ticketFinal = ticketOficial.copyWith(
+    estadoActual: estadoDestino,
+    fotosUrls: urlsEvidencias,
+    urlsAudiosAsistencia: urlsAudios,
+  );
+
+  final updateResult = await actualizarTicket(ticketFinal);
+  updateResult.fold(
+    (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+    (ticketGuardado) => emit(state.copyWith(
+      status: TicketStatus.operationSuccess,
+      message: '✅ $idReal registrado → ${estadoDestino.nombreLegible}.',
+      historial: [ticketGuardado, ...state.historial],
+      tickets: [ticketGuardado, ...state.tickets],
+      currentTicket: ticketGuardado,
+    )),
+  );
+}
+
+Future<void> _onAdjuntarCotizacionVentaRepuesto(AdjuntarCotizacionVentaRepuestoEvent event, Emitter<TicketState> emit) async {
+  final idTicket = event.ticket.id;
+  final List<String> urlsSubidas = [];
+
+  for (final archivo in event.archivos) {
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Subiendo cotización de $idTicket...'));
+    final r = await subirDocumentoEvaluacionUseCase(archivo, idTicket, 'cotizacion_compras');
+    r.fold(
+      (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+      (url) => urlsSubidas.add(url),
+    );
+    if (state.status == TicketStatus.error) return;
+  }
+
+  final ticketActualizado = event.ticket.copyWith(
+    estadoActual: EstadoTicket.comercial,
+    urlsCotizacionCompras: [...event.ticket.urlsCotizacionCompras, ...urlsSubidas],
+    historialEventos: [
+      ...event.ticket.historialEventos,
+      EventoAuditoriaEntity(
+        accion: 'COMPRAS: GESTIÓN DE REPUESTO SIN STOCK COMPLETADA (VENTA DE REPUESTO)',
+        usuarioNombre: event.nombreUsuario,
+        usuarioRol: event.rolUsuario,
+        timestamp: DateTime.now(),
+        proceso: ProcesoAuditoria.compras,
+        hito: HitoProceso.fin,
+        habilita: const [ProcesoAuditoria.comercial],
+      ),
+    ],
+  );
+
+  final updateResult = await actualizarTicket(ticketActualizado);
+  updateResult.fold(
+    (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+    (ticketGuardado) => emit(state.copyWith(
+      status: TicketStatus.operationSuccess,
+      message: '✅ Cotización adjuntada. $idTicket pasa a Proforma.',
+      historial: state.historial.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      tickets: state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      currentTicket: ticketGuardado,
+    )),
+  );
+}
+
+// 📦 Validación simple de Despacho Bodega: mismo patrón que el despacho
+// normal (_onRegistrarDespachoBodega) -- escritura parcial, auditoría vía
+// arrayUnion y métricas de bodega como "despacho total" -- pero sin ítems:
+// no descuenta stock ni libera reservas. La capa de datos relee el ticket
+// en una transacción y solo escribe si todavía aplica la validación simple.
+Future<void> _onValidarDespachoSimpleBodega(ValidarDespachoSimpleBodegaEvent event, Emitter<TicketState> emit) async {
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Validando despacho en Bodega...'));
+
+  final ahora = DateTime.now();
+  final nuevoEvento = EventoAuditoriaEntity(
+    accion: 'BODEGA: DESPACHO TOTAL Y TRANSFERENCIA A PROCESO DE TRABAJO (VALIDACIÓN SIMPLE)',
+    usuarioNombre: event.nombreUsuario,
+    usuarioRol: event.rolUsuario,
+    timestamp: ahora,
+    proceso: ProcesoAuditoria.bodega,
+    hito: HitoProceso.fin,
+    habilita: const [ProcesoAuditoria.taller],
+  );
+
+  final tiemposBodega = CalculadorTiemposOperativos.actualizarMetricasBodega(
+    ticket: event.ticket,
+    itemsActualizados: const [],
+    esDespachoCompleto: true,
+    timestamp: ahora,
+  );
+  final jsonCompleto = TicketModel.fromEntity(event.ticket.copyWith(tiemposOperativos: tiemposBodega)).toJson();
+
+  final campos = <String, dynamic>{
+    'estadoActual': EstadoTicket.procesoTrabajo.name,
+    'tiemposOperativos': jsonCompleto['tiemposOperativos'],
+    'historialEventos': FieldValue.arrayUnion([
+      EventoAuditoriaModel.fromEntity(nuevoEvento).toJson(),
+    ]),
+  };
+
+  final result = await ticketRepository.actualizarCamposConGuardaValidacionSimpleBodega(
+    ticketId: event.ticket.id,
+    campos: campos,
+  );
+  result.fold(
+    (failure) => emit(state.copyWith(
+      status: TicketStatus.error,
+      message: failure is ServerFailure ? failure.message : _mapFailureToMessage(failure),
+    )),
+    (ticketGuardado) => emit(state.copyWith(
+      status: TicketStatus.operationSuccess,
+      message: '✅ Despacho validado. ${ticketGuardado.id} pasa a Proceso de Trabajo.',
+      historial: state.historial.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      tickets: state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      currentTicket: ticketGuardado,
+    )),
+  );
+}
+
+// 🔎 Guarda la marca con arrayUnion (no pisa otras marcas) y actualiza el
+// ticket en memoria sin cambiar el estado de carga de la app.
+Future<void> _onMarcarInconsistenciaRevisada(MarcarInconsistenciaRevisadaEvent event, Emitter<TicketState> emit) async {
+  final result = await ticketRepository.actualizarCampos(event.ticketId, {
+    'inconsistenciasRevisadas': FieldValue.arrayUnion([event.clave]),
+  });
+  result.fold(
+    (failure) => emit(state.copyWith(
+      status: TicketStatus.error,
+      message: 'No se pudo marcar como revisado: ${_mapFailureToMessage(failure)}',
+    )),
+    (ticketGuardado) => emit(state.copyWith(
+      historial: state.historial.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      tickets: state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+    )),
+  );
+}
+
+Future<void> _onActualizarEstadoTicket(ActualizarEstadoTicketEvent event, Emitter<TicketState> emit) async {
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Actualizando estado a ${event.nuevoEstado.name}...'));
+
+  // ⚙️ 1. Ensamblaje de Auditoría (El mismo troquel que usa para anular y crear)
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: event.accionAuditoria,
+    usuarioNombre: event.nombreUsuario,
+    usuarioRol: event.rolUsuario,
+    timestamp: DateTime.now(),
+    proceso: event.proceso,
+    hito: event.hito,
+    habilita: event.habilita,
+  );
+
+  // ⚙️ 2. Clonación Inmutable del Payload (Uso directo de su copyWith)
+  final ticketActualizado = event.ticket.copyWith(
+    estadoActual: event.nuevoEstado,
+    historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+  );
+
+  // 📡 3. Transmisión Directa a BD (Sin capas de traducción inútiles)
+  final updateResult = await actualizarTicket(ticketActualizado); 
+
+  // 🔀 4. Evaluación de la respuesta
+  updateResult.fold(
+    (failure) => emit(state.copyWith(
+      status: TicketStatus.error, 
+      message: 'Fallo al actualizar: ${_mapFailureToMessage(failure)}'
+    )),
+    (ticketGuardado) {
+      // 🔄 5. Refresco del búfer de memoria local
+      final listaActualizada = state.historial.map((t) => 
+        t.id == ticketGuardado.id ? ticketGuardado : t
+      ).toList();
+      final listaTickets = state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+
+      emit(state.copyWith(
+        status: TicketStatus.operationSuccess,
+        message: '✅ Estado del ticket actualizado a ${event.nuevoEstado.name}.',
+        historial: listaActualizada,
+        tickets: listaTickets,
+        currentTicket: ticketGuardado,
+      ));
+    }
+  );
+}
+
+Future<void> _onAnularTicket(AnularTicketEvent event, Emitter<TicketState> emit) async {
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Anulando ticket...'));
+
+  // ⚙️ Auditoría automática (Sin motivos, solo registro de acción)
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: 'ANULACIÓN DE TICKET',
+    usuarioNombre: event.nombreUsuario,
+    usuarioRol: event.rolUsuario,
+    timestamp: DateTime.now(),
+    proceso: ProcesoAuditoria.otro,
+    hito: HitoProceso.fin,
+  );
+
+  // ⚙️ Preparación del payload (Estado nuevo + Historial actualizado)
+  final ticketActualizado = event.ticket.copyWith(
+    estadoActual: EstadoTicket.anulado,
+    historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+  );
+
+  // NUEVO: en tickets Caracol, anular ademas libera en la misma
+  // transaccion lo que seguia pendiente de stockReservado. Para el resto
+  // de equipos (que hoy no reservan nada), queda exactamente igual.
+  if (ticketActualizado.equipo == TipoEquipo.Caracol) {
+    final resultCaracol = await ticketRepository.anularTicketConLiberacionReserva(
+      ticket: ticketActualizado,
+    );
+
+    resultCaracol.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Fallo al anular: ${_mapFailureToMessage(failure)}',
+      )),
+      (_) {
+        final listaActualizada = state.historial.map((t) =>
+          t.id == ticketActualizado.id ? ticketActualizado : t
+        ).toList();
+        final listaTickets = state.tickets.map((t) =>
+          t.id == ticketActualizado.id ? ticketActualizado : t
+        ).toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: 'Ticket anulado correctamente.',
+          historial: listaActualizada,
+          tickets: listaTickets,
+          currentTicket: ticketActualizado,
+        ));
+      },
+    );
+    return;
+  }
+
+  // ⚙️ Convertimos a Modelo para enviar al DataSource
+  final model = TicketModel.fromEntity(ticketActualizado);
+
+  final result = await actualizarTicket(model); 
+
+  result.fold(
+    (failure) => emit(state.copyWith(
+      status: TicketStatus.error, 
+      message: 'Fallo al anular: ${_mapFailureToMessage(failure)}'
+    )),
+    (ticketGuardado) {
+      // ⚙️ Actualizamos la lista local
+      final listaActualizada = state.historial.map((t) => 
+        t.id == ticketGuardado.id ? ticketGuardado : t
+      ).toList();
+      final listaTickets = state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+
+      emit(state.copyWith(
+        status: TicketStatus.operationSuccess,
+        message: 'Ticket anulado correctamente.',
+        historial: listaActualizada,
+        tickets: listaTickets,
+        currentTicket: ticketGuardado,
+      ));
+    }
+  );
+}
+
+
+
+
+Future<void> _onAprobarProformaComercial(AprobarProformaComercialEvent event, Emitter<TicketState> emit) async {
+  List<String> urlsOrdenVenta = [];
+  List<String> urlsOrdenCompra = [];
+
+  emit(state.copyWith(
+    status: TicketStatus.loading, 
+    message: 'Procesando documentos comerciales e iniciando transición...'
+  ));
+
+  // =========================================================
+  // 🚀 FASE 1: TELEMETRÍA DE ARCHIVOS (Subida a Storage)
+  // =========================================================
+  
+ if (event.ordenesVentaArchivos.isNotEmpty) {
+  for (final platformFile in event.ordenesVentaArchivos) {
+    final xFile = platformFile.path != null
+        ? XFile(platformFile.path!)
+        : XFile.fromData(platformFile.bytes!, name: platformFile.name);
+
+    // ✅ Llamada a la tubería de Venta
+    final result = await subirOrdenVentaUseCase(xFile, event.ticket.id);
+
+    result.fold(
+      (f) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(f))),
+      (url) => urlsOrdenVenta.add(url),
+    );
+    
+    // Si la carga falla, cortamos la ejecución antes de persistir
+    if (state.status == TicketStatus.error) return;
+  }
+
+  // 🚀 Consolidación: Inyectamos el metadato y persistimos
+  if (urlsOrdenVenta.isNotEmpty) {
+    final ticketActualizado = event.ticket.copyWith(
+      numeroOrdenVenta: event.ordenesVentaArchivos.first.name,
+    );
+
+    // Persistimos en la base de datos
+    final resultActualizacion = await actualizarTicket(ticketActualizado);
+
+    resultActualizacion.fold(
+      (f) => emit(state.copyWith(
+          status: TicketStatus.error,
+          message: 'Error al vincular Orden de Venta: ${_mapFailureToMessage(f)}')),
+      (_) => emit(state.copyWith(
+        status: TicketStatus.operationSuccess,
+        message: 'Orden de Venta procesada y vinculada exitosamente.',
+        currentTicket: ticketActualizado,
+      )),
+    );
+  }
+}
+
+  // --- 2. Subida de Órdenes de Compra ---
+  if (event.ordenesCompraArchivos.isNotEmpty) {
+    for (final platformFile in event.ordenesCompraArchivos) {
+      final xFile = platformFile.path != null 
+          ? XFile(platformFile.path!) 
+          : XFile.fromData(platformFile.bytes!, name: platformFile.name);
+      
+      // ✅ Llamada a la tubería de Compra
+      final result = await subirOrdenCompraUseCase(xFile, event.ticket.id);
+      
+      result.fold(
+        (f) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(f))),
+        (url) => urlsOrdenCompra.add(url),
+      );
+      if (state.status == TicketStatus.error) return;
+    }
+  }
+
+  // =========================================================
+  // ⚙️ FASE 2: ENSAMBLAJE DEL NUEVO ESTADO DEL TICKET
+  // =========================================================
+
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: 'APROBACIÓN COMERCIAL - Órdenes anexadas',
+    usuarioNombre: event.nombreUsuario,
+    usuarioRol: event.rolUsuario,
+    timestamp: DateTime.now(),
+    proceso: ProcesoAuditoria.aprobacionCliente,
+    hito: HitoProceso.fin,
+    habilita: const [ProcesoAuditoria.costos, ProcesoAuditoria.compras],
+  );
+
+  final ticketActualizado = event.ticket.copyWith(
+    estadoActual: EstadoTicket.costos, 
+    numeroOrdenVenta: event.numeroOrdenVenta,
+    codigoOrdenVenta: urlsOrdenVenta,
+    codigoOrdenCompra: urlsOrdenCompra,
+    historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+    isCostosCompletado: false, 
+    isComprasCompletado: false,
+  );
+
+
+
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Registrando mutación en base de datos...'));
+
+  // =========================================================
+  // 💾 FASE 3: ESCRITURA EN LA BASE DE DATOS
+  // =========================================================
+  final updateResult = await actualizarTicket(ticketActualizado); 
+  
+  updateResult.fold(
+    (failure) {
+      print("🚨 ERROR DE ESCRITURA DB: ${_mapFailureToMessage(failure)}");
+      emit(state.copyWith(
+        status: TicketStatus.error, 
+        message: 'Fallo al escribir en la base de datos: ${_mapFailureToMessage(failure)}'
+      ));
+    },
+    (ticketGuardado) {
+
+
+      final listaActualizada = state.historial.map((t) => 
+        t.id == ticketGuardado.id ? ticketGuardado : t
+      ).toList();
+      final listaTickets = state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+
+      emit(state.copyWith(
+        status: TicketStatus.operationSuccess, 
+        message: 'Trámite comercial completado. Ticket derivado a Costos y Compras.',
+        historial: listaActualizada,
+        tickets: listaTickets,
+        currentTicket: ticketGuardado,
+      ));
+    }
+  );
+}
+
+// =========================================================================
+// 🏭 RUTINA A: DEPARTAMENTO DE COSTOS
+// =========================================================================
+Future<void> _onCompletarCostos(CompletarFaseCostosEvent event, Emitter<TicketState> emit) async {
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Inyectando Código de Proyecto...'));
+
+  // 1. EVALUACIÓN DE LA COMPUERTA LÓGICA (AND GATE)
+  // Si Compras ya terminó antes que Costos, entonces este es el paso final.
+  final bool comprasYaTermino = event.ticket.isComprasCompletado;
+
+  // 2. ENSAMBLAJE
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: 'FASE COSTOS - Código Proyecto Asignado: ${event.codigoProyecto}',
+    usuarioNombre: event.nombreUsuario,
+    usuarioRol: event.rolUsuario,
+    timestamp: DateTime.now(),
+    proceso: ProcesoAuditoria.costos,
+    hito: HitoProceso.fin,
+    habilita: const [ProcesoAuditoria.bodega],
+  );
+
+  final ticketActualizado = event.ticket.copyWith(
+    codigoProyecto: event.codigoProyecto,
+    isCostosCompletado: true, // 🔒 Cerramos la válvula de Costos
+    estadoActual: EstadoTicket.compras,
+    historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+  );
+
+  // 3. PERSISTENCIA
+  final dbResult = await actualizarTicket(ticketActualizado);
+  
+  dbResult.fold(
+    (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+    (ticketGuardado) => emit(state.copyWith(
+      status: TicketStatus.operationSuccess, 
+      message: comprasYaTermino ? 'Costos finalizado. Ticket transferido a Bodega.' : 'Costos finalizado. Esperando a Compras.',
+      historial: state.historial.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      tickets: state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+    ))
+  );
+
+  
+
+}
+
+// =========================================================================
+// 🏭 RUTINA B: DEPARTAMENTO DE COMPRAS
+// =========================================================================
+Future<void> _onCompletarCompras(CompletarFaseComprasEvent event, Emitter<TicketState> emit) async {
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Procesando documentos de Compras...'));
+
+  List<String> urlsNuevas = [];
+
+  // 1. SUBIDA DE ARCHIVOS
+  if (event.ordenesCompraInternaArchivos.isNotEmpty) {
+    for (final file in event.ordenesCompraInternaArchivos) {
+      final uploadResult = await subirEvidenciaUseCase(file, event.ticket.id);
+      uploadResult.fold(
+        (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+        (url) => urlsNuevas.add(url),
+      );
+      if (state.status == TicketStatus.error) return; // Parada por error
+    }
+  }
+
+  // 2. EVALUACIÓN DE LA COMPUERTA LÓGICA (AND GATE)
+  // Si Costos ya terminó antes que Compras, entonces este es el paso final.
+  final bool costosYaTermino = event.ticket.isCostosCompletado;
+  final EstadoTicket nuevoEstado = costosYaTermino ? EstadoTicket.bodega : event.ticket.estadoActual;
+
+  // 3. ENSAMBLAJE
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: 'FASE COMPRAS - Órdenes Internas Anexadas',
+    usuarioNombre: event.nombreUsuario,
+    usuarioRol: event.rolUsuario,
+    timestamp: DateTime.now(),
+  );
+
+  // Ojo aquí: sumamos las URLs nuevas a las que ya pudieran existir
+  final ticketActualizado = event.ticket.copyWith(
+    codigoOrdenCompra: [...event.ticket.codigoOrdenCompra, ...urlsNuevas],
+    isComprasCompletado: true, // 🔒 Cerramos la válvula de Compras
+    estadoActual: nuevoEstado, // 🔀 Solo salta a bodega si Costos ya había acabado
+    historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+  );
+
+  // 4. PERSISTENCIA
+  final dbResult = await actualizarTicket(ticketActualizado);
+  
+  dbResult.fold(
+    (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+    (ticketGuardado) => emit(state.copyWith(
+      status: TicketStatus.operationSuccess, 
+      message: costosYaTermino ? 'Compras finalizado. Ticket transferido a Bodega.' : 'Compras finalizado. Esperando a Costos.',
+      historial: state.historial.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      tickets: state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+    ))
+  );
+}
+
+
+
+// =========================================================================
+// 🏭 RUTINA FINAL: TALLER (Proceso de Trabajo y Cierre)
+// =========================================================================
+Future<void> _onCompletarProcesoTrabajo(CompletarProcesoTrabajoEvent event, Emitter<TicketState> emit) async {
+  // 1. ENCENDIDO DE BALIZA LUMINOSA
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Subiendo telemetría final del equipo...'));
+
+  List<String> urlsSubidas = [];
+
+  // 2. TRANSMISIÓN DE EVIDENCIAS (Subida al Storage)
+  if (event.evidenciasFinales.isNotEmpty) {
+    for (final file in event.evidenciasFinales) {
+      final uploadResult = await subirEvidenciaUseCase(file, event.ticket.id); 
+      
+      uploadResult.fold(
+        (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+        (url) => urlsSubidas.add(url),
+      );
+      if (state.status == TicketStatus.error) return; // Parada de emergencia de la línea
+    }
+  }
+
+  // 3. AUDITORÍA Y REGISTRO
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: 'CIERRE DE TRABAJO - Reparación finalizada. Notas: ${event.notasFinales}',
+    usuarioNombre: event.nombreUsuario,
+    usuarioRol: event.rolUsuario,
+    timestamp: DateTime.now(),
+  );
+
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Registrando cierre definitivo en el servidor...'));
+
+  // 4. ENSAMBLAJE FINAL DEL TICKET
+  final ticketActualizado = event.ticket.copyWith(
+    procesoTrabajoUrls: [...event.ticket.procesoTrabajoUrls, ...urlsSubidas],
+    estadoActual: EstadoTicket.finalizado, // 🚀 DETONADOR DEL CORREO FINAL EN EL BACKEND
+    historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+  );
+
+  // 5. ESCRITURA EN BASE DE DATOS (Actuador Maestro)
+  final dbResult = await actualizarTicket(ticketActualizado);
+  
+  dbResult.fold(
+    (failure) => emit(state.copyWith(
+      status: TicketStatus.error, 
+      message: 'Fallo al sellar el ticket en la base de datos: ${_mapFailureToMessage(failure)}'
+    )),
+    (ticketGuardado) {
+      final listaActualizada = state.historial.map((t) => 
+        t.id == ticketGuardado.id ? ticketGuardado : t
+      ).toList();
+      final listaTickets = state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+
+      emit(state.copyWith(
+        status: TicketStatus.operationSuccess, 
+        message: '✅ Trabajo finalizado exitosamente. El servidor despachará el correo de cierre al cliente.',
+        historial: listaActualizada,
+        tickets: listaTickets,
+        currentTicket: ticketGuardado,
+      ));
+    }
+  );
+}
+
+
+// =========================================================================
+// 🏭 RUTINA C: ESTACIÓN DE BODEGA (Consumo de Inventario)
+// =========================================================================
+Future<void> _onConsumirRepuestosBodega(ConsumirRepuestosBodegaEvent event, Emitter<TicketState> emit) async {
+  emit(state.copyWith(status: TicketStatus.loading, message: 'Registrando consumo de inventario...'));
+
+  // 1. SENSOR DE BARRIDO LÓGICO (Verifica si falta algún repuesto por entregar)
+  // .every() retorna true solo si TODOS los elementos cumplen la condición.
+  // Si la lista está vacía (no se compró nada), retorna true automáticamente.
+  final bool inventarioCompletado = event.itemsActualizados.every((item) => item.consumidoPorBodega == true);
+  
+  // 🔀 Compuerta de salto de estado
+  final EstadoTicket nuevoEstado = inventarioCompletado ? EstadoTicket.procesoTrabajo : event.ticket.estadoActual;
+
+  // 2. AUDITORÍA DINÁMICA
+  final eventoAuditoria = EventoAuditoriaEntity(
+    accion: inventarioCompletado 
+        ? 'BODEGA FINALIZADA - Todos los ítems despachados a Taller.' 
+        : 'BODEGA PARCIAL - Actualización de entrega de repuestos.',
+    usuarioNombre: event.nombreUsuario,
+    usuarioRol: event.rolUsuario,
+    timestamp: DateTime.now(),
+  );
+
+  // 3. ENSAMBLAJE DEL TICKET
+  final ticketActualizado = event.ticket.copyWith(
+    itemsCompra: event.itemsActualizados, // Inyectamos la matriz con los checkboxes actualizados
+    estadoActual: nuevoEstado,
+    historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+  );
+
+  // 4. ESCRITURA EN BASE DE DATOS
+  final dbResult = await actualizarTicket(ticketActualizado);
+  
+  dbResult.fold(
+    (failure) => emit(state.copyWith(status: TicketStatus.error, message: _mapFailureToMessage(failure))),
+    (ticketGuardado) => emit(state.copyWith(
+      status: TicketStatus.operationSuccess, 
+      message: inventarioCompletado 
+          ? 'Despacho completo. Ticket transferido a Taller (Proceso de Trabajo).' 
+          : 'Inventario actualizado. Faltan repuestos por despachar.',
+      historial: state.historial.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      tickets: state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      currentTicket: ticketGuardado,
+    ))
+  );
+}
+
+
+
+
+
+
+
+
+Future<void> _onObtenerClientes(ObtenerClientesEvent event, Emitter<TicketState> emit) async {
+    // Señal de arranque: Mantenemos lo que hay, pero pasamos a estado de carga
+    emit(state.copyWith(status: TicketStatus.loading));
+
+    final result = await obtenerClientes();
+
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: _mapFailureToMessage(failure)
+      )),
+      (clientesObtenidos) => emit(state.copyWith(
+        status: TicketStatus.loaded,
+        clientes: clientesObtenidos, // ⚙️ Inyectamos la lista en el estado
+      )),
+    );
+  }
+
+  String _mapFailureToMessage(Failure failure) {
+    switch (failure.runtimeType) {
+      case ServerFailure: 
+        return 'Fallo de comunicación con los servidores SCADA (Firebase).';
+      case NetworkFailure:
+        return 'Sin conexión a internet en el campamento.';
+      default:
+        return 'Error de sistema no clasificado.';
+    }
+  }
+
+  // ========================================================
+  // 🚀 RUTINA DE RECEPCIÓN FÍSICA Y EMISIÓN DE ACTA (CORREGIDA)
+  // ========================================================
+Future<void> _onConfirmarRecepcion(ConfirmarRecepcionEvent event, Emitter<TicketState> emit) async {
+    // ⚠️ ALERTA ARQUITECTÓNICA: Usamos state.copyWith para preservar las listas en memoria
+    emit(state.copyWith(
+      status: TicketStatus.loading, 
+      message: 'Iniciando fase de transmisión de evidencias fotográficas...'
+    ));
+
+    List<String> urlsNuevas = [];
+
+    // 1. FASE DE TRANSMISIÓN 1: Subida de evidencias (Fotos)
+    if (event.evidencias.isNotEmpty) {
+      for (final file in event.evidencias) {
+        final uploadResult = await subirEvidenciaUseCase(file, event.ticket.id);
+        
+        bool tieneFalla = false;
+        String mensajeFalla = '';
+
+        uploadResult.fold(
+          (failure) {
+            tieneFalla = true;
+            mensajeFalla = _mapFailureToMessage(failure);
+          },
+          (url) => urlsNuevas.add(url),
+        );
+
+        if (tieneFalla) {
+          emit(state.copyWith(
+            status: TicketStatus.error, 
+            message: "Falla al subir fotos: $mensajeFalla"
+          ));
+          return; // Abortar secuencia, disparo de parada de emergencia
+        }
+      }
+    }
+
+    emit(state.copyWith(
+      status: TicketStatus.loading, 
+      message: 'Consolidando parámetros y fabricando documento PDF...'
+    ));
+
+  // 2. CONSOLIDACIÓN DE DATOS (EL CEREBRO DEL BLOC)
+    final List<String> urlsTotales = [...event.ticket.fotosUrls, ...urlsNuevas];
+
+    // 🏷️ Trazabilidad: si la sede es El Guabo el equipo sigue en camino
+    // (la recepción termina al llegar al taller).
+    final String sedeRecepcion = event.ticket.sede.name.toLowerCase();
+    final bool esSedeGuaboRecepcion = sedeRecepcion == 'elguabo' || sedeRecepcion == 'el_guabo';
+    
+    final eventoRecepcion = EventoAuditoriaEntity(
+      accion: 'RECEPCIÓN FÍSICA Y EMISIÓN DE ACTA',
+      usuarioNombre: event.nombreUsuario,
+      usuarioRol: event.rolUsuario,
+      timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.recepcion,
+      hito: esSedeGuaboRecepcion ? HitoProceso.avance : HitoProceso.fin,
+      habilita: esSedeGuaboRecepcion ? const [] : const [ProcesoAuditoria.evaluacion],
+    );
+
+    // 🧠 UNIDAD DE CONTROL LÓGICO: Ruteo Dinámico por Sede
+    // Evaluamos el sensor de ubicación para desviar el flujo
+    final stringSede = event.ticket.sede.name.toLowerCase();
+    final EstadoTicket estadoDestino = (stringSede == 'elguabo' || stringSede == 'el_guabo')
+        ? EstadoTicket.enCamino
+        : EstadoTicket.recepcionFisica;
+
+    // ⚙️ AQUÍ SE HACE LA INGENIERÍA: Ensamblamos TODAS las piezas nuevas en la entidad
+    final ticketActualizado = event.ticket.copyWith(
+      estadoActual: estadoDestino, // 🔀 TRASPASO DE ESTADO DINÁMICO
+      numeroSerie: event.numeroSerie,        
+      fallaReportada: event.fallaReportada, 
+      accesoriosRecibidos: event.accesoriosRecibidos, 
+      
+      // 🚨 LOS DOS CABLES QUE DEJASTE DESCONECTADOS:
+      notasRecepcion: event.notasRecepcion, 
+      esRegistroCompleto: event.esRegistroCompleto, // O ponle true directamente si siempre aplica
+      
+      fotosUrls: urlsTotales,                     
+      historialEventos: [...event.ticket.historialEventos, eventoRecepcion], 
+    );
+
+    // 3. FASE DE FABRICACIÓN: El Dominio genera el PDF con el ticket ya mutado
+    final pdfBytesResult = await generarActaPdfUseCase(
+      ticket: ticketActualizado,
+      tipoRequerimiento: event.tipoRequerimiento, 
+      descripcion: event.notasRecepcion,
+      evidencias: event.evidencias,
+    );
+
+    Uint8List? bytesGenerados;
+    bool falloGeneracion = false;
+    String mensajeFalloGeneracion = '';
+
+    pdfBytesResult.fold(
+      (failure) {
+        falloGeneracion = true;
+        mensajeFalloGeneracion = _mapFailureToMessage(failure);
+      },
+      (bytes) => bytesGenerados = bytes,
+    );
+
+    if (falloGeneracion || bytesGenerados == null) {
+      emit(state.copyWith(
+        status: TicketStatus.error, 
+        message: "Fallo crítico al renderizar el documento PDF: $mensajeFalloGeneracion"
+      ));
+      return;
+    }
+
+    emit(state.copyWith(
+      status: TicketStatus.loading, 
+      message: 'Transmitiendo acta al servidor de almacenamiento...'
+    ));
+
+    // 4. FASE DE TRANSMISIÓN 2: Subida del Acta PDF a Firestore Storage
+    final pdfUploadResult = await subirActaPdfUseCase(ticketActualizado.id, bytesGenerados!);
+    
+    String urlPdfFinal = '';
+    bool falloPdf = false;
+    String mensajeFalloPdf = '';
+
+    pdfUploadResult.fold(
+      (failure) {
+        falloPdf = true;
+        mensajeFalloPdf = _mapFailureToMessage(failure);
+      },
+      (url) => urlPdfFinal = url,
+    );
+
+    if (falloPdf) {
+      emit(state.copyWith(
+        status: TicketStatus.error, 
+        message: "Falla de telemetría al guardar el documento PDF: $mensajeFalloPdf"
+      ));
+      return;
+    }
+
+    // 5. ENSAMBLAJE FINAL Y PERSISTENCIA (Actuador de BD)
+    final ticketFinal = ticketActualizado.copyWith(
+      pdfActaUrl: urlPdfFinal,
+    );
+
+    final dbResult = await actualizarTicket(ticketFinal); 
+    
+    dbResult.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error, 
+        message: _mapFailureToMessage(failure)
+      )),
+      (ticketGuardado) {
+        // ⚙️ HOT SWAP: Actualizamos la memoria RAM de la lista de tickets
+        final listaActualizada = state.historial.map((t) => 
+          t.id == ticketGuardado.id ? ticketGuardado : t
+        ).toList();
+        final listaTickets = state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess, 
+          message: 'Recepción confirmada y acta generada con éxito.',
+          historial: listaActualizada, // Inyectamos la nueva matriz
+          tickets: listaTickets,
+          currentTicket: ticketGuardado,
+          pdfBytes: bytesGenerados, // ¡Inyectado directo al estado para impresión!
+        ));
+      }
+    );
+  }
+
+  // =========================================================================
+  // 🛑 CONTROL DE EXCEPCIÓN: SUPERVISOR DECLARA NO REQUIERE COMPRAS
+  // =========================================================================
+  Future<void> _onDeclararNoRequiereCompras(
+    DeclararNoRequiereComprasEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: event.noRequiereCompras
+          ? 'Registrando excepción: No requiere compras...'
+          : 'Restableciendo requerimiento de compras...',
+    ));
+
+    final accionAuditoria = event.noRequiereCompras
+        ? 'SUPERVISOR DECLARÓ: NO REQUIERE COMPRAS${event.motivo != null && event.motivo!.trim().isNotEmpty ? ' — Motivo: ${event.motivo!.trim()}' : ''}'
+        : 'SUPERVISOR RESTABLECIÓ: REQUIERE COMPRAS';
+
+    final eventoAuditoria = EventoAuditoriaEntity(
+      accion: accionAuditoria,
+      usuarioNombre: event.nombreUsuario,
+      usuarioRol: event.rolUsuario,
+      timestamp: DateTime.now(),
+    );
+
+    final ticketActualizado = event.ticket.copyWith(
+      noRequiereCompras: event.noRequiereCompras,
+      motivoNoRequiereCompras: event.noRequiereCompras ? event.motivo?.trim() : null,
+      supervisorNoRequiereCompras: event.noRequiereCompras ? event.nombreUsuario : null,
+      fechaNoRequiereCompras: event.noRequiereCompras ? DateTime.now() : null,
+      historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
+    );
+
+    final resultado = await actualizarTicket(ticketActualizado);
+
+    resultado.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: _mapFailureToMessage(failure),
+      )),
+      (ticketGuardado) {
+        final listaActualizada = state.historial.map((t) => 
+          t.id == ticketGuardado.id ? ticketGuardado : t
+        ).toList();
+        final listaTickets = state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: event.noRequiereCompras
+              ? 'Ticket actualizado: Se declaró que no requiere compras.'
+              : 'Ticket actualizado: Requerimiento de compras restablecido.',
+          historial: listaActualizada,
+          tickets: listaTickets,
+          currentTicket: ticketGuardado,
+        ));
+      },
+    );
+  }
+
+  Future<void> _onGuardarValidacionBodegaCompras(
+    GuardarValidacionBodegaComprasEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    final String loadingMsg = event.transferirDirectoATaller
+        ? 'Aprobando y transfiriendo directamente a Proceso de Trabajo...'
+        : (event.transferirABodega
+            ? 'Transfiriendo ticket a Bodega...'
+            : 'Guardando validación de repuestos...');
+
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: loadingMsg,
+    ));
+
+    final totalItems = event.items.length;
+    final totalValidados = event.items.where((i) => i.validadoPorCompras).length;
+
+    final String accionAuditoria;
+    final EstadoTicket estadoFinal;
+    final String mensajeExito;
+
+    if (event.transferirDirectoATaller) {
+      accionAuditoria = 'COMPRAS: VALIDACIÓN EN BODEGA APROBADA - TRANSFERIDO DIRECTO A PROCESO DE TRABAJO';
+      estadoFinal = EstadoTicket.procesoTrabajo;
+      mensajeExito = '✅ Validación aprobada en Bodega. Ticket transferido directamente a Proceso de Trabajo.';
+    } else if (event.transferirABodega) {
+      accionAuditoria = 'COMPRAS: VALIDACIÓN COMPLETA ($totalValidados/$totalItems) Y TRANSFERENCIA A BODEGA';
+      estadoFinal = EstadoTicket.bodega;
+      mensajeExito = '✅ Validación completa: Ticket transferido a Bodega exitosamente.';
+    } else {
+      accionAuditoria = 'COMPRAS: VALIDACIÓN PARCIAL DE REPUESTOS ($totalValidados/$totalItems validados)';
+      estadoFinal = event.ticket.estadoActual;
+      mensajeExito = '✅ Validación parcial guardada ($totalValidados/$totalItems). Ya visible en Bodega.';
+    }
+
+    final List<EventoAuditoriaEntity> nuevosEventos = [
+      ...event.ticket.historialEventos,
+      EventoAuditoriaEntity(
+        accion: accionAuditoria,
+        usuarioNombre: event.nombreUsuario,
+        usuarioRol: event.rolUsuario,
+        timestamp: DateTime.now(),
+        proceso: ProcesoAuditoria.validacionBodega,
+        hito: event.transferirDirectoATaller || event.transferirABodega ? HitoProceso.fin : HitoProceso.avance,
+        habilita: event.transferirDirectoATaller ? const [ProcesoAuditoria.taller] : (event.transferirABodega || totalValidados > 0 ? const [ProcesoAuditoria.bodega] : const []),
+      ),
+    ];
+
+    final ahoraVal = DateTime.now();
+    final tiemposCompras = CalculadorTiemposOperativos.actualizarMetricasCompras(
+      ticket: event.ticket,
+      items: event.items,
+      timestamp: ahoraVal,
+    );
+
+    final ticketActualizado = event.ticket.copyWith(
+      itemsDespachoBodega: event.items,
+      estadoActual: estadoFinal,
+      tiemposOperativos: tiemposCompras,
+      historialEventos: nuevosEventos,
+    );
+
+    final result = await actualizarTicket(ticketActualizado);
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Fallo al guardar validación: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) {
+        final listaActualizada = state.historial
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+        final listaTickets = state.tickets
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: mensajeExito,
+          historial: listaActualizada,
+          tickets: listaTickets,
+          currentTicket: ticketGuardado,
+        ));
+      },
+    );
+  }
+
+  // 🔄 SINCRONIZACION SILENCIOSA DE STOCK EN BODEGA:
+  // Cuando Bodega abre el detalle de despacho, la pantalla recalcula en vivo
+  // el cruce contra el inventario real (InventarioBloc). Antes ese resultado
+  // solo se usaba para pintar la pantalla y se perdia al cerrarla. Aqui lo
+  // persistimos en el ticket para que el resto de pantallas (listas, tarjetas,
+  // dashboards) dejen de mostrar estos repuestos como pendientes sin necesidad
+  // de que Compras vuelva a tocar el ticket.
+  //
+  // No emitimos TicketStatus.operationSuccess a proposito: esto ocurre de forma
+  // automatica al abrir la pantalla (no por una accion explicita del usuario),
+  // asi que evitamos un SnackBar de exito o un cierre automatico de pantalla
+  // que confundirian a Bodega. Si la escritura falla, simplemente no hacemos
+  // nada: el proximo intento (proxima vez que se abra el ticket, o cuando
+  // Compras lo procese) volvera a corregir el dato.
+  Future<void> _onSincronizarStockDespachoBodega(
+    SincronizarStockDespachoBodegaEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    final ticketActualizado = event.ticket.copyWith(
+      itemsDespachoBodega: event.itemsActualizados,
+    );
+
+    final result = await actualizarTicket(ticketActualizado);
+
+    result.fold(
+      (failure) {
+        // Fallo silencioso: no interrumpimos a Bodega por una sincronizacion
+        // de fondo que ellos no iniciaron explicitamente.
+      },
+      (ticketGuardado) {
+        final listaActualizada = state.historial
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+        final listaTickets = state.tickets
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.loaded,
+          historial: listaActualizada,
+          tickets: listaTickets,
+          currentTicket: ticketGuardado,
+        ));
+      },
+    );
+  }
+
+  Future<void> _onRegistrarDespachoBodega(
+    RegistrarDespachoBodegaEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Registrando picking...',
+    ));
+
+    final ticketConItems = event.ticket.copyWith(
+      itemsDespachoBodega: event.itemsActualizados,
+      historialDespachos: [...event.ticket.historialDespachos, event.nuevoRegistro],
+    );
+
+    final esDespachoCompleto = ticketConItems.bodegaDespachoCompleto;
+
+    // 📦 PICKING: cada entrega es una guía (despacho parcial). El ticket ya
+    // NO pasa solo a Proceso de Trabajo: eso lo hace "Finalizar picking"
+    // (ver _onFinalizarPicking), cuando todo tiene check y evidencia.
+    final nuevoEvento = EventoAuditoriaEntity(
+      accion: esDespachoCompleto
+          ? 'BODEGA: PICKING PARCIAL ${event.nuevoRegistro.id} LISTO PARA RETIRO (${event.nuevoRegistro.items.length} ítems) - 100 % RECOLECTADO, PENDIENTE DE FINALIZAR PICKING'
+          : 'BODEGA: PICKING PARCIAL ${event.nuevoRegistro.id} LISTO PARA RETIRO (${event.nuevoRegistro.items.length} ítems)',
+      usuarioNombre: event.nombreUsuario,
+      usuarioRol: event.rolUsuario,
+      timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.bodega,
+      hito: HitoProceso.avance,
+    );
+
+    final ahoraDesp = DateTime.now();
+    final tiemposBodega = CalculadorTiemposOperativos.actualizarMetricasBodega(
+      ticket: ticketConItems,
+      itemsActualizados: event.itemsActualizados,
+      esDespachoCompleto: esDespachoCompleto,
+      timestamp: ahoraDesp,
+    );
+
+    // NUEVO (fix overwrite): en vez de mandar el ticket completo -- que
+    // podria traer una copia vieja de codigoProyecto / isCostosCompletado /
+    // isComprasCompletado / estadoActual si esta pantalla no se refresco
+    // desde que Costos/Compras terminaron -- mandamos SOLO los campos que
+    // Despacho realmente cambia. El evento de auditoria se agrega via
+    // arrayUnion para no perder eventos de otras sesiones aunque
+    // event.ticket.historialEventos este desactualizado.
+    final ticketConTiempos = ticketConItems.copyWith(tiemposOperativos: tiemposBodega);
+    final jsonCompleto = TicketModel.fromEntity(ticketConTiempos).toJson();
+    final campos = <String, dynamic>{
+      'itemsDespachoBodega': jsonCompleto['itemsDespachoBodega'],
+      'historialDespachos': jsonCompleto['historialDespachos'],
+      'tiemposOperativos': jsonCompleto['tiemposOperativos'],
+      'historialEventos': FieldValue.arrayUnion([
+        EventoAuditoriaModel.fromEntity(nuevoEvento).toJson(),
+      ]),
+      'estadoDespacho': EstadoDespachoService.despachoParcial,
+    };
+
+    final result = await ticketRepository.actualizarCampos(event.ticket.id, campos);
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Fallo al registrar el picking: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) {
+        final listaActualizada = state.historial
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+        final listaTickets = state.tickets
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: esDespachoCompleto
+              ? '✅ Picking registrado: todo recolectado. Suba la evidencia y luego finalice el picking desde la tarjeta.'
+              : '✅ Picking registrado. Suba la evidencia para dejarlo listo para retiro.',
+          historial: listaActualizada,
+          tickets: listaTickets,
+          currentTicket: ticketGuardado,
+        ));
+      },
+    );
+  }
+
+  // ===========================================================================
+  // 📦 PICKING EN BODEGA
+  // ===========================================================================
+  void _reemplazarTicketEnEstado(Emitter<TicketState> emit, TicketEntity ticketGuardado, String mensaje) {
+    emit(state.copyWith(
+      status: TicketStatus.operationSuccess,
+      message: mensaje,
+      historial: state.historial.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      tickets: state.tickets.map((t) => t.id == ticketGuardado.id ? ticketGuardado : t).toList(),
+      currentTicket: ticketGuardado,
+    ));
+  }
+
+  Future<void> _onIniciarPicking(IniciarPickingEvent event, Emitter<TicketState> emit) async {
+    if (!EstadoDespachoService.puedeIniciarPicking(event.ticket)) {
+      emit(state.copyWith(status: TicketStatus.error, message: 'El picking de este ticket ya fue iniciado.'));
+      return;
+    }
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Iniciando picking...'));
+    final ahora = DateTime.now();
+    final evento = EventoAuditoriaEntity(
+      accion: 'BODEGA: INICIO DE PICKING',
+      usuarioNombre: event.nombreUsuario,
+      usuarioRol: event.rolUsuario,
+      timestamp: ahora,
+      proceso: ProcesoAuditoria.bodega,
+      hito: HitoProceso.avance,
+    );
+    final result = await ticketRepository.actualizarCampos(event.ticket.id, {
+      'estadoDespacho': EstadoDespachoService.pickingEnCurso,
+      'pickingIniciadoPor': event.nombreUsuario,
+      'pickingIniciadoEn': Timestamp.fromDate(ahora),
+      'historialEventos': FieldValue.arrayUnion([EventoAuditoriaModel.fromEntity(evento).toJson()]),
+    });
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'No se pudo iniciar el picking: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) => _reemplazarTicketEnEstado(emit, ticketGuardado, '▶️ Picking iniciado.'),
+    );
+  }
+
+  Future<void> _onFinalizarPicking(FinalizarPickingEvent event, Emitter<TicketState> emit) async {
+    final motivo = EstadoDespachoService.motivoNoFinaliza(event.ticket);
+    if (motivo != null) {
+      emit(state.copyWith(status: TicketStatus.error, message: 'No se puede finalizar el picking: $motivo'));
+      return;
+    }
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Finalizando picking...'));
+    final ahora = DateTime.now();
+    // Solo se mueve a Proceso de Trabajo si el ticket aún no pasó de ahí.
+    const posteriores = {
+      EstadoTicket.validacionFacturacion,
+      EstadoTicket.entrega,
+      EstadoTicket.finalizado,
+      EstadoTicket.anulado,
+    };
+    final pasaATaller = !posteriores.contains(event.ticket.estadoActual);
+    final evento = EventoAuditoriaEntity(
+      accion: pasaATaller
+          ? 'BODEGA: FIN DE PICKING Y TRANSFERENCIA A PROCESO DE TRABAJO (${event.ticket.historialDespachos.length} despacho(s))'
+          : 'BODEGA: FIN DE PICKING (${event.ticket.historialDespachos.length} despacho(s))',
+      usuarioNombre: event.nombreUsuario,
+      usuarioRol: event.rolUsuario,
+      timestamp: ahora,
+      proceso: ProcesoAuditoria.bodega,
+      hito: HitoProceso.fin,
+      habilita: pasaATaller ? const [ProcesoAuditoria.taller] : const [],
+    );
+    final result = await ticketRepository.actualizarCampos(event.ticket.id, {
+      'estadoDespacho': EstadoDespachoService.pickingFinalizado,
+      'pickingFinalizadoPor': event.nombreUsuario,
+      'pickingFinalizadoEn': Timestamp.fromDate(ahora),
+      if (pasaATaller) 'estadoActual': EstadoTicket.procesoTrabajo.name,
+      'historialEventos': FieldValue.arrayUnion([EventoAuditoriaModel.fromEntity(evento).toJson()]),
+    });
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'No se pudo finalizar el picking: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) => _reemplazarTicketEnEstado(
+        emit,
+        ticketGuardado,
+        pasaATaller ? '✅ Picking finalizado: el ticket pasó a Proceso de Trabajo.' : '✅ Picking finalizado.',
+      ),
+    );
+  }
+
+  /// Escribe el estado deducido en los tickets que aún no tienen
+  /// `estadoDespacho`. Silencioso: no cambia el status de la pantalla.
+  Future<void> _onSincronizarEstadoDespacho(SincronizarEstadoDespachoEvent event, Emitter<TicketState> emit) async {
+    final escritos = <String, String>{};
+    for (final entrada in event.estadosPorTicket.entries) {
+      final result = await ticketRepository.actualizarCampos(entrada.key, {'estadoDespacho': entrada.value});
+      result.fold((_) {}, (_) => escritos[entrada.key] = entrada.value);
+    }
+    if (escritos.isEmpty) return;
+    TicketEntity conEstado(TicketEntity t) =>
+        escritos.containsKey(t.id) ? t.copyWith(estadoDespacho: escritos[t.id]) : t;
+    emit(state.copyWith(
+      historial: state.historial.map(conEstado).toList(),
+      tickets: state.tickets.map(conEstado).toList(),
+    ));
+  }
+
+  Future<void> _onActualizarEvidenciasDespacho(
+    ActualizarEvidenciasDespachoEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Subiendo evidencia del picking...',
+    ));
+
+    final List<String> urlsEvidencias = [];
+    for (final foto in event.fotosEvidencias) {
+      final uploadResult = await subirEvidenciaUseCase(foto, event.ticket.id);
+      uploadResult.fold(
+        (failure) => null,
+        (url) => urlsEvidencias.add(url),
+      );
+    }
+
+    if (urlsEvidencias.isEmpty) {
+      emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'No se pudo subir ninguna foto de evidencia. Verifique su conexión.',
+      ));
+      return;
+    }
+
+    final nuevoHistorial = event.ticket.historialDespachos.map((d) {
+      if (d.id == event.despachoId) {
+        return d.copyWith(
+          fotosEvidenciasUrls: [...d.fotosEvidenciasUrls, ...urlsEvidencias],
+        );
+      }
+      return d;
+    }).toList();
+
+    // 📦 PICKING: las evidencias ya no pasan el ticket a Proceso de Trabajo;
+    // eso lo hace "Finalizar picking" desde la tarjeta.
+    final nuevoEvento = EventoAuditoriaEntity(
+      accion: 'BODEGA: REGISTRO DE ${urlsEvidencias.length} EVIDENCIAS PARA PICKING ${event.despachoId}',
+      usuarioNombre: event.nombreUsuario,
+      usuarioRol: event.rolUsuario,
+      timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.bodega,
+      hito: HitoProceso.avance,
+    );
+
+    final ticketConNuevoHistorial = event.ticket.copyWith(
+      historialDespachos: nuevoHistorial,
+    );
+
+    // NUEVO (fix overwrite): mismo criterio que en _onRegistrarDespachoBodega
+    // -- solo mandamos historialDespachos, el nuevo evento (via arrayUnion)
+    // y, solo si corresponde, estadoActual. Nunca tocamos codigoProyecto ni
+    // los hitos de costos/compras desde esta pantalla.
+    final jsonCompleto = TicketModel.fromEntity(ticketConNuevoHistorial).toJson();
+    final campos = <String, dynamic>{
+      'historialDespachos': jsonCompleto['historialDespachos'],
+      'historialEventos': FieldValue.arrayUnion([
+        EventoAuditoriaModel.fromEntity(nuevoEvento).toJson(),
+      ]),
+    };
+
+    // NUEVO: descuento automatico de stock (inventario_bodega) al mismo
+    // tiempo que se guardan las evidencias de ESTE despacho. Se toman los
+    // items/cantidades del despacho puntual (event.despachoId) -- nunca
+    // del acumulado del ticket -- para no descontar de mas si hay varios
+    // despachos parciales. Se busca sin firstWhere/orElse (mismo motivo
+    // del fix de covarianza TicketModel/TicketEntity de esta sesion).
+    RegistroDespachoEntity? despachoActual;
+    for (final d in event.ticket.historialDespachos) {
+      if (d.id == event.despachoId) {
+        despachoActual = d;
+        break;
+      }
+    }
+    final itemsADescontar = (despachoActual?.items ?? const <DetalleItemDespachadoEntity>[])
+        .map((i) => <String, dynamic>{'codigo': i.codigo, 'cantidad': i.cantidad})
+        .toList();
+
+    final result = await ticketRepository.guardarEvidenciasDespachoConDescuentoStock(
+      ticketId: event.ticket.id,
+      despachoId: event.despachoId,
+      campos: campos,
+      itemsADescontar: itemsADescontar,
+      // NUEVO: solo los tickets Caracol reservan stock, asi que solo
+      // ellos tienen algo que liberar en este paso.
+      liberarReserva: event.ticket.equipo == TipoEquipo.Caracol,
+    );
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Fallo al guardar evidencias: ${_mapFailureToMessage(failure)}',
+      )),
+      (_) {
+        // La escritura fue exitosa: el despacho queda con stockDescontado
+        // en true (ya sea porque recien se descargo, o porque ya lo estaba
+        // de una tanda anterior de evidencias para el mismo despacho).
+        final historialConFlag = ticketConNuevoHistorial.historialDespachos.map((d) {
+          if (d.id == event.despachoId) {
+            return d.copyWith(stockDescontado: true);
+          }
+          return d;
+        }).toList();
+        final ticketGuardado = ticketConNuevoHistorial.copyWith(
+          historialDespachos: historialConFlag,
+        );
+
+        final listaActualizada = state.historial
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+        final listaTickets = state.tickets
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: '✅ Evidencia guardada. Picking listo para retiro.',
+          historial: listaActualizada,
+          tickets: listaTickets,
+          currentTicket: ticketGuardado,
+        ));
+      },
+    );
+  }
+
+  Future<void> _onAsignarTecnicosTrabajo(
+    AsignarTecnicosTrabajoEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Asignando técnicos al trabajo...',
+    ));
+
+    final evento = EventoAuditoriaEntity(
+      accion: 'Técnicos asignados en taller: ${event.tecnicos.isEmpty ? "Sin técnicos" : event.tecnicos.join(", ")}',
+      usuarioNombre: event.nombreUsuario,
+      usuarioRol: event.rolUsuario,
+      timestamp: DateTime.now(),
+    );
+
+    final ticketActualizado = event.ticket.copyWith(
+      tecnicosAsignados: event.tecnicos,
+      historialEventos: [...event.ticket.historialEventos, evento],
+    );
+
+    final result = await actualizarTicket(ticketActualizado);
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Fallo al asignar técnicos: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) {
+        final listaActualizada = (state.historial.isNotEmpty ? state.historial : state.tickets)
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: 'Técnicos asignados correctamente.',
+          historial: listaActualizada,
+          tickets: listaActualizada,
+          currentTicket: ticketGuardado,
+        ));
+      },
+    );
+  }
+
+  Future<void> _onGuardarDiagnosticoFallas(
+    GuardarDiagnosticoFallasEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Guardando diagnóstico de fallas...',
+    ));
+
+    // 🔕 Carga retroactiva de diagnóstico de fallas: no genera línea de
+    // auditoría (a diferencia del diagnóstico en vivo desde Proceso de
+    // Trabajo, que sí queda resumido dentro de su propio evento general).
+    // Escritura parcial: solo el diagnóstico y el sello de la ronda de
+    // revisión, así la copia de la bandeja nunca pisa estado ni auditoría.
+    final result = await ticketRepository.actualizarCampos(event.ticket.id, {
+      'diagnosticoFallas': event.fallas.map((f) => f.toJson()).toList(),
+      'rondaDiagnosticoFallas': rondaRevisionDiagnosticoFallas,
+    });
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Fallo al registrar diagnóstico: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) {
+        final listaActualizada = (state.historial.isNotEmpty ? state.historial : state.tickets)
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: 'Diagnóstico de fallas guardado correctamente.',
+          historial: listaActualizada,
+          tickets: listaActualizada,
+          currentTicket: ticketGuardado,
+        ));
+      },
+    );
+  }
+
+  Future<void> _onSubirInformeTecnico(
+    SubirInformeTecnicoEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Subiendo informe técnico...',
+    ));
+
+    final resultSubida = await subirDocumentoEvaluacionUseCase(
+      event.archivo,
+      event.ticket.id,
+      'informes_tecnicos',
+    );
+
+    await resultSubida.fold(
+      (failure) async {
+        emit(state.copyWith(
+          status: TicketStatus.error,
+          message: 'Error al subir informe técnico: ${failure.message}',
+        ));
+      },
+      (url) async {
+        final evento = EventoAuditoriaEntity(
+          accion: 'Informe técnico adjuntado: ${event.archivo.name}',
+          usuarioNombre: event.nombreUsuario,
+          usuarioRol: event.rolUsuario,
+          timestamp: DateTime.now(),
+          proceso: ProcesoAuditoria.taller,
+          hito: HitoProceso.avance,
+        );
+
+        final ticketActualizado = event.ticket.copyWith(
+          urlInformeTecnico: url,
+          historialEventos: [...event.ticket.historialEventos, evento],
+        );
+
+        final result = await actualizarTicket(ticketActualizado);
+        result.fold(
+          (failure) => emit(state.copyWith(
+            status: TicketStatus.error,
+            message: 'Error al actualizar ticket: ${_mapFailureToMessage(failure)}',
+          )),
+          (ticketGuardado) {
+            final listaActualizada = (state.historial.isNotEmpty ? state.historial : state.tickets)
+                .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+                .toList();
+
+            emit(state.copyWith(
+              status: TicketStatus.operationSuccess,
+              message: 'Informe técnico cargado exitosamente.',
+              historial: listaActualizada,
+              tickets: listaActualizada,
+              currentTicket: ticketGuardado,
+            ));
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _onAsignarTecnicoRecepcionBodega(
+    AsignarTecnicoRecepcionBodegaEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Asignando orden de recogida a técnico...',
+    ));
+
+    // 📦 Cada retiro = un picking: la orden lleva SOLO los repuestos de ese
+    // picking que aún no se retiraron ni están en otra orden pendiente.
+    final itemsARecoger = <ItemRecepcionRepuestoEntity>[];
+    if (event.pickingId != null) {
+      if (RetiroPickingService.estado(event.ticket, event.pickingId!) != RetiroPickingService.listo) {
+        emit(state.copyWith(
+          status: TicketStatus.error,
+          message: 'El picking ${RetiroPickingService.codigoCorto(event.ticket, event.pickingId!)} ya tiene una orden de retiro pendiente o ya fue retirado.',
+        ));
+        return;
+      }
+      for (final item in RetiroPickingService.items(event.ticket, event.pickingId!)) {
+        if (item.disponible > 0) {
+          itemsARecoger.add(ItemRecepcionRepuestoEntity(
+            codigo: item.codigo,
+            descripcion: item.descripcion,
+            unidad: item.unidad,
+            cantidadDespachadaBodega: item.disponible,
+            cantidadRecibidaTecnico: 0.0,
+            validado: false,
+          ));
+        }
+      }
+    } else {
+      // Tickets antiguos sin pickings: saldo despachado no recibido, sin
+      // repetir lo que ya está en otra orden pendiente.
+      for (final item in event.ticket.itemsDespachoBodega) {
+        final cantPendiente = event.ticket.cantidadDisponibleParaAsignarRetiro(item.codigo);
+        if (cantPendiente > 0) {
+          itemsARecoger.add(ItemRecepcionRepuestoEntity(
+            codigo: item.codigo,
+            descripcion: item.descripcion,
+            unidad: item.unidad,
+            cantidadDespachadaBodega: cantPendiente,
+            cantidadRecibidaTecnico: 0.0,
+            validado: false,
+          ));
+        }
+      }
+    }
+
+    if (itemsARecoger.isEmpty) {
+      emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'No hay repuestos pendientes de recoger en Bodega para este ticket.',
+      ));
+      return;
+    }
+
+    final ordenId = event.ordenId ?? 'REC-${DateTime.now().millisecondsSinceEpoch}';
+    final nuevaOrden = OrdenRecepcionRepuestosEntity(
+      id: ordenId,
+      ticketId: event.ticket.id,
+      tecnicoId: event.tecnicoId,
+      tecnicoNombre: event.tecnicoNombre,
+      supervisorAsigna: event.nombreSupervisor,
+      fechaAsignacion: DateTime.now(),
+      estado: EstadoOrdenRecepcion.pendienteRecoger,
+      items: itemsARecoger,
+      pickingId: event.pickingId,
+    );
+
+    final picking = event.pickingId == null ? '' : ' DEL PICKING ${RetiroPickingService.codigoCorto(event.ticket, event.pickingId!)}';
+    final evento = EventoAuditoriaEntity(
+      accion: 'TALLER: ORDEN $ordenId ASIGNADA A [${event.tecnicoNombre.toUpperCase()}] PARA RETIRO EN BODEGA$picking (${itemsARecoger.length} ítems)',
+      usuarioNombre: event.nombreSupervisor,
+      usuarioRol: event.rolSupervisor,
+      timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.taller,
+      hito: HitoProceso.avance,
+    );
+
+    final ticketActualizado = event.ticket.copyWith(
+      ordenesRecepcion: [...event.ticket.ordenesRecepcion, nuevaOrden],
+      historialEventos: [...event.ticket.historialEventos, evento],
+    );
+
+    final result = await actualizarTicket(ticketActualizado);
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Fallo al asignar orden de recogida: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) {
+        final listaActualizada = (state.historial.isNotEmpty ? state.historial : state.tickets)
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: '✅ Orden de recogida asignada a ${event.tecnicoNombre}. Ya disponible en su bandeja.',
+          historial: listaActualizada,
+          tickets: listaActualizada,
+          currentTicket: ticketGuardado,
+        ));
+      },
+    );
+  }
+
+  Future<void> _onAnularOrdenRecepcion(AnularOrdenRecepcionEvent event, Emitter<TicketState> emit) async {
+    final motivo = event.motivo.trim();
+    if (motivo.isEmpty) {
+      emit(state.copyWith(status: TicketStatus.error, message: 'Indique el motivo de la anulación.'));
+      return;
+    }
+    OrdenRecepcionRepuestosEntity? orden;
+    for (final o in event.ticket.ordenesRecepcion) {
+      if (o.id == event.ordenId) orden = o;
+    }
+    if (orden == null || orden.estado != EstadoOrdenRecepcion.pendienteRecoger) {
+      emit(state.copyWith(status: TicketStatus.error, message: 'Solo se pueden anular órdenes pendientes de retiro.'));
+      return;
+    }
+
+    emit(state.copyWith(status: TicketStatus.loading, message: 'Anulando orden ${event.ordenId}...'));
+    final ahora = DateTime.now();
+    final ordenes = event.ticket.ordenesRecepcion
+        .map((o) => o.id == event.ordenId
+            ? o.copyWith(
+                estado: EstadoOrdenRecepcion.anulada,
+                motivoAnulacion: motivo,
+                anuladaPor: event.nombreUsuario,
+                fechaAnulacion: ahora,
+              )
+            : o)
+        .toList();
+    final picking = orden.pickingId == null ? '' : ' (picking ${RetiroPickingService.codigoCorto(event.ticket, orden.pickingId!)})';
+    final evento = EventoAuditoriaEntity(
+      accion: 'TALLER: ORDEN DE RETIRO ${event.ordenId}$picking ANULADA -- Motivo: $motivo',
+      usuarioNombre: event.nombreUsuario,
+      usuarioRol: event.rolUsuario,
+      timestamp: ahora,
+      proceso: ProcesoAuditoria.taller,
+      hito: HitoProceso.avance,
+    );
+
+    final result = await actualizarTicket(event.ticket.copyWith(
+      ordenesRecepcion: ordenes,
+      historialEventos: [...event.ticket.historialEventos, evento],
+    ));
+    // El enlace del técnico externo de esa orden deja de servir.
+    if (result.isRight()) {
+      try {
+        await AccesoTemporalBodegaService().quemarTokensDeOrden(event.ordenId, nota: 'ORDEN ANULADA: $motivo');
+      } catch (_) {}
+    }
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'No se pudo anular la orden: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) {
+        final lista = (state.historial.isNotEmpty ? state.historial : state.tickets)
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: '🚫 Orden ${event.ordenId} anulada. Su picking vuelve a estar listo para retiro.',
+          historial: lista,
+          tickets: lista,
+          currentTicket: ticketGuardado,
+        ));
+      },
+    );
+  }
+
+  Future<void> _onConfirmarRecepcionRepuestosTecnico(
+    ConfirmarRecepcionRepuestosTecnicoEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    // 🛡️ Enclavamiento: ninguna cantidad puede ser negativa ni superar lo alistado por bodega
+    for (final item in event.itemsValidados) {
+      if (item.cantidadRecibidaTecnico < 0 ||
+          item.cantidadRecibidaTecnico > item.cantidadDespachadaBodega) {
+        emit(state.copyWith(
+          status: TicketStatus.error,
+          message:
+              'Error de validación: La cantidad recibida de ${item.codigo} (${item.cantidadRecibidaTecnico}) no puede superar el máximo alistado por bodega (${item.cantidadDespachadaBodega} ${item.unidad}).',
+        ));
+        return;
+      }
+    }
+
+    // 📸 Evidencia obligatoria: hoja de materiales firmada + materiales retirados.
+    if (event.fotosHojaFirmada.isEmpty || event.fotosMateriales.isEmpty) {
+      emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Suba la foto de la hoja de materiales firmada y la de los materiales retirados para confirmar.',
+      ));
+      return;
+    }
+
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Subiendo evidencia y confirmando recepción de repuestos...',
+    ));
+
+    Future<List<String>> subir(List<XFile> fotos) async {
+      final urls = <String>[];
+      for (final foto in fotos) {
+        final r = await subirEvidenciaUseCase(foto, event.ticket.id);
+        r.fold((_) {}, urls.add);
+      }
+      return urls;
+    }
+
+    final urlsHoja = await subir(event.fotosHojaFirmada);
+    final urlsMateriales = await subir(event.fotosMateriales);
+    if (urlsHoja.isEmpty || urlsMateriales.isEmpty) {
+      emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'No se pudieron subir las fotos de evidencia. Verifique su conexión e intente de nuevo.',
+      ));
+      return;
+    }
+
+    final ordenesActualizadas = event.ticket.ordenesRecepcion.map((orden) {
+      if (orden.id == event.ordenId) {
+        final todosConformes = event.itemsValidados.every((i) => i.esConforme);
+        return orden.copyWith(
+          items: event.itemsValidados,
+          fechaRecepcion: DateTime.now(),
+          estado: todosConformes ? EstadoOrdenRecepcion.recibidoTotal : EstadoOrdenRecepcion.recibidoParcial,
+          observacion: event.observacion,
+          urlsHojaFirmada: [...orden.urlsHojaFirmada, ...urlsHoja],
+          urlsFotosMateriales: [...orden.urlsFotosMateriales, ...urlsMateriales],
+        );
+      }
+      return orden;
+    }).toList();
+
+    final conformes = event.itemsValidados.where((i) => i.esConforme).length;
+    final total = event.itemsValidados.length;
+
+    final evento = EventoAuditoriaEntity(
+      accion: 'TALLER: REPUESTOS RECIBIDOS EN BODEGA POR [${event.nombreTecnico.toUpperCase()}] ($conformes/$total conformes). '
+          'Trasladados a taller. Evidencia de retiro: ${urlsHoja.length} foto(s) de hoja firmada y ${urlsMateriales.length} de materiales.',
+      usuarioNombre: event.nombreTecnico,
+      usuarioRol: event.rolTecnico,
+      timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.taller,
+      hito: HitoProceso.avance,
+    );
+
+    final ticketActualizado = event.ticket.copyWith(
+      ordenesRecepcion: ordenesActualizadas,
+      historialEventos: [...event.ticket.historialEventos, evento],
+    );
+
+    final result = await actualizarTicket(ticketActualizado);
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Fallo al confirmar recepción: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) {
+        final listaActualizada = (state.historial.isNotEmpty ? state.historial : state.tickets)
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: '✅ Repuestos recibidos y trasladados al taller exitosamente.',
+          historial: listaActualizada,
+          tickets: listaActualizada,
+          currentTicket: ticketGuardado,
+        ));
+      },
+    );
+  }
+
+  Future<void> _onValidarMaterialesRecibidosSupervisor(
+    ValidarMaterialesRecibidosSupervisorEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    if (!event.ticket.puedeSupervisorValidarMateriales) {
+      emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Hay repuestos en bodega aún. No puede validar hasta que el 100% de los repuestos requeridos hayan sido recibidos en el taller.',
+      ));
+      return;
+    }
+
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Certificando recepción de materiales en taller...',
+    ));
+
+    // El consumo general certifica también cada lote ya retirado que aún no
+    // tenga su certificación (los pendientes de recoger no se tocan).
+    final ahora = DateTime.now();
+    final lotesCertificados = <String>[];
+    final ordenesCertificadas = event.ticket.ordenesRecepcion.map((o) {
+      if (o.estaCompletada && !o.validadoSupervisor) {
+        lotesCertificados.add(o.id);
+        return o.copyWith(
+          validadoSupervisor: true,
+          fechaValidadoSupervisor: ahora,
+          supervisorValida: event.nombreSupervisor,
+        );
+      }
+      return o;
+    }).toList();
+
+    final evento = EventoAuditoriaEntity(
+      accion: 'TALLER: CONFORMIDAD DE MATERIALES EN TALLER POR SUPERVISOR [${event.nombreSupervisor.toUpperCase()}]. 100% de repuestos recibidos.'
+          '${lotesCertificados.isEmpty ? '' : ' Consumo general certificado. Lotes: ${lotesCertificados.join(', ')}.'}',
+      usuarioNombre: event.nombreSupervisor,
+      usuarioRol: event.rolSupervisor,
+      timestamp: ahora,
+      proceso: ProcesoAuditoria.taller,
+      hito: HitoProceso.avance,
+    );
+
+    final ticketActualizado = event.ticket.copyWith(
+      materialesValidadosEnTaller: true,
+      supervisorValidoMateriales: event.nombreSupervisor,
+      fechaValidacionMaterialesTaller: ahora,
+      ordenesRecepcion: ordenesCertificadas,
+      historialEventos: [...event.ticket.historialEventos, evento],
+    );
+
+    final result = await actualizarTicket(ticketActualizado);
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Fallo al validar materiales: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) {
+        final listaActualizada = (state.historial.isNotEmpty ? state.historial : state.tickets)
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: '✅ Consumo general certificado (incluye todos los lotes retirados). Requerimiento listo para finalizar y liberar.',
+          historial: listaActualizada,
+          tickets: listaActualizada,
+          currentTicket: ticketGuardado,
+        ));
+      },
+    );
+  }
+
+  Future<void> _onValidarConsumoOrdenTaller(
+    ValidarConsumoOrdenTallerEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Certificando consumo del lote ${event.ordenId} en taller...',
+    ));
+
+    final ordenesActualizadas = event.ticket.ordenesRecepcion.map((o) {
+      if (o.id == event.ordenId) {
+        return o.copyWith(
+          validadoSupervisor: true,
+          fechaValidadoSupervisor: DateTime.now(),
+          supervisorValida: event.nombreSupervisor,
+        );
+      }
+      return o;
+    }).toList();
+
+    final evento = EventoAuditoriaEntity(
+      accion: 'TALLER: CONSUMO DE REPUESTOS CERTIFICADO POR SUPERVISOR [${event.nombreSupervisor.toUpperCase()}]. Lote ${event.ordenId} validado como instalado en máquina.',
+      usuarioNombre: event.nombreSupervisor,
+      usuarioRol: event.rolSupervisor,
+      timestamp: DateTime.now(),
+      proceso: ProcesoAuditoria.taller,
+      hito: HitoProceso.avance,
+    );
+
+    final ticketActualizado = event.ticket.copyWith(
+      ordenesRecepcion: ordenesActualizadas,
+      materialesValidadosEnTaller: true,
+      supervisorValidoMateriales: event.nombreSupervisor,
+      fechaValidacionMaterialesTaller: DateTime.now(),
+      historialEventos: [...event.ticket.historialEventos, evento],
+    );
+
+    final result = await actualizarTicket(ticketActualizado);
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Fallo al validar consumo: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) {
+        final listaActualizada = (state.historial.isNotEmpty ? state.historial : state.tickets)
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message: '✅ Consumo del lote ${event.ordenId} certificado por Supervisor.',
+          historial: listaActualizada,
+          tickets: listaActualizada,
+          currentTicket: ticketGuardado,
+        ));
+      },
+    );
+  }
+
+  // ==========================================
+  // MODULO ADMIN: CAMBIO DE ESTADO MANUAL SIN RESTRICCIONES
+  // ==========================================
+  // Via explicita para mover el ticket de cualquier estado a cualquier
+  // otro, resetear hitos de costos/compras o corregir cualquier campo via
+  // camposExtra. A diferencia de actualizarTicket(), actualizarCampos() NO
+  // aplica ninguna proteccion -- el admin puede editar todo, a proposito.
+  // Siempre queda auditado (motivo + quien lo hizo) via arrayUnion.
+  Future<void> _onForzarCambioEstadoAdmin(
+    ForzarCambioEstadoAdminEvent event,
+    Emitter<TicketState> emit,
+  ) async {
+    emit(state.copyWith(
+      status: TicketStatus.loading,
+      message: 'Aplicando cambio administrativo...',
+    ));
+
+    final nuevoEvento = EventoAuditoriaEntity(
+      accion:
+          'ADMIN: CAMBIO FORZADO A "${event.nuevoEstado.name.toUpperCase()}" -- Motivo: ${event.motivo}',
+      usuarioNombre: event.nombreAdmin,
+      usuarioRol: event.rolAdmin,
+      timestamp: DateTime.now(),
+      // Fuera de los promedios; reinicia el reloj de las etapas abiertas y
+      // habilita la etapa del estado destino (ver TiemposPorProcesoService).
+      proceso: ProcesoAuditoria.admin,
+      hito: HitoProceso.fin,
+      habilita: [if (procesoDeEstado(event.nuevoEstado) != null) procesoDeEstado(event.nuevoEstado)!],
+    );
+
+    final campos = <String, dynamic>{
+      'estadoActual': event.nuevoEstado.name,
+      'historialEventos': FieldValue.arrayUnion([
+        EventoAuditoriaModel.fromEntity(nuevoEvento).toJson(),
+      ]),
+      if (event.resetearCostos) 'isCostosCompletado': false,
+      if (event.resetearCompras) 'isComprasCompletado': false,
+      if (event.nuevoCodigoProyecto != null) 'codigoProyecto': event.nuevoCodigoProyecto,
+      if (event.camposExtra != null) ...event.camposExtra!,
+    };
+
+    final result = await ticketRepository.actualizarCampos(event.ticket.id, campos);
+    result.fold(
+      (failure) => emit(state.copyWith(
+        status: TicketStatus.error,
+        message: 'Fallo al forzar cambio de estado: ${_mapFailureToMessage(failure)}',
+      )),
+      (ticketGuardado) {
+        final listaActualizada = state.historial
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+        final listaTickets = state.tickets
+            .map((t) => t.id == ticketGuardado.id ? ticketGuardado : t)
+            .toList();
+
+        emit(state.copyWith(
+          status: TicketStatus.operationSuccess,
+          message:
+              '✅ Cambio administrativo aplicado: ticket movido a ${event.nuevoEstado.name} (${event.motivo}).',
+          historial: listaActualizada,
+          tickets: listaTickets,
+          currentTicket: ticketGuardado,
+        ));
+      },
+    );
+  }
+}

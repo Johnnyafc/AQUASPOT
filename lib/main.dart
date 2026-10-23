@@ -69,6 +69,8 @@ class AquaspotApp extends StatelessWidget {
           primaryColor: const Color(0xFF005A9C),
           colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF005A9C)),
           useMaterial3: true,
+          // Fuente incluida en la app (assets/fonts): no depende de descargarla.
+          fontFamily: 'Roboto',
         ),
 
         builder: (context, child) => child ?? const SizedBox.shrink(),

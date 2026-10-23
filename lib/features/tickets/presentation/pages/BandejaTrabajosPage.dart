@@ -5,7 +5,6 @@ import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_eve
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/subir_evidencia_trabajo_page.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/materiales_despachados_taller_page.dart';
-import 'package:aquaspot_postventa/features/tickets/presentation/pages/materiales_recibidos_taller_page.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.dart';
 import 'package:flutter/material.dart';
@@ -663,34 +662,6 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
                       context,
                       MaterialPageRoute(
                         builder: (_) => MaterialesDespachadosTallerPage(ticket: ticket),
-                      ),
-                    ).then((_) {
-                      if (context.mounted) {
-                        context.read<TicketBloc>().add(
-                              ObtenerHistorialTicketsEvent(segmento: _segmentoUsuario),
-                            );
-                      }
-                    });
-                  },
-                ),
-
-                // 6. MATERIALES RECIBIDOS EN TALLER
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.inventory_outlined, size: 18),
-                  label: const Text('Materiales recibidos'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: ticket.materialesValidadosEnTaller
-                        ? const Color(0xFF2E7D32)
-                        : const Color(0xFF00796B),
-                    foregroundColor: Colors.white,
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => MaterialesRecibidosTallerPage(ticket: ticket),
                       ),
                     ).then((_) {
                       if (context.mounted) {

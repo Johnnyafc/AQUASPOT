@@ -59,6 +59,7 @@ dependencies:
   archive: ^4.0.9
   xml: ^7.0.1
   shared_preferences: ^2.5.5
+  syncfusion_officechart: ^34.2.9
 
 dev_dependencies:
   flutter_test:
@@ -79,3 +80,22 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/logo.png
+
+  # Roboto incluida en la app (copiada del SDK de Flutter, licencia Apache 2.0
+  # en assets/fonts/LICENSE-Roboto.txt). En web, sin esto la fuente se
+  # descarga de fonts.gstatic.com y, si falla, los números salen con otra fuente.
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
+        - asset: assets/fonts/Roboto-Italic.ttf
+          style: italic
+        - asset: assets/fonts/Roboto-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Roboto-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Roboto-BoldItalic.ttf
+          weight: 700
+          style: italic
+        - asset: assets/fonts/Roboto-Black.ttf
+          weight: 900

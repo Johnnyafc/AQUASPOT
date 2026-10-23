@@ -1,3 +1,4 @@
+import '../../domain/services/retiro_picking_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -327,8 +328,22 @@ class _MaterialesDespachadosTallerPageState
   }
 
   void _mostrarModalAsignarTecnico(BuildContext context, TicketEntity ticket) {
+    // 🔒 Taller secuencial: una orden activa a la vez y solo pickings con
+    // la evidencia de Bodega subida.
+    final bloqueo = RetiroPickingService.motivoBloqueoAsignacion(ticket);
+    if (bloqueo != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(bloqueo), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    // 📦 Cada retiro = un picking listo (con evidencia). Tickets antiguos
+    // sin pickings siguen con el saldo despachado.
+    final pickingsListos = RetiroPickingService.pickingsAsignables(ticket);
+    final bool sinPickings = ticket.historialDespachos.isEmpty;
     final itemsPorRecoger = ticket.itemsPendientesDeRecogerEnBodega;
-    if (itemsPorRecoger.isEmpty) {
+    if (pickingsListos.isEmpty && (!sinPickings || itemsPorRecoger.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('No hay materiales pendientes de recoger en bodega.'),
@@ -339,6 +354,7 @@ class _MaterialesDespachadosTallerPageState
     }
 
     TecnicoEntity? tecnicoSeleccionado;
+    String? pickingSeleccionado = pickingsListos.isNotEmpty ? pickingsListos.first.id : null;
 
     showModalBottomSheet(
       context: context,
@@ -349,6 +365,21 @@ class _MaterialesDespachadosTallerPageState
       builder: (ctx) {
         return StatefulBuilder(
           builder: (modalContext, setModalState) {
+            final filas = pickingSeleccionado != null
+                ? [
+                    for (final i in RetiroPickingService.items(ticket, pickingSeleccionado!))
+                      if (i.disponible > 0)
+                        (codigo: i.codigo, descripcion: i.descripcion, unidad: i.unidad, cantidad: i.disponible),
+                  ]
+                : [
+                    for (final i in itemsPorRecoger)
+                      (
+                        codigo: i.codigo,
+                        descripcion: i.descripcion,
+                        unidad: i.unidad,
+                        cantidad: ticket.cantidadDisponibleParaAsignarRetiro(i.codigo),
+                      ),
+                  ];
             return SafeArea(
               child: Padding(
                 padding: EdgeInsets.only(
@@ -388,9 +419,40 @@ class _MaterialesDespachadosTallerPageState
                     ),
                     const SizedBox(height: 16),
 
+                    // 📦 Picking a retirar (cada retiro = un picking)
+                    if (pickingsListos.isNotEmpty) ...[
+                      const Text(
+                        'Picking a retirar:',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        initialValue: pickingSeleccionado,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.inventory_2_outlined),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
+                        items: [
+                          for (final pk in pickingsListos)
+                            DropdownMenuItem(
+                              value: pk.id,
+                              child: Text(
+                                '${RetiroPickingService.codigoCorto(ticket, pk.id)} · ${_formatearFecha(pk.fecha)} · '
+                                '${pk.fotosEvidenciasUrls.isEmpty ? 'sin evidencia aún' : 'con evidencia'}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                        onChanged: (v) => setModalState(() => pickingSeleccionado = v),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
                     // Resumen de ítems pendientes de retiro
                     const Text(
-                      'Repuestos alistados en bodega por retirar:',
+                      'Repuestos del picking a retirar:',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
@@ -407,11 +469,11 @@ class _MaterialesDespachadosTallerPageState
                       ),
                       child: ListView.separated(
                         shrinkWrap: true,
-                        itemCount: itemsPorRecoger.length,
+                        itemCount: filas.length,
                         separatorBuilder: (_, _) => const Divider(height: 1),
                         itemBuilder: (context, index) {
-                          final item = itemsPorRecoger[index];
-                          final cant = ticket.cantidadDisponibleParaAsignarRetiro(item.codigo);
+                          final item = filas[index];
+                          final cant = item.cantidad;
                           return Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                             child: Row(
@@ -604,6 +666,7 @@ class _MaterialesDespachadosTallerPageState
                                         nombreSupervisor: supervisorNombre,
                                         rolSupervisor: rolSupervisor,
                                         ordenId: ordenId,
+                                        pickingId: pickingSeleccionado,
                                       ),
                                     );
 
@@ -707,7 +770,9 @@ class _MaterialesDespachadosTallerPageState
             final enviados = ticket.itemsDespachados;
             final faltantes = ticket.itemsFaltantesDespacho;
             final ordenes = ticket.ordenesRecepcion;
-            final bool hayPendientesRecoger = ticket.hayMaterialesDespachadosPorAsignar;
+            final String? motivoBloqueo = RetiroPickingService.motivoBloqueoAsignacion(ticket);
+            final bool hayPendientesRecoger = RetiroPickingService.pickingsDisponibles(ticket).isNotEmpty ||
+                (ticket.historialDespachos.isEmpty && ticket.hayMaterialesDespachadosPorAsignar);
 
             return Scaffold(
               backgroundColor: const Color(0xFFF4F6F9),
@@ -765,7 +830,27 @@ class _MaterialesDespachadosTallerPageState
                       padding: const EdgeInsets.all(16),
                       color: Colors.white,
                       child: SafeArea(
-                        child: SizedBox(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // 🔒 Motivo por el que aún no se puede enviar el siguiente.
+                            if (motivoBloqueo != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.lock_clock, size: 18, color: Colors.orange.shade800),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        motivoBloqueo,
+                                        style: TextStyle(fontSize: 12, color: Colors.orange.shade900, fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
                             icon: const Icon(Icons.person_add_alt_1),
@@ -781,8 +866,10 @@ class _MaterialesDespachadosTallerPageState
                                 borderRadius: BorderRadius.circular(10),
                               ),
                             ),
-                            onPressed: () => _mostrarModalAsignarTecnico(context, ticket),
+                            onPressed: motivoBloqueo != null ? null : () => _mostrarModalAsignarTecnico(context, ticket),
                           ),
+                        ),
+                          ],
                         ),
                       ),
                     )
@@ -951,6 +1038,64 @@ class _MaterialesDespachadosTallerPageState
     );
   }
 
+  /// 🚫 Anula una orden pendiente con motivo obligatorio.
+  Future<void> _confirmarAnularOrden(BuildContext context, TicketEntity ticket, OrdenRecepcionRepuestosEntity orden) async {
+    final motivoCtrl = TextEditingController();
+    final motivo = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: Text('Anular orden ${orden.id}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'La orden queda ANULADA, el enlace del técnico deja de funcionar y su picking vuelve a estar '
+                'listo para retiro.',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: motivoCtrl,
+                maxLines: 2,
+                autofocus: true,
+                onChanged: (_) => setD(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'Motivo (obligatorio)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700, foregroundColor: Colors.white),
+              onPressed: motivoCtrl.text.trim().isEmpty ? null : () => Navigator.pop(ctx, motivoCtrl.text.trim()),
+              child: const Text('Anular orden'),
+            ),
+          ],
+        ),
+      ),
+    );
+    motivoCtrl.dispose();
+    if (motivo == null || !context.mounted) return;
+    final authState = context.read<AuthBloc>().state;
+    String nombre = 'SUPERVISOR';
+    String rol = 'SUPERVISOR';
+    if (authState is Authenticated) {
+      nombre = authState.usuario.nombre;
+      rol = authState.usuario.rol.name.toUpperCase();
+    }
+    context.read<TicketBloc>().add(AnularOrdenRecepcionEvent(
+          ticket: ticket,
+          ordenId: orden.id,
+          motivo: motivo,
+          nombreUsuario: nombre,
+          rolUsuario: rol,
+        ));
+  }
+
   Widget _buildTablaOrdenesRetiro(
       BuildContext context,
       TicketEntity ticket,
@@ -979,12 +1124,17 @@ class _MaterialesDespachadosTallerPageState
         final orden = ordenes[index];
         final bool isPendiente = orden.estado == EstadoOrdenRecepcion.pendienteRecoger;
         final bool isTotal = orden.estado == EstadoOrdenRecepcion.recibidoTotal;
+        final bool isAnulada = orden.estaAnulada;
 
         Color badgeBg = const Color(0xFFFFF3E0);
         Color badgeFg = Colors.orange.shade900;
         String badgeText = 'PENDIENTE RETIRO';
 
-        if (isTotal) {
+        if (isAnulada) {
+          badgeBg = Colors.grey.shade200;
+          badgeFg = Colors.grey.shade700;
+          badgeText = 'ANULADA';
+        } else if (isTotal) {
           badgeBg = const Color(0xFFE8F5E9);
           badgeFg = const Color(0xFF2E7D32);
           badgeText = 'RECIBIDO 100%';
@@ -1033,6 +1183,7 @@ class _MaterialesDespachadosTallerPageState
               ],
             ),
             subtitle: Text(
+              '${orden.pickingId != null ? 'Picking: ${RetiroPickingService.codigoCorto(ticket, orden.pickingId!)} • ' : ''}'
               'Técnico: ${orden.tecnicoNombre} • Asignó: ${orden.supervisorAsigna}',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
             ),
@@ -1092,6 +1243,13 @@ class _MaterialesDespachadosTallerPageState
                           ),
                         ),
                       ),
+                      TextButton.icon(
+                        icon: const Icon(Icons.block, size: 14),
+                        label: const Text('Anular orden', style: TextStyle(fontSize: 12)),
+                        style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
+                        onPressed: () => _confirmarAnularOrden(context, ticket, orden),
+                      ),
+                      const SizedBox(width: 6),
                       OutlinedButton.icon(
                         icon: const Icon(Icons.share_outlined, size: 14),
                         label: const Text('Compartir / Copiar', style: TextStyle(fontSize: 12)),
@@ -1104,6 +1262,18 @@ class _MaterialesDespachadosTallerPageState
                         onPressed: () => _compartirOReenviarLinkOrden(context, ticket, orden),
                       ),
                     ],
+                  ),
+                ),
+              ] else if (isAnulada) ...[
+                const Divider(height: 1),
+                Container(
+                  width: double.infinity,
+                  color: Colors.grey.shade100,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Text(
+                    'Anulada por ${orden.anuladaPor ?? "SUPERVISOR"} (${_formatearFecha(orden.fechaAnulacion)}). '
+                    'Motivo: ${orden.motivoAnulacion ?? "-"}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
                   ),
                 ),
               ] else ...[

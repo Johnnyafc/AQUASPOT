@@ -1,0 +1,133 @@
+// test/ruteo_venta_repuesto_test.dart
+//
+// Venta de Repuesto (fase A): líneas "por determinar" con evidencia propia,
+// serialización de la línea (incluidos tickets antiguos) y regla de ruteo
+// secuencial Evaluación → Compras (solo si falta) → Comercial.
+
+import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
+import 'package:aquaspot_postventa/features/tickets/data/models/linea_repuesto_venta_model.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/linea_repuesto_venta_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/services/ruteo_venta_repuesto_service.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+LineaRepuestoVentaEntity _conocida({double cantidad = 1, double stock = 5, bool existe = true}) =>
+    LineaRepuestoVentaEntity(
+      codigo: 'HID00059',
+      descripcion: 'BOMBA HIDRAULICA',
+      unidad: 'UND',
+      cantidad: cantidad,
+      stockDisponibleAlEvaluar: stock,
+      existeEnSistema: existe,
+    );
+
+const _porDeterminar = LineaRepuestoVentaEntity(
+  codigo: '',
+  descripcion: '',
+  unidad: '',
+  cantidad: 1,
+  porDeterminar: true,
+  descripcionCliente: 'Bomba del brazo, no sabe el modelo',
+  urlsEvidencia: ['https://x/foto.jpg'],
+  urlsAudios: ['https://x/nota.m4a'],
+);
+
+void main() {
+  group('Ruteo de Venta de Repuesto', () {
+    test('todas con stock → Comercial', () {
+      final d = RuteoVentaRepuestoService.destino([_conocida(), _conocida(cantidad: 5, stock: 5)]);
+      expect(d, DestinoVentaRepuesto.comercial);
+      expect(RuteoVentaRepuestoService.estadoDe(d), EstadoTicket.comercial);
+    });
+
+    test('alguna sin stock → Compras', () {
+      final d = RuteoVentaRepuestoService.destino([_conocida(), _conocida(cantidad: 3, stock: 1)]);
+      expect(d, DestinoVentaRepuesto.compras);
+      expect(RuteoVentaRepuestoService.estadoDe(d), EstadoTicket.cotizandoRepuesto);
+    });
+
+    test('no existe en el sistema → Compras aunque figure stock', () {
+      final d = RuteoVentaRepuestoService.destino([_conocida(), _conocida(existe: false)]);
+      expect(d, DestinoVentaRepuesto.compras);
+    });
+
+    test('alguna por determinar → Evaluación (aunque otras no tengan stock)', () {
+      final d = RuteoVentaRepuestoService.destino([_conocida(stock: 0), _porDeterminar]);
+      expect(d, DestinoVentaRepuesto.evaluacion);
+      expect(RuteoVentaRepuestoService.estadoDe(d), EstadoTicket.recepcionFisica);
+    });
+
+    test('evaluada con stock y resto con stock → Comercial; evaluada sin stock → Compras', () {
+      final evaluadaConStock = _porDeterminar.copyWith(
+          porDeterminar: false, codigo: 'X1', descripcion: 'BOMBA', stockDisponibleAlEvaluar: 2);
+      final evaluadaSinStock = evaluadaConStock.copyWith(stockDisponibleAlEvaluar: 0);
+      expect(RuteoVentaRepuestoService.destino([_conocida(), evaluadaConStock]), DestinoVentaRepuesto.comercial);
+      expect(RuteoVentaRepuestoService.destino([_conocida(), evaluadaSinStock]), DestinoVentaRepuesto.compras);
+    });
+
+    test('sin líneas (ticket antiguo con asistencia) → Evaluación', () {
+      expect(RuteoVentaRepuestoService.destino(const []), DestinoVentaRepuesto.evaluacion);
+    });
+
+    test('solo se diferencian en Compras las líneas que lo requieren, con su motivo', () {
+      expect(RuteoVentaRepuestoService.motivoGestion(_conocida()), isNull);
+      expect(RuteoVentaRepuestoService.motivoGestion(_conocida(cantidad: 3, stock: 1)), 'Sin stock (faltan 2)');
+      expect(RuteoVentaRepuestoService.motivoGestion(_conocida(existe: false)), 'No existe en el sistema');
+      expect(RuteoVentaRepuestoService.requiereGestionCompras(_porDeterminar), isFalse);
+    });
+  });
+
+  group('Serialización de la línea', () {
+    test('ida y vuelta conserva los campos nuevos', () {
+      final json = LineaRepuestoVentaModel.fromEntity(_porDeterminar).toJson();
+      final vuelta = LineaRepuestoVentaModel.fromJson(json);
+      expect(vuelta.porDeterminar, isTrue);
+      expect(vuelta.descripcionCliente, _porDeterminar.descripcionCliente);
+      expect(vuelta.urlsEvidencia, _porDeterminar.urlsEvidencia);
+      expect(vuelta.urlsAudios, _porDeterminar.urlsAudios);
+      expect(vuelta.existeEnSistema, isTrue);
+      expect(vuelta.descripcionVisible, _porDeterminar.descripcionCliente);
+    });
+
+    test('fase B: cotización del proveedor y quién/cuándo definió la línea', () {
+      final definida = _porDeterminar.copyWith(
+        porDeterminar: false,
+        codigo: 'PROV-77',
+        descripcion: 'BOMBA VICKERS',
+        existeEnSistema: false,
+        urlsCotizacionProveedor: ['https://x/cot.pdf'],
+        definidoPor: 'SUPERVISOR',
+        definidoEn: DateTime(2026, 10, 14, 10, 30),
+      );
+      final vuelta = LineaRepuestoVentaModel.fromJson(LineaRepuestoVentaModel.fromEntity(definida).toJson());
+      expect(vuelta.urlsCotizacionProveedor, ['https://x/cot.pdf']);
+      expect(vuelta.definidoPor, 'SUPERVISOR');
+      expect(vuelta.definidoEn, DateTime(2026, 10, 14, 10, 30));
+      expect(vuelta.existeEnSistema, isFalse);
+      // Con cotización del proveedor (subida en la Evaluación) ya no pasa por
+      // Compras: va directo a la proforma si el resto tiene stock.
+      expect(RuteoVentaRepuestoService.destino([_conocida(), vuelta]), DestinoVentaRepuesto.comercial);
+      expect(RuteoVentaRepuestoService.motivoGestion(vuelta), isNull);
+      // Pero si otro repuesto del sistema no tiene stock, ese sí va a Compras.
+      expect(RuteoVentaRepuestoService.destino([_conocida(stock: 0), vuelta]), DestinoVentaRepuesto.compras);
+    });
+
+    test('línea antigua sin campos nuevos usa valores por defecto', () {
+      final vieja = LineaRepuestoVentaModel.fromJson({
+        'codigo': 'A1',
+        'descripcion': 'FILTRO',
+        'unidad': 'UND',
+        'cantidad': 2,
+        'stockDisponibleAlEvaluar': 4,
+      });
+      expect(vieja.porDeterminar, isFalse);
+      expect(vieja.descripcionCliente, '');
+      expect(vieja.urlsEvidencia, isEmpty);
+      expect(vieja.urlsAudios, isEmpty);
+      expect(vieja.existeEnSistema, isTrue);
+      expect(vieja.urlsCotizacionProveedor, isEmpty);
+      expect(vieja.definidoPor, isNull);
+      expect(vieja.definidoEn, isNull);
+      expect(vieja.descripcionVisible, 'FILTRO');
+    });
+  });
+}

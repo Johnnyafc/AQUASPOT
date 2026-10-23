@@ -1,0 +1,209 @@
+// test/evaluacion_venta_repuesto_test.dart
+//
+// Venta de Repuesto (arquitectura limpia): reglas del servicio de dominio
+// EvaluacionVentaRepuestoService y el use case
+// FinalizarEvaluacionVentaRepuestoUseCase con un repositorio falso (sin
+// Firebase): ruteo, evento de auditoría, candado de estado y validación.
+
+import 'package:aquaspot_postventa/core/enum/proceso_auditoria.dart';
+import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
+import 'package:aquaspot_postventa/core/errors/failures.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/evento_auditoria_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/linea_repuesto_venta_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/ticket_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/repositories/ticket_repository.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/services/evaluacion_venta_repuesto_service.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/finalizar_evaluacion_venta_repuesto_usecase.dart';
+import 'package:dartz/dartz.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+class _RepoFalso implements ITicketRepository {
+  Failure? falla;
+  List<LineaRepuestoVentaEntity>? lineas;
+  EstadoTicket? estadoDestino;
+  EventoAuditoriaEntity? evento;
+  EstadoTicket? estadoRequerido;
+  int llamadas = 0;
+
+  @override
+  Future<Either<Failure, void>> guardarEvaluacionVentaRepuesto({
+    required String ticketId,
+    required List<LineaRepuestoVentaEntity> lineas,
+    required EstadoTicket estadoDestino,
+    required EventoAuditoriaEntity evento,
+    required EstadoTicket estadoRequerido,
+  }) async {
+    llamadas++;
+    this.lineas = lineas;
+    this.estadoDestino = estadoDestino;
+    this.evento = evento;
+    this.estadoRequerido = estadoRequerido;
+    return falla != null ? Left(falla!) : const Right(null);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+const _conocida = LineaRepuestoVentaEntity(
+  codigo: 'hid00059 ',
+  descripcion: 'BOMBA',
+  unidad: 'UND',
+  cantidad: 2,
+  stockDisponibleAlEvaluar: 0,
+);
+
+const _porDeterminar = LineaRepuestoVentaEntity(
+  codigo: '',
+  descripcion: '',
+  unidad: '',
+  cantidad: 1,
+  porDeterminar: true,
+  descripcionCliente: 'Polea motor Deutz',
+);
+
+final _ticket = TicketEntity(
+  id: 'REQ-00080',
+  estadoActual: EstadoTicket.recepcionFisica,
+  sede: Sede.NINGUNO,
+  clienteId: 'Cliente',
+  campamento: '',
+  nombreContacto: 'Contacto',
+  telefonoContacto: '',
+  emailContacto: '',
+  equipo: TipoEquipo.Cosechadora,
+  equipoDetalle: null,
+  accesoriosRecibidos: null,
+  numeroSerie: null,
+  fallaReportada: '',
+  historialEventos: const [],
+  tipoRequerimiento: TipoRequerimiento.ventaRepuesto,
+  lugarAtencion: LugarAtencion.noAplica,
+  esRegistroCompleto: true,
+  lineasRepuestoVenta: const [_conocida, _porDeterminar],
+);
+
+void main() {
+  final fecha = DateTime(2026, 10, 14, 9);
+
+  group('EvaluacionVentaRepuestoService', () {
+    test('conStockActual: toma el stock neto por código y no toca por determinar ni fuera del sistema', () {
+      final fuera = _conocida.copyWith(existeEnSistema: false, stockDisponibleAlEvaluar: 0);
+      final r = EvaluacionVentaRepuestoService.conStockActual(
+        [_conocida, _porDeterminar, fuera],
+        {'HID00059': 5},
+      );
+      expect(r[0].stockDisponibleAlEvaluar, 5); // clave normalizada (mayúsculas, sin espacios)
+      expect(r[1], _porDeterminar);
+      expect(r[2], fuera);
+    });
+
+    test('conStockActual: código que no está en el inventario → stock 0', () {
+      final r = EvaluacionVentaRepuestoService.conStockActual([_conocida.copyWith(stockDisponibleAlEvaluar: 9)], {});
+      expect(r.single.stockDisponibleAlEvaluar, 0);
+    });
+
+    test('definirDesdeInventario: queda como repuesto del sistema', () {
+      final l = EvaluacionVentaRepuestoService.definirDesdeInventario(
+        _porDeterminar,
+        codigo: 'POL-01',
+        descripcion: 'POLEA',
+        unidad: 'UND',
+        cantidad: 2,
+        stockNeto: 3,
+        definidoPor: 'SUP',
+        definidoEn: fecha,
+      );
+      expect(l.porDeterminar, isFalse);
+      expect(l.existeEnSistema, isTrue);
+      expect(l.codigo, 'POL-01');
+      expect(l.cantidad, 2);
+      expect(l.stockDisponibleAlEvaluar, 3);
+      expect(l.descripcionCliente, 'Polea motor Deutz'); // se conserva lo que dijo el cliente
+      expect(l.definidoPor, 'SUP');
+      expect(l.definidoEn, fecha);
+    });
+
+    test('definirConCotizacionProveedor: queda fuera del sistema y sin stock', () {
+      final l = EvaluacionVentaRepuestoService.definirConCotizacionProveedor(
+        _porDeterminar,
+        codigoProveedor: ' PROV-9 ',
+        descripcion: ' POLEA DEUTZ ',
+        cantidad: 1,
+        definidoPor: 'SUP',
+        definidoEn: fecha,
+      );
+      expect(l.porDeterminar, isFalse);
+      expect(l.existeEnSistema, isFalse);
+      expect(l.codigo, 'PROV-9');
+      expect(l.descripcion, 'POLEA DEUTZ');
+      expect(l.stockDisponibleAlEvaluar, 0);
+    });
+  });
+
+  group('FinalizarEvaluacionVentaRepuestoUseCase', () {
+    test('todas con stock → Comercial; guarda con candado en Evaluación y evento etiquetado', () async {
+      final repo = _RepoFalso();
+      final lineas = [
+        _conocida.copyWith(stockDisponibleAlEvaluar: 5),
+        _porDeterminar.copyWith(porDeterminar: false, codigo: 'POL-01', stockDisponibleAlEvaluar: 4),
+      ];
+      final r = await FinalizarEvaluacionVentaRepuestoUseCase(repo)(
+        ticket: _ticket,
+        lineas: lineas,
+        nombreUsuario: 'SUP',
+        rolUsuario: 'SUPERVISOR',
+        ahora: fecha,
+      );
+      final t = r.getOrElse(() => throw 'falló');
+      expect(t.estadoActual, EstadoTicket.comercial);
+      expect(t.lineasRepuestoVenta, lineas);
+      expect(t.historialEventos.last.accion, 'EVALUACIÓN DE VENTA DE REPUESTO COMPLETADA');
+      expect(repo.estadoDestino, EstadoTicket.comercial);
+      expect(repo.estadoRequerido, EstadoTicket.recepcionFisica);
+      expect(repo.evento!.proceso, ProcesoAuditoria.evaluacion);
+      expect(repo.evento!.hito, HitoProceso.fin);
+      expect(repo.evento!.habilita, [ProcesoAuditoria.comercial]);
+      expect(repo.evento!.timestamp, fecha);
+    });
+
+    test('alguna fuera del sistema (cotización del proveedor) → Compras', () async {
+      final repo = _RepoFalso();
+      final r = await FinalizarEvaluacionVentaRepuestoUseCase(repo)(
+        ticket: _ticket,
+        lineas: [
+          _conocida.copyWith(stockDisponibleAlEvaluar: 5),
+          _porDeterminar.copyWith(porDeterminar: false, existeEnSistema: false, urlsCotizacionProveedor: ['u']),
+        ],
+        nombreUsuario: 'SUP',
+        rolUsuario: 'SUPERVISOR',
+      );
+      expect(r.isRight(), isTrue);
+      expect(repo.estadoDestino, EstadoTicket.cotizandoRepuesto);
+      expect(repo.evento!.habilita, [ProcesoAuditoria.compras]);
+    });
+
+    test('con líneas por determinar no guarda nada (ValidationFailure)', () async {
+      final repo = _RepoFalso();
+      final r = await FinalizarEvaluacionVentaRepuestoUseCase(repo)(
+        ticket: _ticket,
+        lineas: const [_conocida, _porDeterminar],
+        nombreUsuario: 'SUP',
+        rolUsuario: 'SUPERVISOR',
+      );
+      expect(r.fold((f) => f, (_) => null), isA<ValidationFailure>());
+      expect(repo.llamadas, 0);
+    });
+
+    test('si el repositorio falla (candado de estado), devuelve la falla', () async {
+      final repo = _RepoFalso()..falla = const ServerFailure('El ticket ya no está en Evaluación');
+      final r = await FinalizarEvaluacionVentaRepuestoUseCase(repo)(
+        ticket: _ticket,
+        lineas: [_conocida.copyWith(stockDisponibleAlEvaluar: 5)],
+        nombreUsuario: 'SUP',
+        rolUsuario: 'SUPERVISOR',
+      );
+      expect(r.fold((f) => f.message, (_) => ''), 'El ticket ya no está en Evaluación');
+    });
+  });
+}

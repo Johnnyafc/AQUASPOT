@@ -1,0 +1,254 @@
+// lib/features/tickets/domain/services/inconsistencias_trazabilidad_service.dart
+//
+// 🔎 Detecta tickets cuya trazabilidad (historialEventos) tiene algo raro,
+// para la sección "Tickets con posibles inconsistencias" del dashboard
+// (visible solo para la cuenta administradora).
+//
+// Cada regla es una función aparte: para agregar una regla nueva, se
+// agrega su id/nombre en ReglasInconsistencia y su función aquí, y se
+// llama desde `detectar` (o desde `detectarAtipicos` si compara contra
+// otros tickets). Los umbrales están como constantes al inicio.
+
+import '../entities/evento_auditoria_entity.dart';
+import '../../../../core/enum/proceso_auditoria.dart';
+import 'tiempos_por_proceso_service.dart';
+
+class InconsistenciaTicket {
+  final String ticketId;
+  final String reglaId;
+  final String detalle;
+
+  const InconsistenciaTicket({required this.ticketId, required this.reglaId, required this.detalle});
+
+  String get regla => ReglasInconsistencia.nombres[reglaId] ?? reglaId;
+
+  /// Identifica esta inconsistencia para marcarla como "Revisada".
+  String get clave => '$reglaId: $detalle';
+}
+
+class ReglasInconsistencia {
+  static const ordenFlujo = 'orden_flujo';
+  static const faltaPaso = 'falta_paso';
+  static const mismoMinuto = 'mismo_minuto';
+  static const creadoTarde = 'creado_tarde';
+  static const fechaFueraDeRango = 'fecha_fuera_de_rango';
+  static const tiempoAtipico = 'tiempo_atipico';
+
+  static const nombres = {
+    ordenFlujo: 'Orden de flujo no habitual',
+    faltaPaso: 'Falta un paso esperado',
+    mismoMinuto: 'Pasos de distintas etapas en el mismo minuto',
+    creadoTarde: 'Ticket creado cuando el equipo ya había llegado',
+    fechaFueraDeRango: 'Fecha fuera de rango',
+    tiempoAtipico: 'Tiempo atípico',
+  };
+}
+
+class InconsistenciasTrazabilidadService {
+  // ------------------------------------------------------------ Umbrales
+  /// "Tiempo atípico": más de N veces el tiempo típico (mediana) del proceso…
+  static const double factorAtipico = 3.0;
+  /// …y al menos estas horas (evita marcar procesos que normalmente duran minutos).
+  static const double minimoHorasAtipico = 8.0;
+  /// Tickets finalizados mínimos de un proceso para calcular su tiempo típico.
+  static const int minimoTicketsTipico = 5;
+  /// "Creado tarde": recibido desde El Guabo a menos de estos minutos de crear el ticket.
+  static const int minutosCreadoTarde = 60;
+  /// "Fecha futura": tolerancia por diferencias de reloj.
+  static const int minutosToleranciaFutura = 10;
+
+  /// Etapa del flujo para la regla de orden. Las etapas con el mismo número
+  /// pueden ir en paralelo. Entrega no se valida (guía y factura se pueden
+  /// cargar antes, por diseño).
+  static const Map<String, int> etapa = {
+    'Recepción': 1,
+    'Evaluación Técnica': 2,
+    'Revisión Garantía': 3,
+    'En cotización': 4,
+    'Proforma enviada': 5,
+    'Costos': 6,
+    'Compras': 6,
+    'Validación Bodega': 6,
+    'Despacho': 6,
+    'Proceso de Trabajo': 6,
+    'Revisión de pagos': 7,
+  };
+
+  /// Procesos que todo ticket finalizado debería tener.
+  static const List<String> pasosEsperados = ['Evaluación Técnica', 'Proceso de Trabajo', 'Revisión de pagos'];
+
+  static String? _proceso(EventoAuditoriaEntity e) =>
+      e.proceso != null ? e.proceso!.etiquetaDashboard : TiemposPorProcesoService.procesoPorTexto(e.accion);
+
+  static String _dd(int v) => v.toString().padLeft(2, '0');
+  static String _fecha(DateTime d) => '${_dd(d.day)}/${_dd(d.month)}/${d.year} ${_dd(d.hour)}:${_dd(d.minute)}';
+  static String _duracion(double horas) {
+    final min = (horas * 60).round();
+    final d = min ~/ 1440, h = (min % 1440) ~/ 60, m = min % 60;
+    if (d > 0) return '${d}d ${h}h';
+    if (h > 0) return '${h}h ${m}m';
+    return '${m}m';
+  }
+
+  /// Reglas que se evalúan con el historial de UN ticket.
+  static List<InconsistenciaTicket> detectar({
+    required String ticketId,
+    required List<EventoAuditoriaEntity> historial,
+    required bool finalizado,
+    DateTime? ahora,
+  }) {
+    if (historial.isEmpty) return const [];
+    final eventos = [...historial]..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    return [
+      ..._ordenFlujo(ticketId, eventos),
+      if (finalizado) ..._faltaPaso(ticketId, eventos),
+      ..._mismoMinuto(ticketId, eventos),
+      ..._creadoTarde(ticketId, eventos),
+      ..._fechaFueraDeRango(ticketId, eventos, ahora ?? DateTime.now()),
+    ];
+  }
+
+  // 1. Un paso de una etapa anterior ocurre después de uno de una etapa
+  //    posterior. Una "solicitud de modificación" de la proforma permite
+  //    volver a cotizar sin marcarlo.
+  static List<InconsistenciaTicket> _ordenFlujo(String id, List<EventoAuditoriaEntity> eventos) {
+    final out = <InconsistenciaTicket>[];
+    EventoAuditoriaEntity? masAvanzado;
+    var etapaMax = 0;
+    for (final e in eventos) {
+      final accion = e.accion.toUpperCase();
+      if (accion.startsWith('SOLICITUD DE MODIFICACI')) {
+        // El cliente pidió cambios: Comercial puede volver a cotizar.
+        etapaMax = etapa['Revisión Garantía']!;
+        masAvanzado = e;
+        continue;
+      }
+      // Reportes y ajustes de Comercial pueden darse en cualquier momento.
+      if (accion.startsWith('REPORTE COMERCIAL') || accion.startsWith('COMERCIAL MODIFIC')) continue;
+      final p = _proceso(e);
+      final n = p == null ? null : etapa[p];
+      if (n == null) continue;
+      if (n < etapaMax && masAvanzado != null) {
+        out.add(InconsistenciaTicket(
+          ticketId: id,
+          reglaId: ReglasInconsistencia.ordenFlujo,
+          detalle: '«$p» (${_fecha(e.timestamp)}) después de «${_proceso(masAvanzado) ?? masAvanzado.accion}» (${_fecha(masAvanzado.timestamp)})',
+        ));
+      }
+      if (n >= etapaMax) {
+        etapaMax = n;
+        masAvanzado = e;
+      }
+    }
+    return out;
+  }
+
+  // 2. Ticket finalizado sin alguno de los pasos esperados.
+  static List<InconsistenciaTicket> _faltaPaso(String id, List<EventoAuditoriaEntity> eventos) {
+    final presentes = eventos.map(_proceso).whereType<String>().toSet();
+    return [
+      for (final paso in pasosEsperados)
+        if (!presentes.contains(paso))
+          InconsistenciaTicket(ticketId: id, reglaId: ReglasInconsistencia.faltaPaso, detalle: 'Finalizado sin «$paso»'),
+    ];
+  }
+
+  // 3. Dos pasos seguidos de etapas distintas en el mismo minuto
+  //    (posible registro tardío o en lote).
+  static List<InconsistenciaTicket> _mismoMinuto(String id, List<EventoAuditoriaEntity> eventos) {
+    final out = <InconsistenciaTicket>[];
+    for (var i = 1; i < eventos.length; i++) {
+      final a = eventos[i - 1], b = eventos[i];
+      final pa = _proceso(a), pb = _proceso(b);
+      if (pa == null || pb == null || pa == pb) continue;
+      if (pa == TiemposPorProcesoService.etiquetaOtro || pb == TiemposPorProcesoService.etiquetaOtro) continue;
+      if (b.timestamp.difference(a.timestamp).inMinutes == 0) {
+        out.add(InconsistenciaTicket(
+          ticketId: id,
+          reglaId: ReglasInconsistencia.mismoMinuto,
+          detalle: '«$pa» y «$pb» registrados a la vez (${_fecha(b.timestamp)})',
+        ));
+      }
+    }
+    return out;
+  }
+
+  // 4. Recibido desde El Guabo poco después de crear el ticket: el equipo ya
+  //    había llegado cuando se creó, así que el traslado no se pudo medir.
+  static List<InconsistenciaTicket> _creadoTarde(String id, List<EventoAuditoriaEntity> eventos) {
+    final creacion = eventos.where((e) => e.accion.toUpperCase().startsWith('CREACIÓN DE REQUERIMIENTO'));
+    final guabo = eventos.where((e) => e.accion.toUpperCase().contains('GUABO'));
+    if (creacion.isEmpty || guabo.isEmpty) return const [];
+    final minutos = guabo.first.timestamp.difference(creacion.first.timestamp).inMinutes;
+    if (minutos < 0 || minutos > minutosCreadoTarde) return const [];
+    return [
+      InconsistenciaTicket(
+        ticketId: id,
+        reglaId: ReglasInconsistencia.creadoTarde,
+        detalle: 'Recibido desde El Guabo $minutos min después de crear el ticket (${_fecha(creacion.first.timestamp)}): el traslado no se pudo medir',
+      ),
+    ];
+  }
+
+  // 5. Evento con fecha futura o anterior a la creación del ticket
+  //    (posible reloj mal configurado en el dispositivo).
+  static List<InconsistenciaTicket> _fechaFueraDeRango(String id, List<EventoAuditoriaEntity> eventos, DateTime ahora) {
+    final out = <InconsistenciaTicket>[];
+    final creacion = eventos.where((e) => e.accion.toUpperCase().startsWith('CREACIÓN DE REQUERIMIENTO'));
+    final fechaCreacion = creacion.isEmpty ? null : creacion.first.timestamp;
+    final limiteFuturo = ahora.add(const Duration(minutes: minutosToleranciaFutura));
+    for (final e in eventos) {
+      final nombre = _proceso(e) ?? e.accion;
+      if (e.timestamp.isAfter(limiteFuturo)) {
+        out.add(InconsistenciaTicket(
+          ticketId: id,
+          reglaId: ReglasInconsistencia.fechaFueraDeRango,
+          detalle: '«$nombre» con fecha futura (${_fecha(e.timestamp)})',
+        ));
+      } else if (fechaCreacion != null && fechaCreacion.difference(e.timestamp).inMinutes >= 1) {
+        out.add(InconsistenciaTicket(
+          ticketId: id,
+          reglaId: ReglasInconsistencia.fechaFueraDeRango,
+          detalle: '«$nombre» (${_fecha(e.timestamp)}) anterior a la creación del ticket (${_fecha(fechaCreacion)})',
+        ));
+      }
+    }
+    return out;
+  }
+
+  // 6. Un proceso que tardó mucho más de lo típico, comparado contra la
+  //    mediana de ese proceso en los tickets finalizados.
+  //    horasPorTicket: ticketId -> proceso -> horas totales del proceso.
+  static List<InconsistenciaTicket> detectarAtipicos({
+    required Map<String, Map<String, double>> horasPorTicket,
+    required Set<String> finalizados,
+  }) {
+    final muestras = <String, List<double>>{};
+    for (final id in finalizados) {
+      horasPorTicket[id]?.forEach((proceso, horas) => muestras.putIfAbsent(proceso, () => []).add(horas));
+    }
+    final tipico = <String, double>{};
+    muestras.forEach((proceso, lista) {
+      if (lista.length < minimoTicketsTipico) return;
+      lista.sort();
+      final m = lista.length ~/ 2;
+      tipico[proceso] = lista.length.isOdd ? lista[m] : (lista[m - 1] + lista[m]) / 2;
+    });
+
+    final out = <InconsistenciaTicket>[];
+    horasPorTicket.forEach((id, porProceso) {
+      porProceso.forEach((proceso, horas) {
+        final t = tipico[proceso];
+        if (t == null || t <= 0) return;
+        if (horas > t * factorAtipico && horas >= minimoHorasAtipico) {
+          out.add(InconsistenciaTicket(
+            ticketId: id,
+            reglaId: ReglasInconsistencia.tiempoAtipico,
+            detalle: '«$proceso» tardó ${_duracion(horas)} (lo típico es ~${_duracion(t)})',
+          ));
+        }
+      });
+    });
+    return out;
+  }
+}

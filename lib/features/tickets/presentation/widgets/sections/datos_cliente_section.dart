@@ -21,6 +21,13 @@ class DatosClienteSection extends StatelessWidget {
   // ⚙️ EL PIN DE CONTROL (Enclavamiento lógico)
   final bool showSede;
 
+  // 🆕 MODO VENTA DE REPUESTO: cambia el título a "Datos del Cliente"
+  // (sin Sede) y reemplaza el dropdown de Sede por "Medio de contacto".
+  // No afecta a Reparación/Garantía -- por defecto queda apagado.
+  final bool esVenta;
+  final MedioContacto? medioContacto;
+  final ValueChanged<MedioContacto?>? onMedioContactoChanged;
+
   const DatosClienteSection({
     super.key,
     required this.listaClientes,
@@ -35,6 +42,9 @@ class DatosClienteSection extends StatelessWidget {
     required this.onClienteSelected,
     required this.onClienteCleared,
     this.showSede = true, // Por defecto visible
+    this.esVenta = false,
+    this.medioContacto,
+    this.onMedioContactoChanged,
   });
 
   @override
@@ -42,11 +52,21 @@ class DatosClienteSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionTitleWidget(title: '1. Datos del Cliente y Sede'),
+        SectionTitleWidget(title: esVenta ? '1. Datos del Cliente' : '1. Datos del Cliente y Sede'),
         const SizedBox(height: 16),
 
-        // ⚙️ COMPUERTA LÓGICA: Solo se renderiza si el estado es 'true'
-        if (showSede) ...[
+        // 🆕 MODO VENTA: "Medio de contacto" en vez del dropdown de Sede.
+        if (esVenta) ...[
+          CustomDropdownField<MedioContacto>(
+            label: 'Medio de contacto',
+            icon: Icons.contact_phone,
+            items: MedioContacto.values,
+            value: medioContacto,
+            onChanged: onMedioContactoChanged ?? (_) {},
+          ),
+          const SizedBox(height: 16),
+        ] else if (showSede) ...[
+          // ⚙️ COMPUERTA LÓGICA: Solo se renderiza si el estado es 'true'
           CustomDropdownField<Sede>(
             label: 'Lugar de recepción', 
             icon: Icons.business, 

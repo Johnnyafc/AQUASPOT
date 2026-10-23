@@ -1,0 +1,422 @@
+// lib/features/tickets/presentation/services/generador_excel_indicadores_postventa.dart
+//
+// 📊 Excel de "Indicadores de Postventa" (botón del Dashboard): una hoja por
+// indicador (columnas = meses) y una hoja de detalle por indicador con los
+// tickets que entraron en el cálculo. Los números salen de
+// IndicadoresPostventaService.
+
+import 'dart:typed_data';
+import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xlsio;
+import '../../domain/services/indicadores_postventa_service.dart';
+
+typedef _Svc = IndicadoresPostventaService;
+
+const _mesesCortos = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const _responsables = 'Tyron, Medardo y Diego';
+const _ordenEquipos = ['Caracol', 'Contador', 'Cosechadora', 'Otros'];
+const _ordenLugares = [_Svc.taller, _Svc.campo, _Svc.sinLugar];
+
+String _mes(DateTime m) => '${_mesesCortos[m.month - 1]}-${m.year}';
+String _fecha(DateTime d) =>
+    '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year} '
+    '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+double _pct(num parte, num total) => total == 0 ? 0 : parte / total;
+
+/// Escritura secuencial sobre una hoja (fila actual + estilos comunes).
+class _Hoja {
+  final xlsio.Worksheet sheet;
+  int fila = 1;
+  int maxColumna = 1;
+
+  _Hoja(this.sheet);
+
+  xlsio.Range _celda(int f, int c) {
+    if (c > maxColumna) maxColumna = c;
+    return sheet.getRangeByIndex(f, c);
+  }
+
+  void texto(int c, String valor, {bool negrita = false, String? fondo}) {
+    final r = _celda(fila, c)..setText(valor);
+    r.cellStyle.bold = negrita;
+    if (fondo != null) r.cellStyle.backColor = fondo;
+  }
+
+  void numero(int c, num valor, {String formato = '0', bool negrita = false}) {
+    final r = _celda(fila, c)..setNumber(valor.toDouble());
+    r.numberFormat = formato;
+    r.cellStyle.bold = negrita;
+  }
+
+  void porcentaje(int c, double valor, {bool negrita = false}) => numero(c, valor, formato: '0.0%', negrita: negrita);
+
+  void titulo(String valor) {
+    final r = _celda(fila, 1)..setText(valor);
+    r.cellStyle.bold = true;
+    r.cellStyle.fontSize = 14;
+    r.cellStyle.fontColor = '#1F3864';
+    fila++;
+  }
+
+  void linea(String valor, {bool negrita = false}) {
+    texto(1, valor, negrita: negrita);
+    fila++;
+  }
+
+  void subtitulo(String valor) {
+    final r = _celda(fila, 1)..setText(valor);
+    r.cellStyle.bold = true;
+    r.cellStyle.fontSize = 12;
+    r.cellStyle.fontColor = '#005A9C';
+    fila++;
+  }
+
+  void encabezados(List<String> valores, {int desde = 1}) {
+    for (var i = 0; i < valores.length; i++) {
+      texto(desde + i, valores[i], negrita: true, fondo: '#D9E1F2');
+    }
+    fila++;
+  }
+
+  void saltar([int n = 1]) => fila += n;
+
+  void ajustarColumnas() {
+    for (var c = 1; c <= maxColumna; c++) {
+      sheet.autoFitColumn(c);
+    }
+  }
+}
+
+class GeneradorExcelIndicadoresPostventa {
+  static Uint8List generar(IndicadoresPostventa datos) {
+    final workbook = xlsio.Workbook(7);
+    final periodo = datos.meses.isEmpty
+        ? ''
+        : '${_mes(datos.meses.first)} a ${_mes(datos.meses.last)}';
+
+    _hojaIndicador1(_Hoja(workbook.worksheets[0]..name = 'Indicador 1'), datos, periodo);
+    _hojaIndicador2(_Hoja(workbook.worksheets[1]..name = 'Indicador 2'), datos, periodo);
+    _hojaIndicador3(_Hoja(workbook.worksheets[2]..name = 'Indicador 3'), datos, periodo);
+    _detalle1(_Hoja(workbook.worksheets[3]..name = 'Detalle I1'), datos);
+    _detalle2(_Hoja(workbook.worksheets[4]..name = 'Detalle I2'), datos);
+    _detalle3(_Hoja(workbook.worksheets[5]..name = 'Detalle I3'), datos);
+    _hojaCriterios(_Hoja(workbook.worksheets[6]..name = 'Criterios'));
+
+    final bytes = workbook.saveAsStream();
+    workbook.dispose();
+    return Uint8List.fromList(bytes);
+  }
+
+  static void _cabecera(_Hoja h, String titulo, String granularidad, String periodo, String criterio) {
+    h.titulo(titulo);
+    h.linea('Granularidad: $granularidad');
+    h.linea('Frecuencia: Mensual');
+    h.linea('Responsables: $_responsables');
+    h.linea('Período: $periodo');
+    h.linea('Criterio: $criterio');
+    h.saltar();
+  }
+
+  static List<String> _lugaresPresentes(Iterable<String> lugares) =>
+      _ordenLugares.where((l) => l != _Svc.sinLugar || lugares.contains(_Svc.sinLugar)).toList();
+
+  static List<String> _equiposPresentes(Iterable<String> equipos) {
+    final set = equipos.toSet();
+    return [
+      ..._ordenEquipos.where(set.contains),
+      ...(set.difference(_ordenEquipos.toSet()).toList()..sort()),
+    ];
+  }
+
+  // ------------------------------------------------------------- Indicador 1
+  static void _hojaIndicador1(_Hoja h, IndicadoresPostventa d, String periodo) {
+    _cabecera(
+      h,
+      'INDICADOR 1 — N.º de servicios técnicos realizados por tipo',
+      'Taller y campo',
+      periodo,
+      'Tickets que ya terminaron Proceso de Trabajo (hoy en Revisión de pagos, Entrega o Finalizado), '
+          'contados en el mes en que salieron de Proceso de Trabajo. Sin anulados.',
+    );
+    final lugares = _lugaresPresentes(d.servicios.map((s) => s.lugar));
+
+    void tabla(String subtitulo, String nombreGrupo, String Function(ServicioRealizado) grupo, List<String> grupos) {
+      h.subtitulo(subtitulo);
+      h.encabezados([nombreGrupo, 'Lugar', for (final m in d.meses) _mes(m), 'Total']);
+      for (final g in grupos) {
+        for (final lugar in [...lugares, 'Total']) {
+          final filas = d.servicios.where((s) => grupo(s) == g && (lugar == 'Total' || s.lugar == lugar));
+          final esTotal = lugar == 'Total';
+          h.texto(1, g, negrita: esTotal);
+          h.texto(2, lugar, negrita: esTotal);
+          for (var i = 0; i < d.meses.length; i++) {
+            h.numero(3 + i, filas.where((s) => s.mes == d.meses[i]).length, negrita: esTotal);
+          }
+          h.numero(3 + d.meses.length, filas.length, negrita: true);
+          h.saltar();
+        }
+      }
+      // Total general por lugar.
+      for (final lugar in [...lugares, 'Total']) {
+        final filas = d.servicios.where((s) => lugar == 'Total' || s.lugar == lugar);
+        h.texto(1, 'TOTAL', negrita: true, fondo: '#F2F2F2');
+        h.texto(2, lugar, negrita: true, fondo: '#F2F2F2');
+        for (var i = 0; i < d.meses.length; i++) {
+          h.numero(3 + i, filas.where((s) => s.mes == d.meses[i]).length, negrita: true);
+        }
+        h.numero(3 + d.meses.length, filas.length, negrita: true);
+        h.saltar();
+      }
+      h.saltar();
+    }
+
+    final tipos = (d.servicios.map((s) => s.tipo).toSet().toList()..sort());
+    tabla('Por tipo de requerimiento', 'Tipo', (s) => s.tipo, tipos);
+    tabla('Por tipo de equipo', 'Equipo', (s) => s.equipo, _equiposPresentes(d.servicios.map((s) => s.equipo)));
+    if (d.servicios.isEmpty) h.linea('Sin servicios realizados en el período.');
+    h.ajustarColumnas();
+  }
+
+  // ------------------------------------------------------------- Indicador 2
+  static void _hojaIndicador2(_Hoja h, IndicadoresPostventa d, String periodo) {
+    _cabecera(
+      h,
+      'INDICADOR 2 — Lead time de atención del servicio de Postventa',
+      'Taller y campo',
+      periodo,
+      'Tickets finalizados en cada mes. Lead time = días desde la creación del ticket hasta su finalización '
+          '(igual que "Días promedio" del Dashboard). Sin anulados.',
+    );
+    final lugares = _lugaresPresentes(d.leadTimes.map((l) => l.lugar));
+    h.encabezados(['Lugar', 'Métrica', for (final m in d.meses) _mes(m), 'Período']);
+
+    for (final lugar in [...lugares, 'Total']) {
+      final delLugar = d.leadTimes.where((l) => lugar == 'Total' || l.lugar == lugar).toList();
+      final porMes = [for (final m in d.meses) ResumenLeadTime.de(delLugar.where((l) => l.mes == m))];
+      final periodoRes = ResumenLeadTime.de(delLugar);
+      final metricas = <(String, num? Function(ResumenLeadTime?), String)>[
+        ('Lead time promedio (días)', (r) => r?.promedio, '0.0'),
+        ('N.º de tickets finalizados', (r) => r?.tickets ?? 0, '0'),
+        ('Mínimo (días)', (r) => r?.minimo, '0.0'),
+        ('Máximo (días)', (r) => r?.maximo, '0.0'),
+      ];
+      final esTotal = lugar == 'Total';
+      for (final (nombre, valor, formato) in metricas) {
+        h.texto(1, lugar, negrita: esTotal);
+        h.texto(2, nombre, negrita: esTotal);
+        for (var i = 0; i < porMes.length; i++) {
+          final v = valor(porMes[i]);
+          if (v == null) {
+            h.texto(3 + i, '—');
+          } else {
+            h.numero(3 + i, v, formato: formato, negrita: esTotal);
+          }
+        }
+        final vp = valor(periodoRes);
+        if (vp == null) {
+          h.texto(3 + porMes.length, '—');
+        } else {
+          h.numero(3 + porMes.length, vp, formato: formato, negrita: true);
+        }
+        h.saltar();
+      }
+      h.saltar();
+    }
+    if (d.leadTimes.isEmpty) h.linea('Sin tickets finalizados en el período.');
+    h.ajustarColumnas();
+  }
+
+  // ------------------------------------------------------------- Indicador 3
+  static void _hojaIndicador3(_Hoja h, IndicadoresPostventa d, String periodo) {
+    _cabecera(
+      h,
+      'INDICADOR 3 — % de recurrencia de fallas por sistema y tipo de equipo',
+      'Por tipo de máquina y segmentado por sistema (categoría de falla), con las razones de falla por sistema',
+      periodo,
+      'Fallas diagnosticadas en Proceso de Trabajo, por mes de creación del ticket (igual que el filtro de '
+          'fechas del Dashboard). Cada falla suma 1; cada razón marcada suma 1. Sin anulados.',
+    );
+    if (d.fallas.isEmpty) {
+      h.linea('Sin fallas diagnosticadas en el período.');
+      h.ajustarColumnas();
+      return;
+    }
+
+    final cabMeses = [for (final m in d.meses) ...['${_mes(m)} cant.', '${_mes(m)} %'], 'Total cant.', 'Total %'];
+
+    for (final equipo in _equiposPresentes(d.fallas.map((f) => f.equipo))) {
+      final delEquipo = d.fallas.where((f) => f.equipo == equipo).toList();
+      final tickets = delEquipo.map((f) => f.ticket.id).toSet().length;
+      h.subtitulo('${equipo.toUpperCase()} — ${delEquipo.length} falla(s) en $tickets ticket(s)');
+
+      int enMes(Iterable<FallaDiagnosticada> l, DateTime m) => l.where((f) => f.mes == m).length;
+
+      // A. Fallas por sistema (% sobre las fallas del equipo en ese mes).
+      h.linea('A. Fallas por sistema', negrita: true);
+      h.encabezados(['Sistema', ...cabMeses]);
+      final sistemas = _ordenarPorCantidad(delEquipo.map((f) => f.sistema));
+      for (final s in sistemas) {
+        final delSistema = delEquipo.where((f) => f.sistema == s);
+        h.texto(1, s);
+        var c = 2;
+        for (final m in d.meses) {
+          final n = enMes(delSistema, m);
+          h.numero(c++, n);
+          h.porcentaje(c++, _pct(n, enMes(delEquipo, m)));
+        }
+        h.numero(c++, delSistema.length, negrita: true);
+        h.porcentaje(c, _pct(delSistema.length, delEquipo.length), negrita: true);
+        h.saltar();
+      }
+      h.texto(1, 'Total', negrita: true, fondo: '#F2F2F2');
+      var c = 2;
+      for (final m in d.meses) {
+        h.numero(c++, enMes(delEquipo, m), negrita: true);
+        h.porcentaje(c++, enMes(delEquipo, m) == 0 ? 0 : 1, negrita: true);
+      }
+      h.numero(c++, delEquipo.length, negrita: true);
+      h.porcentaje(c, 1, negrita: true);
+      h.saltar(2);
+
+      // B. Razones de falla por sistema (% sobre las marcas del sistema).
+      h.linea('B. Razones de falla (causa raíz) por sistema', negrita: true);
+      h.encabezados(['Sistema', 'Razón', ...cabMeses]);
+      for (final s in sistemas) {
+        final delSistema = delEquipo.where((f) => f.sistema == s).toList();
+        int marcas(Iterable<FallaDiagnosticada> l, {String? razon, DateTime? mes}) => l
+            .where((f) => mes == null || f.mes == mes)
+            .fold(0, (n, f) => n + (razon == null ? f.razones.length : (f.razones.contains(razon) ? 1 : 0)));
+        final razones = _ordenarPorCantidad(delSistema.expand((f) => f.razones));
+        if (razones.isEmpty) {
+          h.texto(1, s);
+          h.texto(2, 'Sin razones registradas');
+          h.saltar();
+          continue;
+        }
+        for (final r in razones) {
+          h.texto(1, s);
+          h.texto(2, r);
+          var col = 3;
+          for (final m in d.meses) {
+            final n = marcas(delSistema, razon: r, mes: m);
+            h.numero(col++, n);
+            h.porcentaje(col++, _pct(n, marcas(delSistema, mes: m)));
+          }
+          final total = marcas(delSistema, razon: r);
+          h.numero(col++, total, negrita: true);
+          h.porcentaje(col, _pct(total, marcas(delSistema)), negrita: true);
+          h.saltar();
+        }
+      }
+      h.saltar();
+
+      // C. Fallas más frecuentes del equipo.
+      h.linea('C. Fallas más frecuentes', negrita: true);
+      h.encabezados(['Falla', 'Sistema · Subcategoría', ...cabMeses]);
+      final claves = _ordenarPorCantidad(delEquipo.map((f) => '${f.falla}|${f.sistema}|${f.subcategoria}'));
+      for (final k in claves) {
+        final partes = k.split('|');
+        final deFalla = delEquipo.where((f) => '${f.falla}|${f.sistema}|${f.subcategoria}' == k);
+        h.texto(1, partes[0]);
+        h.texto(2, partes[2].isEmpty ? partes[1] : '${partes[1]} · ${partes[2]}');
+        var col = 3;
+        for (final m in d.meses) {
+          final n = enMes(deFalla, m);
+          h.numero(col++, n);
+          h.porcentaje(col++, _pct(n, enMes(delEquipo, m)));
+        }
+        h.numero(col++, deFalla.length, negrita: true);
+        h.porcentaje(col, _pct(deFalla.length, delEquipo.length), negrita: true);
+        h.saltar();
+      }
+      h.saltar(2);
+    }
+    h.ajustarColumnas();
+  }
+
+  static List<String> _ordenarPorCantidad(Iterable<String> valores) {
+    final conteo = <String, int>{};
+    for (final v in valores) {
+      conteo[v] = (conteo[v] ?? 0) + 1;
+    }
+    return conteo.keys.toList()
+      ..sort((a, b) => conteo[b] != conteo[a] ? conteo[b]!.compareTo(conteo[a]!) : a.compareTo(b));
+  }
+
+  // ---------------------------------------------------------------- Detalles
+  static void _detalle1(_Hoja h, IndicadoresPostventa d) {
+    h.titulo('Detalle Indicador 1 — Servicios realizados');
+    h.encabezados(['Mes', 'Ticket', 'Cliente', 'Equipo', 'Tipo', 'Lugar', 'Estado actual', 'Fin de Proceso de Trabajo']);
+    final lista = [...d.servicios]..sort((a, b) => a.fechaFinTrabajo.compareTo(b.fechaFinTrabajo));
+    for (final s in lista) {
+      h.texto(1, _mes(s.mes));
+      h.texto(2, s.ticket.id);
+      h.texto(3, s.ticket.clienteId);
+      h.texto(4, s.equipo);
+      h.texto(5, s.tipo);
+      h.texto(6, s.lugar);
+      h.texto(7, s.ticket.estadoActual.name);
+      h.texto(8, _fecha(s.fechaFinTrabajo));
+      h.saltar();
+    }
+    h.ajustarColumnas();
+  }
+
+  static void _detalle2(_Hoja h, IndicadoresPostventa d) {
+    h.titulo('Detalle Indicador 2 — Lead time de tickets finalizados');
+    h.encabezados(['Mes', 'Ticket', 'Cliente', 'Equipo', 'Tipo', 'Lugar', 'Creación', 'Finalización', 'Días']);
+    final lista = [...d.leadTimes]..sort((a, b) => a.fechaFinalizacion.compareTo(b.fechaFinalizacion));
+    for (final l in lista) {
+      h.texto(1, _mes(l.mes));
+      h.texto(2, l.ticket.id);
+      h.texto(3, l.ticket.clienteId);
+      h.texto(4, l.ticket.equipo.name);
+      h.texto(5, _Svc.etiquetaTipo(l.ticket));
+      h.texto(6, l.lugar);
+      h.texto(7, _fecha(l.fechaCreacion));
+      h.texto(8, _fecha(l.fechaFinalizacion));
+      h.numero(9, l.dias, formato: '0.0');
+      h.saltar();
+    }
+    h.ajustarColumnas();
+  }
+
+  static void _detalle3(_Hoja h, IndicadoresPostventa d) {
+    h.titulo('Detalle Indicador 3 — Fallas diagnosticadas');
+    h.encabezados(['Mes', 'Ticket', 'Cliente', 'Equipo', 'Creación', 'Sistema', 'Subcategoría', 'Falla', 'Razones']);
+    final lista = [...d.fallas]..sort((a, b) => a.fechaCreacion.compareTo(b.fechaCreacion));
+    for (final f in lista) {
+      h.texto(1, _mes(f.mes));
+      h.texto(2, f.ticket.id);
+      h.texto(3, f.ticket.clienteId);
+      h.texto(4, f.equipo);
+      h.texto(5, _fecha(f.fechaCreacion));
+      h.texto(6, f.sistema);
+      h.texto(7, f.subcategoria);
+      h.texto(8, f.falla);
+      h.texto(9, f.razones.join(', '));
+      h.saltar();
+    }
+    h.ajustarColumnas();
+  }
+
+  static void _hojaCriterios(_Hoja h) {
+    h.titulo('Criterios de cálculo');
+    for (final l in const [
+      'Indicador 1: cuenta los tickets que ya terminaron Proceso de Trabajo (estado actual Revisión de pagos, '
+          'Entrega o Finalizado). El mes es el del último registro de Proceso de Trabajo. Los tickets que siguen en '
+          'taller no cuentan.',
+      'Indicador 1: "Tipo" es el tipo de requerimiento; un ticket con dictamen de garantía en la auditoría cuenta '
+          'como Reclamo de garantía (misma regla del Dashboard). También se muestra por tipo de equipo.',
+      'Indicador 2: solo tickets finalizados en cada mes; días desde el primer registro (creación) hasta el último '
+          '(finalización).',
+      'Indicador 3: fallas del diagnóstico técnico (sistema = categoría de falla), por mes de creación del ticket. '
+          'Las razones fuera del catálogo estándar se agrupan como "Otras (texto libre)".',
+      'Indicador 3: % de fallas = fallas del sistema / fallas del equipo en el mes; % de razones = marcas de la '
+          'razón / marcas del sistema en el mes.',
+      'En los tres indicadores se excluyen los tickets anulados. Lugar = lugar de atención del ticket.',
+    ]) {
+      h.linea('• $l');
+    }
+    h.sheet.getRangeByIndex(1, 1).columnWidth = 120;
+  }
+}

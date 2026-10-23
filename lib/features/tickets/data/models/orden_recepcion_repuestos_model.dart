@@ -62,6 +62,12 @@ class OrdenRecepcionRepuestosModel extends OrdenRecepcionRepuestosEntity {
     super.validadoSupervisor = false,
     super.fechaValidadoSupervisor,
     super.supervisorValida,
+    super.urlsHojaFirmada = const [],
+    super.urlsFotosMateriales = const [],
+    super.pickingId,
+    super.motivoAnulacion,
+    super.anuladaPor,
+    super.fechaAnulacion,
   });
 
   factory OrdenRecepcionRepuestosModel.fromJson(Map<String, dynamic> json) {
@@ -116,6 +122,14 @@ class OrdenRecepcionRepuestosModel extends OrdenRecepcionRepuestosEntity {
       validadoSupervisor: json['validadoSupervisor'] as bool? ?? false,
       fechaValidadoSupervisor: fechaValSup,
       supervisorValida: json['supervisorValida'] as String?,
+      urlsHojaFirmada: (json['urlsHojaFirmada'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      urlsFotosMateriales: (json['urlsFotosMateriales'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      pickingId: json['pickingId'] as String?,
+      motivoAnulacion: json['motivoAnulacion'] as String?,
+      anuladaPor: json['anuladaPor'] as String?,
+      fechaAnulacion: json['fechaAnulacion'] is Timestamp
+          ? (json['fechaAnulacion'] as Timestamp).toDate()
+          : (json['fechaAnulacion'] is String ? DateTime.tryParse(json['fechaAnulacion'] as String) : null),
     );
   }
 
@@ -139,6 +153,12 @@ class OrdenRecepcionRepuestosModel extends OrdenRecepcionRepuestosEntity {
       'validadoSupervisor': validadoSupervisor,
       'fechaValidadoSupervisor': fechaValidadoSupervisor?.toIso8601String(),
       'supervisorValida': supervisorValida,
+      'urlsHojaFirmada': urlsHojaFirmada,
+      'urlsFotosMateriales': urlsFotosMateriales,
+      'pickingId': pickingId,
+      'motivoAnulacion': motivoAnulacion,
+      'anuladaPor': anuladaPor,
+      'fechaAnulacion': fechaAnulacion?.toIso8601String(),
     };
   }
 
@@ -159,6 +179,12 @@ class OrdenRecepcionRepuestosModel extends OrdenRecepcionRepuestosEntity {
       validadoSupervisor: entity.validadoSupervisor,
       fechaValidadoSupervisor: entity.fechaValidadoSupervisor,
       supervisorValida: entity.supervisorValida,
+      urlsHojaFirmada: entity.urlsHojaFirmada,
+      urlsFotosMateriales: entity.urlsFotosMateriales,
+      pickingId: entity.pickingId,
+      motivoAnulacion: entity.motivoAnulacion,
+      anuladaPor: entity.anuladaPor,
+      fechaAnulacion: entity.fechaAnulacion,
     );
   }
 }
