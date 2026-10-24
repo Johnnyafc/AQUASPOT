@@ -1204,6 +1204,43 @@ class _DashboardViewState extends State<_DashboardView> {
   // globales (Equipo, fechas, etc.). Clic en una categoría la selecciona y
   // limita "Razones" y "Fallas más frecuentes" a esa categoría. Cuenta FALLAS
   // diagnosticadas (no tickets) y cada razón marcada suma 1. Sin anulados.
+  // Fallas diagnosticadas de los tickets (sin anulados: no llegan a
+  // Proceso de Trabajo), listas para el servicio de dominio.
+  List<FallaParaParte> _fallasDiagnosticadas(List<ResumenTicketDash> data) => [
+        for (final r in data)
+          if (r.estadoBucket != 'Anulado')
+            for (final d in r.diagnosticos)
+              FallaParaParte(
+                categoria: d.categoria,
+                parte: d.subcategoria,
+                falla: d.falla,
+                razones: d.razones,
+                ticketId: r.id,
+                equipo: r.equipo,
+              ),
+      ];
+
+  // Aviso en las secciones que siguen la categoría / parte elegidas en
+  // "Diagnóstico de fallas" (Garantías y Detalle); la ✕ quita esa elección.
+  Widget _avisoFiltroFalla(String etiqueta) {
+    void quitar() => setState(() {
+          _categoriaSel = null;
+          _parteSel = null;
+        });
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: InputChip(
+        avatar: const Icon(Icons.filter_alt_outlined, size: 16, color: _navy),
+        label: Text.rich(TextSpan(children: [
+          const TextSpan(text: 'Filtrado por falla: '),
+          TextSpan(text: etiqueta, style: const TextStyle(fontWeight: FontWeight.w600)),
+        ])),
+        onDeleted: quitar,
+        onPressed: quitar,
+      ),
+    );
+  }
+
   Widget _seccionDiagnosticoFallas(List<ResumenTicketDash> data) {
     String clave(String t) => t.trim().toLowerCase();
     String pct(num parte, num total) => total == 0 ? '0' : (parte / total * 100).toStringAsFixed(0);
@@ -1211,21 +1248,7 @@ class _DashboardViewState extends State<_DashboardView> {
 
     final validos = data.where((r) => r.estadoBucket != 'Anulado').toList();
     final conDiagnostico = validos.where((r) => r.diagnosticos.isNotEmpty).toList();
-    final pares = [
-      for (final r in conDiagnostico)
-        for (final d in r.diagnosticos) (ticket: r, d: d),
-    ];
-    final fallas = [
-      for (final x in pares)
-        FallaParaParte(
-          categoria: x.d.categoria,
-          parte: x.d.subcategoria,
-          falla: x.d.falla,
-          razones: x.d.razones,
-          ticketId: x.ticket.id,
-          equipo: x.ticket.equipo,
-        ),
-    ];
+    final fallas = _fallasDiagnosticadas(data);
 
     // Un pastel General (null) y uno por equipo en cada tarjeta. Con el
     // filtro "Equipo" de arriba, solo el de ese equipo (el General sería igual).
@@ -1535,7 +1558,9 @@ class _DashboardViewState extends State<_DashboardView> {
     });
   }
 
-  Widget _seccionGarantias(List<ResumenTicketDash> data) {
+  // `etiquetaFalla`: categoría / parte elegidas en "Diagnóstico de fallas"
+  // (data ya viene filtrada a los tickets con esa falla).
+  Widget _seccionGarantias(List<ResumenTicketDash> data, {String? etiquetaFalla}) {
     final garantias = data.where((r) => r.esReclamoGarantia).toList(growable: false);
     // Un pastel General (null) y uno por equipo, como en Diagnóstico de
     // fallas. Con el filtro "Equipo" de arriba, solo el de ese equipo.
@@ -1549,7 +1574,9 @@ class _DashboardViewState extends State<_DashboardView> {
     final List<String?> pasteles = _equipo != null ? [_equipo] : [null, ...equiposGarantia];
     int deEquipo(String e) => garantias.where((r) => r.equipo == e).length;
 
-    var nota = '${garantias.length} de ${data.length} tickets (con los filtros actuales) son reclamos de garantía';
+    var nota = etiquetaFalla == null
+        ? '${garantias.length} de ${data.length} tickets (con los filtros actuales) son reclamos de garantía'
+        : '${garantias.length} de ${data.length} tickets con falla en $etiquetaFalla son reclamos de garantía';
     nota += _equipo == null && garantias.isNotEmpty
         ? ' (${equiposGarantia.map((e) => '$e ${deEquipo(e)}').join(' · ')}).'
         : '.';
@@ -2016,6 +2043,27 @@ class _DashboardViewState extends State<_DashboardView> {
           final idsFinalizados = filtrados.where((r) => r.estadoBucket == 'Finalizado').map((r) => r.id).toSet();
           final segmentosFinalizados = segmentosFiltrados.where((s) => idsFinalizados.contains(s.ticketId)).toList();
 
+          // 🧩 Categoría / parte elegidas en "Diagnóstico de fallas": también
+          // filtran lo que está debajo (Garantías y Detalle de tickets) a los
+          // tickets con al menos una falla de esa categoría / parte.
+          final fallasFiltradas = _fallasDiagnosticadas(filtrados);
+          final seleccionFalla = FallasPorParteService.seleccionVigente(
+            fallasFiltradas,
+            claveCategoria: _categoriaSel,
+            claveParte: _parteSel,
+          );
+          final etiquetaFalla = seleccionFalla.etiqueta;
+          final idsConFalla = seleccionFalla.claveCategoria == null
+              ? null
+              : FallasPorParteService.ticketsCon(
+                  fallasFiltradas,
+                  claveCategoria: seleccionFalla.claveCategoria!,
+                  claveParte: seleccionFalla.claveParte,
+                );
+          final debajo = idsConFalla == null ? filtrados : filtrados.where((r) => idsConFalla.contains(r.id)).toList();
+          final ordenadosDebajo =
+              idsConFalla == null ? ordenados : ordenados.where((r) => idsConFalla.contains(r.id)).toList();
+
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -2036,11 +2084,15 @@ class _DashboardViewState extends State<_DashboardView> {
                 _seccionTitulo('Diagnóstico de fallas'),
                 _seccionDiagnosticoFallas(filtrados),
                 _seccionTitulo('Análisis de garantías (reclamo de garantía)'),
-                _seccionGarantias(filtrados),
+                if (etiquetaFalla != null) _avisoFiltroFalla(etiquetaFalla),
+                _seccionGarantias(debajo, etiquetaFalla: etiquetaFalla),
                 _seccionTitulo('Detalle de tickets'),
+                if (etiquetaFalla != null) _avisoFiltroFalla(etiquetaFalla),
                 _card(
-                  nota: 'Toca un encabezado para ordenar. Los filtros de arriba también aplican a esta tabla.',
-                  child: _tablaDetalle(ordenados),
+                  nota: etiquetaFalla == null
+                      ? 'Toca un encabezado para ordenar. Los filtros de arriba también aplican a esta tabla.'
+                      : 'Toca un encabezado para ordenar. Los filtros de arriba y la falla elegida en Diagnóstico de fallas también aplican a esta tabla.',
+                  child: _tablaDetalle(ordenadosDebajo),
                 ),
                 const SizedBox(height: 16),
                 Center(

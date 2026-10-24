@@ -16,6 +16,9 @@
 //   "Otras (texto libre)". Una falla puede tener varias razones.
 // - "Fallas más frecuentes": cada falla con la categoría y la parte de las
 //   que deriva (la misma falla en dos partes son dos filas).
+// - La categoría / parte elegidas en los pasteles también filtran Garantías
+//   y Detalle: cuentan los tickets con al menos una falla de esa categoría /
+//   parte (seleccionVigente + ticketsCon).
 
 import '../../../../core/utils/constants.dart' show razonesProblemaEstandar;
 
@@ -148,6 +151,32 @@ class FallasPorParteService {
       return true;
     }).toList();
   }
+
+  /// Categoría y parte elegidas que siguen existiendo en [fallas] (las que ya
+  /// no existen con los filtros actuales se ignoran), con su etiqueta
+  /// "Categoría" o "Categoría › Parte". Sin nada vigente: todo null.
+  static ({String? claveCategoria, String? claveParte, String? etiqueta}) seleccionVigente(
+    Iterable<FallaParaParte> fallas, {
+    String? claveCategoria,
+    String? claveParte,
+  }) {
+    const ninguna = (claveCategoria: null, claveParte: null, etiqueta: null);
+    if (claveCategoria == null) return ninguna;
+    final categoria = agruparCategorias(fallas).where((c) => c.clave == claveCategoria).firstOrNull;
+    if (categoria == null) return ninguna;
+    final parte = claveParte == null
+        ? null
+        : agrupar(fallas, claveCategoria: claveCategoria).where((p) => p.clave == claveParte).firstOrNull;
+    return (
+      claveCategoria: claveCategoria,
+      claveParte: parte?.clave,
+      etiqueta: parte == null ? categoria.etiqueta : '${parte.categoria} › ${parte.parte}',
+    );
+  }
+
+  /// Tickets con al menos una falla de esa categoría (y parte, si se da).
+  static Set<String> ticketsCon(Iterable<FallaParaParte> fallas, {required String claveCategoria, String? claveParte}) =>
+      filtrar(fallas, claveCategoria: claveCategoria, claveParte: claveParte).map((f) => f.ticketId).toSet();
 
   /// Agrupa las fallas por categoría, de la que tiene más fallas a la que menos.
   static List<ResumenGrupo> agruparCategorias(Iterable<FallaParaParte> fallas) {

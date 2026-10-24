@@ -3,7 +3,8 @@
 // Dashboard → "Fallas por parte": agrupación de las fallas diagnosticadas
 // por parte (Categoría → Parte → Falla), filtro por categoría y "Sin parte";
 // categorías, razones del problema y filtro por equipo (un pastel por equipo);
-// "Fallas más frecuentes" con la categoría y la parte de cada falla.
+// "Fallas más frecuentes" con la categoría y la parte de cada falla;
+// filtro de Garantías y Detalle por la categoría / parte elegidas.
 
 import 'package:aquaspot_postventa/features/tickets/domain/services/fallas_por_parte_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -160,5 +161,39 @@ void main() {
       'Hidráulico › ${S.sinParte} › Motor hidráulico dañado',
     ]);
     expect(r.last.esSinParte, isTrue);
+  });
+
+  group('13. Filtro por falla para Garantías y Detalle', () {
+    final fallas = [
+      f('Mecánico', 'Motor diésel', 'Fuga de aceite', ticket: 'T1'),
+      f('Mecánico', 'Bomba', 'Pérdida de presión', ticket: 'T2'),
+      f('Mecánico', 'Motor diésel', 'Sobrecalentamiento', ticket: 'T2'),
+      f('Hidráulico', '', 'Fuga por retenedor', ticket: 'T3'),
+    ];
+
+    test('ticketsCon: tickets con al menos una falla de la categoría / parte', () {
+      expect(S.ticketsCon(fallas, claveCategoria: 'mecánico'), {'T1', 'T2'});
+      expect(S.ticketsCon(fallas, claveCategoria: 'mecánico', claveParte: S.clave('Mecánico', 'Bomba')), {'T2'});
+      expect(S.ticketsCon(fallas, claveCategoria: 'hidráulico', claveParte: S.clave('Hidráulico', '')), {'T3'});
+    });
+
+    test('seleccionVigente: etiqueta y descarta lo que ya no existe', () {
+      final soloCat = S.seleccionVigente(fallas, claveCategoria: 'mecánico');
+      expect(soloCat.etiqueta, 'Mecánico');
+      expect(soloCat.claveParte, isNull);
+
+      final conParte = S.seleccionVigente(fallas,
+          claveCategoria: 'mecánico', claveParte: S.clave('Mecánico', 'Motor diésel'));
+      expect(conParte.etiqueta, 'Mecánico › Motor diésel');
+
+      // Parte que no existe: queda solo la categoría.
+      final parteVieja = S.seleccionVigente(fallas, claveCategoria: 'mecánico', claveParte: 'mecánico|turbo');
+      expect(parteVieja.claveParte, isNull);
+      expect(parteVieja.etiqueta, 'Mecánico');
+
+      // Categoría que no existe (o nada elegido): sin filtro.
+      expect(S.seleccionVigente(fallas, claveCategoria: 'software').etiqueta, isNull);
+      expect(S.seleccionVigente(fallas).claveCategoria, isNull);
+    });
   });
 }
