@@ -8,6 +8,7 @@
 import 'dart:typed_data';
 import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xlsio;
 import 'package:syncfusion_officechart/officechart.dart' as chart;
+import '../../../../core/utils/duracion_utils.dart';
 import '../../domain/services/indicadores_postventa_service.dart';
 
 typedef _Svc = IndicadoresPostventaService;
@@ -334,7 +335,7 @@ class GeneradorExcelIndicadoresPostventa {
     h.pastel('Tickets finalizados: Taller vs Campo',
         [for (final l in lugares) (l, d.leadTimes.where((t) => t.lugar == l).length)]);
     h.pastel('Tickets por rango de lead time', [
-      for (final (nombre, desde, hasta) in _rangosLeadTime)
+      for (final (nombre, desde, hasta) in rangosLeadTime)
         (nombre, d.leadTimes.where((t) => t.dias > desde && t.dias <= hasta).length),
     ]);
 
@@ -345,14 +346,16 @@ class GeneradorExcelIndicadoresPostventa {
       final delLugar = d.leadTimes.where((l) => lugar == 'Total' || l.lugar == lugar).toList();
       final porMes = [for (final m in d.meses) ResumenLeadTime.de(delLugar.where((l) => l.mes == m))];
       final periodoRes = ResumenLeadTime.de(delLugar);
-      final metricas = <(String, num? Function(ResumenLeadTime?), String)>[
-        ('Lead time promedio (días)', (r) => r?.promedio, '0.0'),
-        ('N.º de tickets finalizados', (r) => r?.tickets ?? 0, '0'),
-        ('Mínimo (días)', (r) => r?.minimo, '0.0'),
-        ('Máximo (días)', (r) => r?.maximo, '0.0'),
+      // El último campo es el nombre de la fila con el tiempo exacto
+      // ("7d 22h 11m") que va debajo; null = sin esa fila.
+      final metricas = <(String, num? Function(ResumenLeadTime?), String, String?)>[
+        ('Lead time promedio (días)', (r) => r?.promedio, '0.0', '↳ Promedio (tiempo)'),
+        ('N.º de tickets finalizados', (r) => r?.tickets ?? 0, '0', null),
+        ('Mínimo (días)', (r) => r?.minimo, '0.0', '↳ Mínimo (tiempo)'),
+        ('Máximo (días)', (r) => r?.maximo, '0.0', '↳ Máximo (tiempo)'),
       ];
       final esTotal = lugar == 'Total';
-      for (final (nombre, valor, formato) in metricas) {
+      for (final (nombre, valor, formato, nombreTiempo) in metricas) {
         h.texto(1, lugar, negrita: esTotal);
         h.texto(2, nombre, negrita: esTotal);
         for (var i = 0; i < porMes.length; i++) {
@@ -370,6 +373,15 @@ class GeneradorExcelIndicadoresPostventa {
           h.numero(3 + porMes.length, vp, formato: formato, negrita: true);
         }
         h.saltar();
+        if (nombreTiempo != null) {
+          h.texto(1, lugar);
+          h.texto(2, nombreTiempo);
+          for (final (i, res) in [...porMes, periodoRes].indexed) {
+            final v = valor(res);
+            h.texto(3 + i, v == null ? '—' : tiempoDeDias(v.toDouble()));
+          }
+          h.saltar();
+        }
       }
       h.saltar();
     }
@@ -581,13 +593,18 @@ class GeneradorExcelIndicadoresPostventa {
     h.saltar();
   }
 
-  /// Rangos de lead time del pastel del Indicador 2: (nombre, más de, hasta) días.
-  static const List<(String, double, double)> _rangosLeadTime = [
-    ('0 a 7 días', -1, 7),
-    ('8 a 15 días', 7, 15),
-    ('16 a 30 días', 15, 30),
+  /// Rangos de lead time del pastel del Indicador 2: (nombre, más de, hasta)
+  /// días. Los nombres dicen el corte exacto: 7d 22h va en "Más de 7 a 15".
+  static const List<(String, double, double)> rangosLeadTime = [
+    ('Hasta 7 días', -1, 7),
+    ('Más de 7 a 15 días', 7, 15),
+    ('Más de 15 a 30 días', 15, 30),
     ('Más de 30 días', 30, double.infinity),
   ];
+
+  /// Días decimales del lead time como tiempo exacto, ej. 7.92 → "7d 22h 10m"
+  /// (mismo formato que las tarjetas de ticket y el Dashboard).
+  static String tiempoDeDias(double dias) => formatearDuracion(Duration(minutes: (dias * 1440).round()));
 
   /// (valor, cantidad) ordenado de mayor a menor, para los pasteles.
   static List<(String, num)> _conteo(Iterable<String> valores) {
@@ -625,7 +642,7 @@ class GeneradorExcelIndicadoresPostventa {
 
   static void _detalle2(_Hoja h, IndicadoresPostventa d) {
     h.titulo('Detalle Indicador 2 — Lead time de tickets finalizados');
-    h.encabezados(['Mes', 'Ticket', 'Cliente', 'Equipo', 'Tipo', 'Lugar', 'Creación', 'Finalización', 'Días']);
+    h.encabezados(['Mes', 'Ticket', 'Cliente', 'Equipo', 'Tipo', 'Lugar', 'Creación', 'Finalización', 'Días', 'Tiempo']);
     final lista = [...d.leadTimes]..sort((a, b) => a.fechaFinalizacion.compareTo(b.fechaFinalizacion));
     for (final l in lista) {
       h.texto(1, _mes(l.mes));
@@ -637,6 +654,7 @@ class GeneradorExcelIndicadoresPostventa {
       h.texto(7, _fecha(l.fechaCreacion));
       h.texto(8, _fecha(l.fechaFinalizacion));
       h.numero(9, l.dias, formato: '0.0');
+      h.texto(10, tiempoDeDias(l.dias));
       h.saltar();
     }
     h.ajustarColumnas();

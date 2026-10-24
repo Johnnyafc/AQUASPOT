@@ -250,4 +250,23 @@ void main() {
     expect(datos.fallas.length, 3);
     expect(GeneradorExcelIndicadoresPostventa.generar(datos), isNotEmpty);
   });
+
+  group('Lead time: tiempo exacto y rangos', () {
+    test('Días decimales como tiempo exacto', () {
+      // 17/08 10:31 → 25/08 08:42 = 7d 22h 11m.
+      expect(GeneradorExcelIndicadoresPostventa.tiempoDeDias(11411 / 1440), '7d 22h 11m');
+      expect(GeneradorExcelIndicadoresPostventa.tiempoDeDias(0.5), '12h 0m');
+      expect(GeneradorExcelIndicadoresPostventa.tiempoDeDias(51.0541666), '51d 1h 18m');
+    });
+
+    test('Rangos con el corte exacto en el nombre: 7d 22h va en "Más de 7 a 15"', () {
+      final rangos = GeneradorExcelIndicadoresPostventa.rangosLeadTime;
+      expect(rangos.map((r) => r.$1), ['Hasta 7 días', 'Más de 7 a 15 días', 'Más de 15 a 30 días', 'Más de 30 días']);
+      String rangoDe(double dias) => rangos.firstWhere((r) => dias > r.$2 && dias <= r.$3).$1;
+      expect(rangoDe(7), 'Hasta 7 días');
+      expect(rangoDe(7.92), 'Más de 7 a 15 días');
+      expect(rangoDe(15), 'Más de 7 a 15 días');
+      expect(rangoDe(30.5), 'Más de 30 días');
+    });
+  });
 }
