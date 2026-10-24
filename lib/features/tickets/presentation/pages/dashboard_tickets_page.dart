@@ -31,6 +31,7 @@ import 'package:printing/printing.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/services/indicadores_postventa_service.dart';
 import '../../domain/services/fallas_por_parte_service.dart';
+import '../../domain/services/tendencia_creacion_service.dart';
 import '../services/generador_excel_indicadores_postventa.dart';
 import '../bloc/dashboard_bloc.dart';
 import '../bloc/dashboard_event.dart';
@@ -160,6 +161,10 @@ class _DashboardViewState extends State<_DashboardView> {
   String? _categoriaSel;
   // 🧩 Parte seleccionada con clic en "Fallas por parte" (clave categoría|parte).
   String? _parteSel;
+  // 📅 Desglose de "Tickets creados por mes": mes y semana elegidos con clic
+  // (null = se ven los meses / las semanas del mes).
+  DateTime? _mesTendencia;
+  DateTime? _semanaTendencia;
   // ⏱️ Procesos desplegados en "Tiempo promedio por proceso" (ver sus partes).
   final Set<String> _procesosExpandidos = {};
 
@@ -185,6 +190,8 @@ class _DashboardViewState extends State<_DashboardView> {
       _fechaHasta = null;
       _categoriaSel = null;
       _parteSel = null;
+      _mesTendencia = null;
+      _semanaTendencia = null;
     });
   }
 
@@ -532,7 +539,11 @@ class _DashboardViewState extends State<_DashboardView> {
     // separado, y fl_chart generaba una marca automática extra cerca del
     // máximo que se encimaba con la última etiqueta manual (ej. "126"
     // superpuesto con "100").
-    final intervaloEje = maxY / 4 <= 0 ? 1.0 : maxY / 4;
+    // Sin decimales (conteos), el paso es entero y de al menos 1: con
+    // máximos chicos (ej. 2 tickets en un día) cuartos de 0.6 se veían como
+    // "0, 0, 1, 1" en el eje.
+    final cuarto = maxY / 4 <= 0 ? 1.0 : maxY / 4;
+    final intervaloEje = mostrarDecimales ? cuarto : cuarto.ceilToDouble();
 
     return LayoutBuilder(builder: (context, constraints) {
     // Ancho disponible por barra: las etiquetas y los valores se ajustan a
@@ -555,7 +566,11 @@ class _DashboardViewState extends State<_DashboardView> {
                 showTitles: true,
                 reservedSize: 32,
                 interval: intervaloEje,
-                getTitlesWidget: (v, meta) => Text(v.toInt().toString(), style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                // El tope del eje (máximo × 1.25) no cae en un paso: sin
+                // ocultarlo se repetía el número de la marca anterior.
+                getTitlesWidget: (v, meta) => v == meta.max && v % intervaloEje != 0
+                    ? const SizedBox.shrink()
+                    : Text(v.toInt().toString(), style: const TextStyle(fontSize: 10, color: Colors.grey)),
               ),
             ),
             bottomTitles: AxisTitles(
@@ -774,15 +789,10 @@ class _DashboardViewState extends State<_DashboardView> {
   // 📈 SECCIONES
   // =========================================================================
   Widget _seccionTendencia(List<ResumenTicketDash> data) {
-    final conteoMes = <String, int>{};
     final conteoEstado = <String, int>{};
     for (final r in data) {
-      final m = _fmtMes(r.fechaCreacion);
-      if (m.isNotEmpty) conteoMes[m] = (conteoMes[m] ?? 0) + 1;
       conteoEstado[r.estadoNombre] = (conteoEstado[r.estadoNombre] ?? 0) + 1;
     }
-    final meses = conteoMes.keys.toList()..sort();
-    final valoresMes = meses.map((m) => conteoMes[m]!.toDouble()).toList();
     final coloresEstado = {for (final n in _ordenEstadosPipeline) n: _colorPorNombreEstado(n)};
 
     // 📅 Con filtro de fechas: tickets por DÍA dentro del rango (incluye los
@@ -820,10 +830,102 @@ class _DashboardViewState extends State<_DashboardView> {
         pasoEtiquetas: dias <= 14 ? 1 : (dias / 12).ceil(),
       );
     } else {
-      if (hayFiltroFechas && dias > 92) {
-        notaCreados = 'Rango mayor a 3 meses: se agrupa por mes de creación';
+      // Por mes; tocar una barra baja a las semanas de ese mes (lunes a
+      // domingo) y tocar una semana, a sus días. Si con los filtros el mes
+      // o la semana elegidos ya no existen, se vuelve a los meses.
+      const nombresMes = [
+        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+      ];
+      const diasCortos = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+      String fmtSemana(BarraTendencia b) =>
+          '${dosDigitos(b.inicio.day)}–${dosDigitos(b.fin.day)}/${dosDigitos(b.fin.month)}';
+
+      final porMes = TendenciaCreacionService.porMes(fechas);
+      final mesSel = porMes.where((b) => b.inicio == _mesTendencia).firstOrNull;
+      final semanas =
+          mesSel == null ? const <BarraTendencia>[] : TendenciaCreacionService.semanasDelMes(fechas, mesSel.inicio);
+      final semanaSel = semanas.where((b) => b.inicio == _semanaTendencia).firstOrNull;
+
+      final List<BarraTendencia> barras;
+      final List<String> etiquetas;
+      ValueChanged<int>? alTocar;
+      if (mesSel != null && semanaSel != null) {
+        barras = TendenciaCreacionService.dias(fechas, semanaSel.inicio, semanaSel.fin);
+        etiquetas = [for (final b in barras) '${diasCortos[b.inicio.weekday - 1]} ${dosDigitos(b.inicio.day)}'];
+        tituloCreados = 'Tickets creados por día — Semana ${fmtSemana(semanaSel)}/${semanaSel.fin.year}';
+        notaCreados = '${semanaSel.tickets} ticket(s) en la semana';
+      } else if (mesSel != null) {
+        barras = semanas;
+        etiquetas = semanas.map(fmtSemana).toList();
+        alTocar = (i) => setState(() => _semanaTendencia = semanas[i].inicio);
+        tituloCreados = 'Tickets creados por semana — ${nombresMes[mesSel.inicio.month - 1]} ${mesSel.inicio.year}';
+        notaCreados = 'Semanas de lunes a domingo · ${mesSel.tickets} ticket(s) en el mes · Toca una barra para ver por día';
+      } else {
+        barras = porMes;
+        etiquetas = [for (final b in porMes) _fmtMes(b.inicio)];
+        alTocar = (i) => setState(() {
+              _mesTendencia = porMes[i].inicio;
+              _semanaTendencia = null;
+            });
+        if (hayFiltroFechas && dias > 92) {
+          notaCreados = 'Rango mayor a 3 meses: se agrupa por mes de creación';
+        }
+        notaCreados = '$notaCreados · Toca una barra para ver por semana';
       }
-      graficoCreados = _barChartFl(labels: meses, values: valoresMes, color: _tealLight);
+
+      final grafico = _barChartFl(
+        labels: etiquetas,
+        values: [for (final b in barras) b.tickets.toDouble()],
+        color: _tealLight,
+        onTapBarra: alTocar,
+      );
+
+      // Ruta para volver: "Todos los meses › Octubre 2026 › Semana 12–18/10".
+      Widget tramo(String texto, VoidCallback? alPulsar) => alPulsar == null
+          ? Text(texto, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _navy))
+          : InkWell(
+              onTap: alPulsar,
+              child: Text(texto,
+                  style: const TextStyle(fontSize: 12, color: _teal, decoration: TextDecoration.underline)),
+            );
+      final separador = Text('  ›  ', style: TextStyle(fontSize: 12, color: Colors.grey.shade500));
+      graficoCreados = mesSel == null
+          ? grafico
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    IconButton(
+                      tooltip: 'Volver',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.arrow_back, size: 18, color: _navy),
+                      onPressed: () => setState(() {
+                        if (semanaSel != null) {
+                          _semanaTendencia = null;
+                        } else {
+                          _mesTendencia = null;
+                        }
+                      }),
+                    ),
+                    tramo(
+                        'Todos los meses',
+                        () => setState(() {
+                              _mesTendencia = null;
+                              _semanaTendencia = null;
+                            })),
+                    separador,
+                    tramo('${nombresMes[mesSel.inicio.month - 1]} ${mesSel.inicio.year}',
+                        semanaSel == null ? null : () => setState(() => _semanaTendencia = null)),
+                    if (semanaSel != null) ...[separador, tramo('Semana ${fmtSemana(semanaSel)}', null)],
+                  ],
+                ),
+                const SizedBox(height: 8),
+                grafico,
+              ],
+            );
     }
 
     return _grid([
