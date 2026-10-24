@@ -1101,6 +1101,27 @@ class _DashboardViewState extends State<_DashboardView> {
     Map<String, Color>? colorPorGrupo,
     bool agrupaPorEquipo = false,
   }) {
+    return _DonaInteractiva(
+      textoTotal: 'tickets',
+      porciones: _porcionesTickets(
+        data,
+        agrupar,
+        colores: colores,
+        colorPorGrupo: colorPorGrupo,
+        agrupaPorEquipo: agrupaPorEquipo,
+      ),
+    );
+  }
+
+  // Porciones de _donaTickets. `agrupaPorEquipo` también oculta la línea
+  // "Por equipo" en el pastel de un solo equipo (ahí sobra).
+  List<_PorcionDona> _porcionesTickets(
+    List<ResumenTicketDash> data,
+    String Function(ResumenTicketDash r) agrupar, {
+    List<Color>? colores,
+    Map<String, Color>? colorPorGrupo,
+    bool agrupaPorEquipo = false,
+  }) {
     final grupos = <String, List<ResumenTicketDash>>{};
     for (final r in data) {
       final k = agrupar(r).trim().isEmpty ? 'Sin especificar' : agrupar(r).trim();
@@ -1118,9 +1139,7 @@ class _DashboardViewState extends State<_DashboardView> {
     String top(Map<String, int> m, int n) =>
         (m.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).take(n).map((e) => '${e.key} ${e.value}').join(' · ');
 
-    return _DonaInteractiva(
-      textoTotal: 'tickets',
-      porciones: [
+    return [
         for (var i = 0; i < claves.length; i++)
           (() {
             final lista = grupos[claves[i]]!;
@@ -1146,8 +1165,7 @@ class _DashboardViewState extends State<_DashboardView> {
               ],
             );
           })(),
-      ],
-    );
+      ];
   }
 
   Widget _seccionDimensiones(List<ResumenTicketDash> data) {
@@ -1519,7 +1537,22 @@ class _DashboardViewState extends State<_DashboardView> {
 
   Widget _seccionGarantias(List<ResumenTicketDash> data) {
     final garantias = data.where((r) => r.esReclamoGarantia).toList(growable: false);
-    var nota = '${garantias.length} de ${data.length} tickets (con los filtros actuales) son reclamos de garantía.';
+    // Un pastel General (null) y uno por equipo, como en Diagnóstico de
+    // fallas. Con el filtro "Equipo" de arriba, solo el de ese equipo.
+    final otrosEquipos = garantias
+        .map((r) => r.equipo)
+        .where((e) => e.isNotEmpty && !FallasPorParteService.equiposBase.contains(e))
+        .toSet()
+        .toList()
+      ..sort();
+    final equiposGarantia = [...FallasPorParteService.equiposBase, ...otrosEquipos];
+    final List<String?> pasteles = _equipo != null ? [_equipo] : [null, ...equiposGarantia];
+    int deEquipo(String e) => garantias.where((r) => r.equipo == e).length;
+
+    var nota = '${garantias.length} de ${data.length} tickets (con los filtros actuales) son reclamos de garantía';
+    nota += _equipo == null && garantias.isNotEmpty
+        ? ' (${equiposGarantia.map((e) => '$e ${deEquipo(e)}').join(' · ')}).'
+        : '.';
     if (garantias.isNotEmpty && garantias.length < 5) {
       nota += ' Muestra pequeña — interpretar las proporciones con cautela.';
     }
@@ -1540,17 +1573,21 @@ class _DashboardViewState extends State<_DashboardView> {
           ),
           child: Text(nota, style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700)),
         ),
-        _grid([
-          _card(
-            titulo: 'Dictamen de garantía',
-            nota: 'Reclamos de garantía: «Aprobada» = garantía aprobada por ingeniería · «Rechazada» = auditoría «GARANTÍA RECHAZADA - PASA A FACTURACIÓN CLIENTE» · «Sin dictamen» = aún en revisión.',
-            child: _donaTickets(
-              garantias,
+        _card(
+          titulo: 'Dictamen de garantía',
+          nota: 'Reclamos de garantía: «Aprobada» = garantía aprobada por ingeniería · «Rechazada» = auditoría «GARANTÍA RECHAZADA - PASA A FACTURACIÓN CLIENTE» · «Sin dictamen» = aún en revisión. Un pastel por equipo.',
+          child: _pastelesPorEquipo(
+            id: 'garantia',
+            equipos: pasteles,
+            textoTotal: 'tickets',
+            porciones: (equipo) => _porcionesTickets(
+              equipo == null ? garantias : garantias.where((r) => r.equipo == equipo).toList(),
               (r) => r.dictamenGarantia ?? 'Sin dictamen',
               colorPorGrupo: const {'Aprobada': _good, 'Rechazada': _bad, 'Sin dictamen': Color(0xFF9AA5B1)},
+              agrupaPorEquipo: equipo != null,
             ),
           ),
-        ]),
+        ),
       ],
     );
   }
