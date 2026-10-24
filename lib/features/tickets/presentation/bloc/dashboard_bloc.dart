@@ -18,6 +18,7 @@
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/entities/ticket_entity.dart';
+import '../../domain/services/documentos_ticket_service.dart';
 import '../../domain/services/tiempos_por_proceso_service.dart';
 import '../../../../core/enum/ticket_enums.dart';
 import 'dashboard_event.dart';
@@ -105,11 +106,6 @@ String _capBloc(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring
 
 double _redondear2(double v) => double.parse(v.toStringAsFixed(2));
 
-// 🆕 Filtra nulos/vacíos y junta varias fuentes de URLs en una sola lista
-// plana — así cada grupo documental queda listo para la tabla del
-// Dashboard sin importar cuántas variables crudas lo componen.
-List<String> _urls(Iterable<String?> fuentes) =>
-    fuentes.where((u) => u != null && u.trim().isNotEmpty).map((u) => u!.trim()).toList();
 
 // Tipo de garantía legible; null si no es "Máquina nueva" ni "Servicio"
 // (ej. "pendiente" o "noAplica" en tickets que no son garantía).
@@ -175,25 +171,7 @@ ResumenTicketDash _resumirTicketBloc(TicketEntity t) {
     estadoNombre: _nombreEstadoBloc(t.estadoActual),
     dictamenGarantia: _dictamenGarantiaBloc(t),
     // 🆕 Documentos agrupados por trámite lógico (ver comentario en el DTO).
-    documentosActa: _urls([t.pdfActaUrl]),
-    documentosEvidenciaRecepcion: _urls([...t.fotosUrls]),
-    documentosEvaluacion: _urls([
-      t.evaluacionTecnica?.urlProformaExcel,
-      ...?t.evaluacionTecnica?.urlsAdjuntosPdf,
-      ...?t.evaluacionTecnica?.urlsAdjuntosPdfGarantia,
-    ]),
-    documentosProforma: _urls([
-      ...?t.proforma?.pdfUrls,
-      ...?t.proforma?.excelUrls,
-    ]),
-    documentosCompras: _urls([...?t.gestionCompras?.urlsOrdenCompra]),
-    documentosEvidenciaTrabajo: _urls([
-      ...t.procesoTrabajoUrls,
-      ...?t.evidenciaTrabajo?.fotosUrls,
-      ...?t.evidenciaTrabajo?.videosUrls,
-    ]),
-    documentosEntrega: _urls([t.urlGuiaRemision, t.urlFactura]),
-    documentosGarantia: _urls([...?t.urlsEvidenciasGarantia]),
+    documentos: DocumentosTicketService.porColumna(t),
     diagnosticos: t.diagnosticoFallas
         .map((d) => DiagnosticoFallaDash(
               categoria: d.categoria,

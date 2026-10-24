@@ -30,6 +30,7 @@ import '../../../../core/enum/segmento_operativo.dart';
 import '../../../../core/enum/ticket_enums.dart';
 import '../../../../core/theme/ticket_visual_theme.dart';
 import '../../domain/entities/ticket_entity.dart';
+import '../../domain/services/documentos_ticket_service.dart';
 import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_event.dart';
 import '../bloc/ticket_state.dart';
@@ -39,7 +40,7 @@ import '../widgets/copy_icon_button_widget.dart';
 // 🗂️ MODELOS LOCALES DE PRESENTACIÓN (no tocan el dominio ni Firestore)
 // =============================================================================
 
-enum _TipoArchivo { foto, pdf, excel, video, otro }
+enum _TipoArchivo { foto, pdf, excel, video, audio, otro }
 
 IconData _iconoTipo(_TipoArchivo t) {
   switch (t) {
@@ -51,6 +52,8 @@ IconData _iconoTipo(_TipoArchivo t) {
       return Icons.grid_on_outlined;
     case _TipoArchivo.video:
       return Icons.videocam_outlined;
+    case _TipoArchivo.audio:
+      return Icons.audiotrack_outlined;
     case _TipoArchivo.otro:
       return Icons.insert_drive_file_outlined;
   }
@@ -66,6 +69,8 @@ String _nombreTipo(_TipoArchivo t) {
       return 'Excel';
     case _TipoArchivo.video:
       return 'Video';
+    case _TipoArchivo.audio:
+      return 'Audio';
     case _TipoArchivo.otro:
       return 'Archivo';
   }
@@ -90,6 +95,14 @@ _TipoArchivo _tipoDesdeUrl(String url) {
   }
   if (sinQuery.endsWith('.mp4') || sinQuery.endsWith('.mov') || sinQuery.endsWith('.avi') || sinQuery.endsWith('.webm')) {
     return _TipoArchivo.video;
+  }
+  if (sinQuery.endsWith('.m4a') ||
+      sinQuery.endsWith('.mp3') ||
+      sinQuery.endsWith('.aac') ||
+      sinQuery.endsWith('.wav') ||
+      sinQuery.endsWith('.ogg') ||
+      sinQuery.endsWith('.opus')) {
+    return _TipoArchivo.audio;
   }
   return _TipoArchivo.otro;
 }
@@ -121,51 +134,46 @@ List<_Doc> _docsDesde(List<String> urls) {
   return docs;
 }
 
-// 🧠 EXTRACTOR ÚNICO: recorre TODOS los campos del ticket (y sus objetos
-// anidados) que pueden contener una URL de Firebase Storage. Si mañana se
-// agrega un campo nuevo de archivo, solo hay que añadir una línea aquí.
-List<_Categoria> _extraerCategorias(TicketEntity t) {
-  final categorias = <_Categoria>[];
+// 🧠 Las carpetas (qué variable del ticket va en cada una y en qué orden)
+// las define DocumentosTicketService, el mismo que usa la tabla del
+// Dashboard; aquí solo se les pone ícono y se clasifica cada archivo.
+const Map<String, IconData> _iconoCarpeta = {
+  'fotosRecepcion': Icons.photo_camera_outlined,
+  'actaRecepcion': Icons.description_outlined,
+  'evidenciasGarantia': Icons.verified_user_outlined,
+  'ventaEvidencias': Icons.photo_library_outlined,
+  'audios': Icons.mic_none_outlined,
+  'evaluacionExcel': Icons.grid_on_outlined,
+  'evaluacionAdjuntos': Icons.attach_file_outlined,
+  'evaluacionGarantia': Icons.shield_outlined,
+  'evaluacionRevisionAntigua': Icons.history_edu_outlined,
+  'evaluacionFotosActividades': Icons.photo_library_outlined,
+  'proformaPdf': Icons.picture_as_pdf_outlined,
+  'proformaExcel': Icons.grid_on_outlined,
+  'ordenVenta': Icons.point_of_sale_outlined,
+  'ordenCompraCostos': Icons.request_quote_outlined,
+  'cotizacionCompras': Icons.price_check_outlined,
+  'ordenCompra': Icons.shopping_cart_outlined,
+  'pickingEvidencias': Icons.inventory_2_outlined,
+  'retiroHoja': Icons.assignment_turned_in_outlined,
+  'retiroFotos': Icons.handyman_outlined,
+  'evidenciaFotos': Icons.photo_library_outlined,
+  'evidenciaVideos': Icons.videocam_outlined,
+  'procesoTrabajoAnterior': Icons.build_circle_outlined,
+  'informeTecnico': Icons.summarize_outlined,
+  'guiaRemision': Icons.local_shipping_outlined,
+  'factura': Icons.receipt_long_outlined,
+};
 
-  void agregar(String titulo, IconData icono, List<String> urls) {
-    final docs = _docsDesde(urls);
-    if (docs.isNotEmpty) {
-      categorias.add(_Categoria(titulo: titulo, icono: icono, documentos: docs));
-    }
-  }
+List<_Categoria> _extraerCategorias(TicketEntity t) => [
+      for (final c in DocumentosTicketService.carpetas(t))
+        _Categoria(
+          titulo: c.titulo,
+          icono: _iconoCarpeta[c.id] ?? Icons.folder_outlined,
+          documentos: _docsDesde(c.urls),
+        ),
+    ];
 
-  agregar('Fotos de Recepción', Icons.photo_camera_outlined, t.fotosUrls);
-  agregar('Acta de Recepción (PDF)', Icons.description_outlined, [if (t.pdfActaUrl != null) t.pdfActaUrl!]);
-  agregar('Orden de Venta', Icons.point_of_sale_outlined, t.codigoOrdenVenta);
-  agregar('Orden de Compra (Costos)', Icons.request_quote_outlined, t.codigoOrdenCompra);
-  agregar('Proceso de Trabajo', Icons.build_circle_outlined, t.procesoTrabajoUrls);
-  agregar(
-    'Evaluación Técnica — Proforma Excel',
-    Icons.grid_on_outlined,
-    [if (t.evaluacionTecnica?.urlProformaExcel != null) t.evaluacionTecnica!.urlProformaExcel!],
-  );
-  agregar('Evaluación Técnica — Adjuntos', Icons.attach_file_outlined, t.evaluacionTecnica?.urlsAdjuntosPdf ?? const []);
-  agregar(
-    'Evaluación Técnica — Adjuntos de Garantía',
-    Icons.shield_outlined,
-    t.evaluacionTecnica?.urlsAdjuntosPdfGarantia ?? const [],
-  );
-  agregar(
-    'Evaluación Técnica — Revisión Antigua (Garantía)',
-    Icons.history_edu_outlined,
-    [if (t.evaluacionTecnica?.urlPdfRevisionTecnicaAntigua != null) t.evaluacionTecnica!.urlPdfRevisionTecnicaAntigua!],
-  );
-  agregar('Proforma Comercial — PDF', Icons.picture_as_pdf_outlined, t.proforma?.pdfUrls ?? const []);
-  agregar('Proforma Comercial — Excel', Icons.grid_on_outlined, t.proforma?.excelUrls ?? const []);
-  agregar('Gestión de Compras — Orden de Compra', Icons.shopping_cart_outlined, t.gestionCompras?.urlsOrdenCompra ?? const []);
-  agregar('Evidencia de Trabajo — Fotos', Icons.photo_library_outlined, t.evidenciaTrabajo?.fotosUrls ?? const []);
-  agregar('Evidencia de Trabajo — Videos', Icons.videocam_outlined, t.evidenciaTrabajo?.videosUrls ?? const []);
-  agregar('Evidencias de Garantía', Icons.verified_user_outlined, t.urlsEvidenciasGarantia ?? const []);
-  agregar('Guía de Remisión', Icons.local_shipping_outlined, [if (t.urlGuiaRemision != null) t.urlGuiaRemision!]);
-  agregar('Factura', Icons.receipt_long_outlined, [if (t.urlFactura != null) t.urlFactura!]);
-
-  return categorias;
-}
 
 // =============================================================================
 // 🗄️ COLOR ÚNICO DE "CARPETA" — el amarillo/ámbar clásico de explorador de

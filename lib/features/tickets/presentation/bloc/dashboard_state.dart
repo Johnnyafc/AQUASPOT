@@ -14,6 +14,7 @@
 // pantalla: ya no hay que navegar `r.ticket.campo.subcampo` en cada chart.
 
 import 'package:equatable/equatable.dart';
+import '../../domain/services/documentos_ticket_service.dart';
 
 enum DashboardStatus { inicial, cargando, listo, error }
 
@@ -64,21 +65,13 @@ class ResumenTicketDash extends Equatable {
   // 'Sin dictamen' (null si el ticket no es reclamo de garantía).
   final String? dictamenGarantia;
 
-  // 🆕 Documentos del ticket, agrupados por trámite lógico (no por variable
-  // cruda) para la columna de "links" del Dashboard. Cada lista puede venir
-  // vacía si ese trámite todavía no tiene ningún documento subido — la
-  // pantalla decide si muestra la columna según si HAY datos en alguna fila
-  // ("no pongas columnas por gusto, solo si tienen lo pones sino no").
-  final List<String> documentosActa; // pdfActaUrl (documento formal de recepción)
-  final List<String> documentosEvidenciaRecepcion; // fotosUrls (evidencia fotográfica de recepción)
-  final List<String> documentosEvaluacion; // evaluacionTecnica.* (pdf/excel/garantía)
-  final List<String> documentosProforma; // proforma.pdfUrls + .excelUrls
-  final List<String> documentosCompras; // gestionCompras.urlsOrdenCompra
-  final List<String> documentosEvidenciaTrabajo; // procesoTrabajoUrls + evidenciaTrabajo.*
+  // 🆕 Documentos del ticket por columna de la tabla del Dashboard (qué
+  // variable va en cada una: DocumentosTicketService). Solo trae las
+  // columnas con algo — la pantalla muestra una columna si HAY datos en
+  // alguna fila ("no pongas columnas por gusto, solo si tienen lo pones").
+  final Map<ColumnaDocumentos, List<String>> documentos;
   // 🔍 Diagnóstico técnico de fallas (categoría / falla / razones).
   final List<DiagnosticoFallaDash> diagnosticos;
-  final List<String> documentosEntrega; // urlGuiaRemision + urlFactura
-  final List<String> documentosGarantia; // urlsEvidenciasGarantia
 
   const ResumenTicketDash({
     required this.id,
@@ -100,14 +93,7 @@ class ResumenTicketDash extends Equatable {
     required this.estadoBucket,
     required this.estadoNombre,
     this.dictamenGarantia,
-    this.documentosActa = const [],
-    this.documentosEvidenciaRecepcion = const [],
-    this.documentosEvaluacion = const [],
-    this.documentosProforma = const [],
-    this.documentosCompras = const [],
-    this.documentosEvidenciaTrabajo = const [],
-    this.documentosEntrega = const [],
-    this.documentosGarantia = const [],
+    this.documentos = const {},
     this.diagnosticos = const [],
   });
 
@@ -132,14 +118,7 @@ class ResumenTicketDash extends Equatable {
         estadoBucket,
         estadoNombre,
         dictamenGarantia,
-        documentosActa,
-        documentosEvidenciaRecepcion,
-        documentosEvaluacion,
-        documentosProforma,
-        documentosCompras,
-        documentosEvidenciaTrabajo,
-        documentosEntrega,
-        documentosGarantia,
+        documentos,
         diagnosticos,
       ];
 }

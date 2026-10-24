@@ -32,6 +32,7 @@ import '../../domain/entities/ticket_entity.dart';
 import '../../domain/services/indicadores_postventa_service.dart';
 import '../../domain/services/fallas_por_parte_service.dart';
 import '../../domain/services/tendencia_creacion_service.dart';
+import '../../domain/services/documentos_ticket_service.dart';
 import '../services/generador_excel_indicadores_postventa.dart';
 import '../bloc/dashboard_bloc.dart';
 import '../bloc/dashboard_event.dart';
@@ -1743,20 +1744,18 @@ class _DashboardViewState extends State<_DashboardView> {
     _ColumnaTabla('Estado', 150, 'estado_bucket'),
   ];
 
-  // 🆕 Columnas de documentos, agrupadas por trámite lógico (no por variable
-  // cruda de Firestore). Cada una define cómo sacar la lista de URLs de una
-  // fila (`documentos`) — la propia definición de la columna no dice nada
-  // sobre si hay datos o no, eso se decide en `_columnasPara` según el
-  // conjunto de tickets filtrado actualmente en pantalla.
+  // 🆕 Columnas de documentos, una por ColumnaDocumentos y en su orden (qué
+  // variable va en cada una lo decide DocumentosTicketService). Si hay datos
+  // o no se decide en `_columnasPara` según los tickets filtrados en pantalla.
   static final List<_ColumnaTabla> _columnasDocDefinidas = [
-    _ColumnaTabla('Acta', 90, 'doc_acta', documentos: (r) => r.documentosActa),
-    _ColumnaTabla('Evidencia recepción', 140, 'doc_evidencia_recepcion', documentos: (r) => r.documentosEvidenciaRecepcion),
-    _ColumnaTabla('Evaluación', 105, 'doc_evaluacion', documentos: (r) => r.documentosEvaluacion),
-    _ColumnaTabla('Proforma', 95, 'doc_proforma', documentos: (r) => r.documentosProforma),
-    _ColumnaTabla('Compras', 90, 'doc_compras', documentos: (r) => r.documentosCompras),
-    _ColumnaTabla('Evidencia trabajo', 135, 'doc_evidencia', documentos: (r) => r.documentosEvidenciaTrabajo),
-    _ColumnaTabla('Entrega', 90, 'doc_entrega', documentos: (r) => r.documentosEntrega),
-    _ColumnaTabla('Foto horómetro', 120, 'doc_garantia', documentos: (r) => r.documentosGarantia),
+    for (final c in ColumnaDocumentos.values)
+      _ColumnaTabla(
+        c.titulo,
+        // Ancho según el largo del título (los links ocupan poco).
+        (c.titulo.length * 7.5 + 40).clamp(90, 150).toDouble(),
+        'doc_${c.name}',
+        documentos: (r) => r.documentos[c] ?? const [],
+      ),
   ];
 
   // ⚙️ "No pongas columnas por gusto, solo si tienen lo pones sino no": una
