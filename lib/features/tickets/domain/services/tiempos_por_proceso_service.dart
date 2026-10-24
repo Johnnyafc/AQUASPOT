@@ -10,6 +10,12 @@
 // dashboard (ver `subprocesos`): cada tramo lleva además su `subproceso`, y
 // las partes de un proceso suman exactamente su total.
 //
+// Despacho (carril de Bodega) se parte en: "Antes del picking" (desde que
+// le habilitan el ticket hasta "BODEGA: INICIO DE PICKING"), "Picking"
+// (hasta el fin de Bodega) y "Validación simple" (tickets que Bodega cierra
+// con la validación simple, sin picking). Sin "INICIO DE PICKING" (tickets
+// anteriores al picking) todo va en "Antes del picking".
+//
 // Dos formas de medir, según cómo se creó el ticket:
 //
 // 1. Tickets con etiquetas (su evento de creación tiene `proceso`): cada
@@ -51,6 +57,7 @@ class TiemposPorProcesoService {
 
   static const String recepcion = 'Recepción';
   static const String compras = 'Compras';
+  static const String despacho = 'Despacho';
   static const String taller = 'Proceso de Trabajo';
 
   static const String subRegistro = 'Registro y acta';
@@ -58,10 +65,14 @@ class TiemposPorProcesoService {
   static const String subAntesDeIniciar = 'Antes de iniciar';
   static const String subEsperaMaterial = 'Espera de material';
   static const String subTrabajo = 'Trabajo';
+  static const String subAntesPicking = 'Antes del picking';
+  static const String subPicking = 'Picking';
+  static const String subValidacionSimple = 'Validación simple';
 
   /// Procesos que se pueden desplegar y el orden de sus partes.
   static const Map<String, List<String>> subprocesos = {
     recepcion: [subRegistro, subEnCamino],
+    despacho: [subAntesPicking, subPicking, subValidacionSimple],
     taller: [subAntesDeIniciar, subEsperaMaterial, subTrabajo],
   };
 
@@ -134,6 +145,7 @@ class TiemposPorProcesoService {
     DateTime? anterior;
     DateTime? inicioTaller;        // "Iniciar trabajo" del ciclo de taller en curso
     DateTime? ultimoFinBodega;     // último despacho total (fin de la espera de material)
+    DateTime? inicioPicking;       // "BODEGA: INICIO DE PICKING" del ciclo de Bodega en curso
 
     for (final e in eventos) {
       final p = e.proceso;
@@ -151,11 +163,16 @@ class TiemposPorProcesoService {
         abiertos.clear();
         provisionales.clear();
         inicioTaller = null;
+        inicioPicking = null;
       }
 
       // Una acción propia del proceso confirma su apertura provisional.
       provisionales.remove(p);
       final etiqueta = p.etiquetaDashboard;
+
+      if (p == ProcesoAuditoria.bodega && e.accion.toUpperCase().startsWith('BODEGA: INICIO DE PICKING')) {
+        inicioPicking ??= e.timestamp;
+      }
 
       if (e.hito == HitoProceso.inicio) {
         abiertos.putIfAbsent(p, () => e.timestamp);
@@ -179,6 +196,20 @@ class TiemposPorProcesoService {
             sumarParte(etiqueta, subTrabajo, e, finEspera, e.timestamp,
                 forzar: !e.timestamp.isAfter(desde)); // taller de 0 minutos: igual cuenta
             inicioTaller = null;
+          } else if (p == ProcesoAuditoria.bodega) {
+            // Despacho = antes del picking + picking, o validación simple.
+            // La última parte se fuerza para que el ticket cuente en
+            // Despacho aunque el tramo haya durado 0.
+            if (e.accion.toUpperCase().contains('VALIDACIÓN SIMPLE')) {
+              sumarParte(etiqueta, subValidacionSimple, e, desde, e.timestamp, forzar: true);
+            } else if (inicioPicking != null) {
+              final inicio = inicioPicking.isAfter(desde) ? inicioPicking : desde;
+              sumarParte(etiqueta, subAntesPicking, e, desde, inicio);
+              sumarParte(etiqueta, subPicking, e, inicio, e.timestamp, forzar: true);
+            } else {
+              sumarParte(etiqueta, subAntesPicking, e, desde, e.timestamp, forzar: true);
+            }
+            inicioPicking = null;
           } else {
             sumar(etiqueta, e, desde, e.timestamp);
           }
@@ -221,6 +252,10 @@ class TiemposPorProcesoService {
     switch (proceso) {
       case recepcion:
         return a.contains('GUABO') ? subEnCamino : subRegistro;
+      case despacho:
+        if (a.contains('VALIDACIÓN SIMPLE')) return subValidacionSimple;
+        if (a.contains('PICKING') && !a.startsWith('BODEGA: INICIO DE PICKING')) return subPicking;
+        return subAntesPicking;
       case taller:
         // Texto anterior y nuevo (con prefijo "TALLER: ").
         if (a.startsWith('INICIO DE TRABAJO') || a.startsWith('TALLER: INICIO DE TRABAJO')) return subAntesDeIniciar;

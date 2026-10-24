@@ -259,4 +259,75 @@ void main() {
       }
     }
   });
+
+  group('Despacho desplegable: antes del picking / picking / validación simple', () {
+    const d = TiemposPorProcesoService.despacho;
+    final antes = '$d|${TiemposPorProcesoService.subAntesPicking}';
+    final picking = '$d|${TiemposPorProcesoService.subPicking}';
+    final simple = '$d|${TiemposPorProcesoService.subValidacionSimple}';
+    EventoAuditoriaEntity creado(String f) => _ev(f, 'TICKET CREADO', p: ProcesoAuditoria.recepcion, h: HitoProceso.inicio);
+
+    test('Picking normal: desde Validación de Bodega, partido en el inicio de picking', () {
+      final h = [
+        creado('2026-10-10 07:00'),
+        _ev('2026-10-10 08:00', 'COMPRAS: VALIDACIÓN COMPLETA (2/2) Y TRANSFERENCIA A BODEGA', p: ProcesoAuditoria.validacionBodega, h: HitoProceso.fin, hab: [ProcesoAuditoria.bodega]),
+        _ev('2026-10-10 15:30', 'BODEGA: INICIO DE PICKING', p: ProcesoAuditoria.bodega, h: HitoProceso.avance),
+        _ev('2026-10-10 18:00', 'BODEGA: PICKING PARCIAL D1 LISTO PARA RETIRO (2 ítems)', p: ProcesoAuditoria.bodega, h: HitoProceso.avance),
+        _ev('2026-10-11 07:36', 'BODEGA: FIN DE PICKING Y TRANSFERENCIA A PROCESO DE TRABAJO (1 despacho(s))', p: ProcesoAuditoria.bodega, h: HitoProceso.fin, hab: [ProcesoAuditoria.taller]),
+      ];
+      final partes = _partes(h);
+      expect(partes[antes], 7.5);
+      expect(partes[picking], closeTo(16.1, 0.001)); // 15:30 → 07:36 = 16h 06m
+      expect(partes.containsKey(simple), isFalse);
+      // Las partes suman exactamente el total de Despacho (23h 36m).
+      expect(_totales(h)[d], closeTo(23.6, 0.001));
+    });
+
+    test('Sin falta nada (sin Validación de Bodega): cuenta desde Costos', () {
+      final h = [
+        creado('2026-10-01 07:00'),
+        _ev('2026-10-01 10:00', 'FASE COSTOS - Código Proyecto Asignado: P-1', p: ProcesoAuditoria.costos, h: HitoProceso.fin, hab: [ProcesoAuditoria.bodega]),
+        _ev('2026-10-02 10:00', 'BODEGA: INICIO DE PICKING', p: ProcesoAuditoria.bodega, h: HitoProceso.avance),
+        _ev('2026-10-02 14:00', 'BODEGA: FIN DE PICKING Y TRANSFERENCIA A PROCESO DE TRABAJO (1 despacho(s))', p: ProcesoAuditoria.bodega, h: HitoProceso.fin, hab: [ProcesoAuditoria.taller]),
+      ];
+      expect(_partes(h)[antes], 24);
+      expect(_partes(h)[picking], 4);
+    });
+
+    test('Validación simple: todo en su propia parte, sin picking', () {
+      final h = [
+        creado('2026-10-01 07:00'),
+        _ev('2026-10-01 10:00', 'FASE COSTOS - Código Proyecto Asignado: P-1', p: ProcesoAuditoria.costos, h: HitoProceso.fin, hab: [ProcesoAuditoria.bodega]),
+        _ev('2026-10-01 13:00', 'BODEGA: DESPACHO TOTAL Y TRANSFERENCIA A PROCESO DE TRABAJO (VALIDACIÓN SIMPLE)', p: ProcesoAuditoria.bodega, h: HitoProceso.fin, hab: [ProcesoAuditoria.taller]),
+      ];
+      expect(_partes(h), {simple: 3});
+    });
+
+    test('Sin inicio de picking (ticket anterior al picking): todo en "Antes del picking"', () {
+      final h = [
+        creado('2026-10-01 07:00'),
+        _ev('2026-10-01 10:00', 'FASE COSTOS - Código Proyecto Asignado: P-1', p: ProcesoAuditoria.costos, h: HitoProceso.fin, hab: [ProcesoAuditoria.bodega]),
+        _ev('2026-10-01 12:00', 'BODEGA: DESPACHO PARCIAL (1 ítems entregados)', p: ProcesoAuditoria.bodega, h: HitoProceso.avance),
+        _ev('2026-10-01 15:00', 'BODEGA: DESPACHO TOTAL Y TRANSFERENCIA A PROCESO DE TRABAJO (2 ítems entregados)', p: ProcesoAuditoria.bodega, h: HitoProceso.fin, hab: [ProcesoAuditoria.taller]),
+      ];
+      expect(_partes(h), {antes: 5});
+    });
+
+    test('Dos vueltas por Bodega: cada una se parte y se suman; picking de 0 minutos igual cuenta', () {
+      final h = [
+        creado('2026-10-01 07:00'),
+        _ev('2026-10-01 08:00', 'COMPRAS: VALIDACIÓN COMPLETA (1/1) Y TRANSFERENCIA A BODEGA', p: ProcesoAuditoria.validacionBodega, h: HitoProceso.fin, hab: [ProcesoAuditoria.bodega]),
+        _ev('2026-10-01 09:00', 'BODEGA: INICIO DE PICKING', p: ProcesoAuditoria.bodega, h: HitoProceso.avance),
+        _ev('2026-10-01 11:00', 'BODEGA: FIN DE PICKING Y TRANSFERENCIA A PROCESO DE TRABAJO (1 despacho(s))', p: ProcesoAuditoria.bodega, h: HitoProceso.fin, hab: [ProcesoAuditoria.taller]),
+        _ev('2026-10-03 08:00', 'ADMIN: CAMBIO FORZADO A BODEGA', p: ProcesoAuditoria.admin, hab: [ProcesoAuditoria.bodega]),
+        _ev('2026-10-03 10:00', 'BODEGA: INICIO DE PICKING', p: ProcesoAuditoria.bodega, h: HitoProceso.avance),
+        _ev('2026-10-03 10:00', 'BODEGA: FIN DE PICKING Y TRANSFERENCIA A PROCESO DE TRABAJO (2 despacho(s))', p: ProcesoAuditoria.bodega, h: HitoProceso.fin, hab: [ProcesoAuditoria.taller]),
+      ];
+      final partes = _partes(h);
+      expect(partes[antes], 1 + 2);
+      expect(partes[picking], 2 + 0);
+      expect(TiemposPorProcesoService.calcular(h).where((t) => t.subproceso == TiemposPorProcesoService.subPicking).length, 1,
+          reason: 'mismo usuario: un solo acumulado de picking');
+    });
+  });
 }
