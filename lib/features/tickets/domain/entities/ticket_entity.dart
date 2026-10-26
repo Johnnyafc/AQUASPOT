@@ -13,6 +13,7 @@ import 'registro_despacho_entity.dart';
 import 'orden_recepcion_repuestos_entity.dart';
 import 'cambio_material_entity.dart';
 import 'linea_repuesto_venta_entity.dart';
+import 'mantenimiento_interno_entity.dart';
 import '../../../fallas/domain/entities/metrica_falla_entity.dart';
 
 import 'evento_auditoria_entity.dart';
@@ -133,6 +134,10 @@ final String marca; // 🚨 El que te habías olvidado
   // auditoría). Solo se agrega con arrayUnion; nunca va en toJson.
   final List<CambioMaterialEntity> historialCambiosMateriales;
 
+  // 🛠️ MANTENIMIENTO INTERNO (solo tipoRequerimiento == mantenimientoInterno):
+  // tipo de mantenimiento, tipo de máquina, placa, km y fecha de la falla.
+  final MantenimientoInternoEntity? mantenimientoInterno;
+
 const TicketEntity({
     required this.id,
     required this.estadoActual,
@@ -204,6 +209,7 @@ const TicketEntity({
     this.pickingFinalizadoPor,
     this.pickingFinalizadoEn,
     this.historialCambiosMateriales = const [],
+    this.mantenimientoInterno,
   });
 
   // ⚙️ CLONADOR INDUSTRIAL CORREGIDO (Mutación Segura)
@@ -278,6 +284,7 @@ const TicketEntity({
     String? pickingFinalizadoPor,
     DateTime? pickingFinalizadoEn,
     List<CambioMaterialEntity>? historialCambiosMateriales,
+    MantenimientoInternoEntity? mantenimientoInterno,
   }) {
     return TicketEntity(
       id: id ?? this.id,
@@ -350,6 +357,7 @@ const TicketEntity({
       pickingFinalizadoPor: pickingFinalizadoPor ?? this.pickingFinalizadoPor,
       pickingFinalizadoEn: pickingFinalizadoEn ?? this.pickingFinalizadoEn,
       historialCambiosMateriales: historialCambiosMateriales ?? this.historialCambiosMateriales,
+      mantenimientoInterno: mantenimientoInterno ?? this.mantenimientoInterno,
     );
   }
 
@@ -425,11 +433,16 @@ const TicketEntity({
         pickingFinalizadoPor,
         pickingFinalizadoEn,
         historialCambiosMateriales,
+        mantenimientoInterno,
       ];
 
   /// Reclamo de garantía según el tipo de requerimiento O según la auditoría:
   /// si tiene dictamen de garantía ("GARANTÍA APROBADA…" / "GARANTÍA
   /// RECHAZADA…") lo es, aunque su tipo se haya cambiado manualmente.
+  /// Mantenimiento interno (máquinas y vehículos propios): no entra en las
+  /// bandejas ni en los indicadores de servicio al cliente.
+  bool get esMantenimientoInterno => tipoRequerimiento == TipoRequerimiento.mantenimientoInterno;
+
   bool get esReclamoDeGarantia =>
       tipoRequerimiento == TipoRequerimiento.reclamoGarantia ||
       historialEventos.any((e) {

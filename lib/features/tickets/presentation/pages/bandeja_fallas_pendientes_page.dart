@@ -98,6 +98,7 @@ class _BandejaFallasPendientesPageState extends State<BandejaFallasPendientesPag
             // Ventas de repuesto y anulados no llevan diagnóstico de fallas.
             final pendientes = state.historial.where((t) {
               if (t.tipoRequerimiento == TipoRequerimiento.ventaRepuesto) return false;
+              if (t.esMantenimientoInterno) return false; // aún sin flujo de diagnóstico
               if (t.estadoActual == EstadoTicket.anulado) return false;
               return _motivoPendiente(t) != null;
             }).toList();

@@ -58,6 +58,7 @@ enum TipoRequerimiento {
   reparacion,
   reclamoGarantia,
   ventaMaquina,
+  mantenimientoInterno, // equipos y vehículos propios de Aquaspot (sin cliente)
   ninguno
 }
 

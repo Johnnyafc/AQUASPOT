@@ -195,6 +195,8 @@ class IndicadoresPostventaService {
         return 'Alquiler / prueba';
       case TipoRequerimiento.ventaMaquina:
         return 'Venta de máquina';
+      case TipoRequerimiento.mantenimientoInterno:
+        return 'Mantenimiento interno';
       case TipoRequerimiento.ninguno:
         return 'Sin especificar';
     }
@@ -263,6 +265,9 @@ class IndicadoresPostventaService {
 
     for (final t in tickets) {
       if (equipo != null && t.equipo.name != equipo) continue;
+      // Mantenimiento interno (máquinas propias): fuera de los indicadores
+      // de servicio al cliente.
+      if (t.esMantenimientoInterno) continue;
       final lugar = etiquetaLugar(t.lugarAtencion);
 
       // Indicador adicional: TODOS los creados en el rango (anulados

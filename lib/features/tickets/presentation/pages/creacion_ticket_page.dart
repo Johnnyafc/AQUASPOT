@@ -13,6 +13,9 @@ import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../../../features/auth/presentation/bloc/auth_state.dart';
 import '../widgets/ticket_form_widget.dart';
 import '../widgets/venta_repuesto_form_widget.dart';
+import '../widgets/mantenimiento_interno_form_widget.dart';
+import '../bloc/mantenimiento_interno_cubit.dart';
+import '../../../../injection_container.dart' as di;
 import '../widgets/confirmacion_ingreso_dialog.dart';
 import '../../domain/entities/linea_repuesto_venta_entity.dart';
 import '../../domain/services/evaluacion_venta_repuesto_service.dart';
@@ -649,7 +652,13 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
                     elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     child: Padding(
                       padding: const EdgeInsets.all(32.0),
-                      child: state.tipoSeleccionado == TipoRequerimiento.ventaRepuesto
+                      child: state.tipoSeleccionado == TipoRequerimiento.mantenimientoInterno
+                          // 🛠️ Mantenimiento interno: formulario y estado propios (cubit).
+                          ? BlocProvider(
+                              create: (_) => di.sl<MantenimientoInternoCubit>(),
+                              child: const MantenimientoInternoFormWidget(),
+                            )
+                          : state.tipoSeleccionado == TipoRequerimiento.ventaRepuesto
                           ? VentaRepuestoFormWidget(
                               formKey: _formKey,
                               isProcessing: state.status == TicketStatus.loading,

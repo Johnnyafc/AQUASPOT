@@ -97,6 +97,8 @@ String _etiquetaTipoRequerimientoBloc(TipoRequerimiento t) {
       return 'Alquiler / prueba';
     case TipoRequerimiento.ventaMaquina:
       return 'Venta de máquina';
+    case TipoRequerimiento.mantenimientoInterno:
+      return 'Mantenimiento interno';
     case TipoRequerimiento.ninguno:
       return 'Sin especificar';
   }

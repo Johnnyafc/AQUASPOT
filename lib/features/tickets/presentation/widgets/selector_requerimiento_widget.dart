@@ -73,6 +73,7 @@ class SelectorRequerimientoWidget extends StatelessWidget {
             _BotonOpcion(icono: Icons.build, texto: 'Reparación', onTap: () => _seleccionarTipo(context, TipoRequerimiento.reparacion)),
             _BotonOpcion(icono: Icons.gavel, texto: 'Reclamo/Garantía', onTap: () => _seleccionarTipo(context, TipoRequerimiento.reclamoGarantia)),
             _BotonOpcion(icono: Icons.point_of_sale, texto: 'Venta Maquina', onTap: () => _seleccionarTipo(context, TipoRequerimiento.ventaMaquina)),
+            _BotonOpcion(icono: Icons.handyman, texto: 'Mantenimiento Interno', onTap: () => _seleccionarTipo(context, TipoRequerimiento.mantenimientoInterno)),
           ],
         ),
       ],
@@ -157,7 +158,7 @@ class SelectorRequerimientoWidget extends StatelessWidget {
                 const Text('Requerimiento Seleccionado:',
                     style: TextStyle(fontSize: 12, color: Colors.green)),
                 Text(
-                  '${state.tipoSeleccionado.name.toUpperCase()} ${state.lugarAtencion != LugarAtencion.noAplica && state.lugarAtencion != LugarAtencion.pendiente ? "(${state.lugarAtencion.name.toUpperCase()})" : ""}$textoGarantia',
+                  '${state.tipoSeleccionado == TipoRequerimiento.mantenimientoInterno ? 'MANTENIMIENTO INTERNO' : state.tipoSeleccionado.name.toUpperCase()} ${state.lugarAtencion != LugarAtencion.noAplica && state.lugarAtencion != LugarAtencion.pendiente ? "(${state.lugarAtencion.name.toUpperCase()})" : ""}$textoGarantia',
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ],

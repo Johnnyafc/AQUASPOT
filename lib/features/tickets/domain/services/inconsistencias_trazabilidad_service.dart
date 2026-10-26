@@ -93,10 +93,13 @@ class InconsistenciasTrazabilidadService {
   }
 
   /// Todas las reglas sobre una lista de tickets. Excluye las ventas de
-  /// repuesto (módulo en desarrollo) y los anulados.
+  /// repuesto y el mantenimiento interno (módulos en desarrollo) y los anulados.
   static List<InconsistenciaTicket> detectarEnTickets(List<TicketEntity> tickets, {DateTime? ahora}) {
     final revisables = tickets
-        .where((t) => t.tipoRequerimiento != TipoRequerimiento.ventaRepuesto && t.estadoActual != EstadoTicket.anulado)
+        .where((t) =>
+            t.tipoRequerimiento != TipoRequerimiento.ventaRepuesto &&
+            !t.esMantenimientoInterno &&
+            t.estadoActual != EstadoTicket.anulado)
         .toList();
     final momento = ahora ?? DateTime.now();
     final horasPorTicket = <String, Map<String, double>>{};

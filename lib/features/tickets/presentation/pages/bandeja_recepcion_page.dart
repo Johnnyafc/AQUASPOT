@@ -120,8 +120,9 @@ class _BandejaRecepcionPageState extends State<BandejaRecepcionPage> {
                 
                 // Carril 1 (INCOMPLETOS): Tickets que nacieron en campo pero les falta revisión, fotos o serie.
                 // Se quedaron retenidos en la etapa de creación.
+                // El mantenimiento interno no pasa por recepción física.
                 final incompletos = state.historial
-                    .where((t) => t.estadoActual == EstadoTicket.creado)
+                    .where((t) => t.estadoActual == EstadoTicket.creado && !t.esMantenimientoInterno)
                     .toList();
 
                 // Carril 2 (COMPLETOS): Tickets que ya pasaron por el taller (o nacieron completos) 

@@ -4,6 +4,7 @@ import 'item_despacho_bodega_model.dart';
 import 'registro_despacho_model.dart';
 import 'orden_recepcion_repuestos_model.dart';
 import 'linea_repuesto_venta_model.dart';
+import 'mantenimiento_interno_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:aquaspot_postventa/features/tickets/data/models/GestionComprasModel.dart';
 import 'package:aquaspot_postventa/features/tickets/data/models/evidencia_trabajo_model.dart';
@@ -87,6 +88,7 @@ class TicketModel extends TicketEntity {
     super.pickingFinalizadoPor,
     super.pickingFinalizadoEn,
     super.historialCambiosMateriales = const [],
+    super.mantenimientoInterno,
   });
 
   static DateTime? _fechaOpcional(dynamic v) {
@@ -235,6 +237,7 @@ class TicketModel extends TicketEntity {
       pickingIniciadoEn: _fechaOpcional(json['pickingIniciadoEn']),
       pickingFinalizadoPor: json['pickingFinalizadoPor'] as String?,
       pickingFinalizadoEn: _fechaOpcional(json['pickingFinalizadoEn']),
+      mantenimientoInterno: MantenimientoInternoModel.fromJson(json['mantenimientoInterno']),
       historialCambiosMateriales: (json['historialCambiosMateriales'] as List?)
               ?.map(CambioMaterialEntity.fromJson)
               .whereType<CambioMaterialEntity>()
@@ -330,6 +333,7 @@ class TicketModel extends TicketEntity {
       pickingFinalizadoPor: entity.pickingFinalizadoPor,
       pickingFinalizadoEn: entity.pickingFinalizadoEn,
       historialCambiosMateriales: entity.historialCambiosMateriales,
+      mantenimientoInterno: entity.mantenimientoInterno,
     );
 
   }
@@ -434,6 +438,7 @@ class TicketModel extends TicketEntity {
       'necesitaAsistenciaTecnica': necesitaAsistenciaTecnica,
       'urlsAudiosAsistencia': urlsAudiosAsistencia,
       'urlsCotizacionCompras': urlsCotizacionCompras,
+      if (mantenimientoInterno != null) 'mantenimientoInterno': MantenimientoInternoModel.toJson(mantenimientoInterno!),
       // ⚠️ 'inconsistenciasRevisadas' NO se escribe aquí a propósito: solo
       // se agrega con arrayUnion, así una copia desactualizada del ticket
       // nunca borra una marca de "Revisado".
