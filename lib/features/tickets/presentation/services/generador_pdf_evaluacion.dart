@@ -19,16 +19,19 @@ class GeneradorPdfEvaluacion {
     return '$dia de $mes de $anio';
   }
 
-  // NUEVO: el informe de evaluacion tecnica siempre cierra con "ING." antes
+  // NUEVO: el informe de evaluacion tecnica siempre cierra con "Ing." antes
   // del nombre de quien firma. Si el nombre ya viene con ese prefijo (ej.
-  // alguien lo guardo asi manualmente), no se duplica.
+  // alguien lo guardo asi manualmente como "ING." o "Ing"), no se duplica y
+  // se escribe como "Ing.".
   static String _conPrefijoIng(String nombre) {
-    final normalizado = nombre.trim();
-    final yaLoTiene = normalizado.toUpperCase().startsWith('ING.') ||
-        normalizado.toUpperCase().startsWith('ING ');
-    if (yaLoTiene) return normalizado;
-    return 'ING. $normalizado';
+    final sinPrefijo = nombre.trim().replaceFirst(RegExp(r'^ing(\.\s*|\s+)', caseSensitive: false), '');
+    return 'Ing. $sinPrefijo';
   }
+
+  static const String _notaDaniosOcultos =
+      'NOTA: Al desarmar los componentes (motor, carcasa, etc.) podrían aparecer daños ocultos no '
+      'detectables en la inspección visual inicial; el cliente acepta esta posibilidad, la cual podría '
+      'afectar el alcance y el monto del presupuesto.';
 
   static Future<Uint8List> generarPdf({
     required TicketEntity ticket,
@@ -210,7 +213,12 @@ class GeneradorPdfEvaluacion {
             );
           }),
 
-          pw.SizedBox(height: 30),
+          pw.SizedBox(height: 20),
+
+          // Nota de daños ocultos
+          pw.Text(_notaDaniosOcultos, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+
+          pw.SizedBox(height: 20),
 
           // Firma de Cierre
           pw.Column(
