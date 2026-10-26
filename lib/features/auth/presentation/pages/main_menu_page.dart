@@ -252,7 +252,11 @@ class _InicioView extends StatelessWidget {
     }
 
     // 🚀 MÓDULOS DE REQUERIMIENTO Y RECEPCIÓN
-    if (isAdmin || operador.rol == RolUsuario.requerimiento || operador.rol == RolUsuario.supervisor) {
+    // Comercial también crea requerimientos (ej. ventas de repuesto que le llegan directo).
+    if (isAdmin ||
+        operador.rol == RolUsuario.requerimiento ||
+        operador.rol == RolUsuario.supervisor ||
+        operador.rol == RolUsuario.comercial) {
       modules.add(_buildCardOption(
         title: 'Crear Ticket',
         icon: Icons.add_box,
