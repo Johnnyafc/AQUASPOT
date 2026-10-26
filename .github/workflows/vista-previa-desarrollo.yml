@@ -1,0 +1,60 @@
+# .github/workflows/vista-previa-desarrollo.yml
+#
+# Link de prueba "desarrollo" (canal de vista previa de Firebase Hosting).
+# En cada push a aquaspot_optimizado: analiza, corre los tests, compila la
+# app web y la publica SOLO en el canal "desarrollo". Nunca publica en
+# producción (live) ni en el canal "prueba-rapida".
+#
+# Requiere el secreto FIREBASE_SERVICE_ACCOUNT (clave JSON de la cuenta de
+# servicio github-desarrollo del proyecto aquaspot-postventa).
+# El link aparece al final del paso "Publicar en el canal desarrollo" y en
+# Firebase → Hosting → Canales de vista previa.
+
+name: Vista previa desarrollo
+
+on:
+  push:
+    branches: [aquaspot_optimizado]
+  workflow_dispatch:
+
+# Si llegan dos pushes seguidos, solo se publica el último.
+concurrency:
+  group: vista-previa-desarrollo
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar Flutter 3.47.2 (misma versión que el equipo de desarrollo)
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.2
+          channel: stable
+          cache: true
+
+      - name: Dependencias
+        run: flutter pub get
+
+      # Solo los errores detienen la publicación (los avisos ya existentes no).
+      - name: Análisis
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Tests
+        run: flutter test
+
+      - name: Compilar versión web
+        run: flutter build web --release
+
+      - name: Publicar en el canal desarrollo
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: aquaspot-postventa
+          channelId: desarrollo
+          expires: 30d
