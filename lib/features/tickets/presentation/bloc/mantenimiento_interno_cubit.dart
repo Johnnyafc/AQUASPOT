@@ -3,7 +3,8 @@
 // Estado del formulario de MANTENIMIENTO INTERNO (Crear Ticket). Las reglas
 // (campos por máquina, tipo de mantenimiento por rol, validaciones) están
 // en FormularioMantenimientoService; aquí solo se guarda lo que el usuario
-// llena y se orquesta el envío: crear el ticket → subir fotos → adjuntarlas.
+// llena y se orquesta el envío: crear el ticket → subir la foto del
+// horómetro / kilometraje, las fotos y los videos → adjuntarlos.
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -20,6 +21,8 @@ enum EstadoEnvioMantenimiento { editando, enviando, creado, error }
 class MantenimientoInternoState extends Equatable {
   final DatosMantenimientoInterno datos;
   final List<XFile> fotos;
+  final List<XFile> videos;
+  final XFile? fotoLectura; // foto del horómetro / kilometraje
   final EstadoEnvioMantenimiento envio;
   final String mensaje;
   final List<String> errores;
@@ -28,6 +31,8 @@ class MantenimientoInternoState extends Equatable {
   const MantenimientoInternoState({
     this.datos = const DatosMantenimientoInterno(),
     this.fotos = const [],
+    this.videos = const [],
+    this.fotoLectura,
     this.envio = EstadoEnvioMantenimiento.editando,
     this.mensaje = '',
     this.errores = const [],
@@ -37,6 +42,9 @@ class MantenimientoInternoState extends Equatable {
   MantenimientoInternoState copyWith({
     DatosMantenimientoInterno? datos,
     List<XFile>? fotos,
+    List<XFile>? videos,
+    XFile? fotoLectura,
+    bool limpiarFotoLectura = false,
     EstadoEnvioMantenimiento? envio,
     String? mensaje,
     List<String>? errores,
@@ -45,6 +53,8 @@ class MantenimientoInternoState extends Equatable {
     return MantenimientoInternoState(
       datos: datos ?? this.datos,
       fotos: fotos ?? this.fotos,
+      videos: videos ?? this.videos,
+      fotoLectura: limpiarFotoLectura ? null : (fotoLectura ?? this.fotoLectura),
       envio: envio ?? this.envio,
       mensaje: mensaje ?? this.mensaje,
       errores: errores ?? this.errores,
@@ -54,7 +64,8 @@ class MantenimientoInternoState extends Equatable {
 
   @override
   List<Object?> get props => [datos.tipoMantenimiento, datos.tipoActivo, datos.serieOPlaca, datos.horometro,
-        datos.kilometraje, datos.fechaHora, datos.detalle, fotos, envio, mensaje, errores, ticketCreadoId];
+        datos.kilometraje, datos.fechaHora, datos.detalle, fotos, videos, fotoLectura, envio, mensaje, errores,
+        ticketCreadoId];
 }
 
 class MantenimientoInternoCubit extends Cubit<MantenimientoInternoState> {
@@ -71,8 +82,14 @@ class MantenimientoInternoCubit extends Cubit<MantenimientoInternoState> {
   void _datos(DatosMantenimientoInterno d) => emit(state.copyWith(datos: d, errores: const []));
 
   void elegirTipoMantenimiento(TipoMantenimiento t) => _datos(state.datos.copyWith(tipoMantenimiento: t));
-  void elegirTipoActivo(TipoActivoMantenimiento t) =>
-      _datos(FormularioMantenimientoService.cambiarTipoActivo(state.datos, t));
+  void elegirTipoActivo(TipoActivoMantenimiento t) {
+    if (state.datos.tipoActivo == t) return;
+    emit(state.copyWith(
+      datos: FormularioMantenimientoService.cambiarTipoActivo(state.datos, t),
+      limpiarFotoLectura: true,
+      errores: const [],
+    ));
+  }
   void elegirSerieOPlaca(String valor) => _datos(state.datos.copyWith(serieOPlaca: valor));
   void cambiarHorometro(double? v) =>
       _datos(v == null ? state.datos.copyWith(limpiarHorometro: true) : state.datos.copyWith(horometro: v));
@@ -91,8 +108,24 @@ class MantenimientoInternoCubit extends Cubit<MantenimientoInternoState> {
     emit(state.copyWith(fotos: fotos, datos: state.datos.copyWith(cantidadFotos: fotos.length)));
   }
 
-  /// Crea el ticket, sube las fotos y las adjunta. Si una foto falla, el
-  /// ticket ya quedó creado: se avisa cuál y con qué número.
+  void agregarVideos(List<XFile> nuevos) {
+    final videos = [...state.videos, ...nuevos];
+    emit(state.copyWith(videos: videos, datos: state.datos.copyWith(cantidadVideos: videos.length), errores: const []));
+  }
+
+  void quitarVideo(int index) {
+    final videos = [...state.videos]..removeAt(index);
+    emit(state.copyWith(videos: videos, datos: state.datos.copyWith(cantidadVideos: videos.length)));
+  }
+
+  void ponerFotoLectura(XFile foto) =>
+      emit(state.copyWith(fotoLectura: foto, datos: state.datos.copyWith(tieneFotoLectura: true), errores: const []));
+
+  void quitarFotoLectura() =>
+      emit(state.copyWith(limpiarFotoLectura: true, datos: state.datos.copyWith(tieneFotoLectura: false)));
+
+  /// Crea el ticket, sube las evidencias y las adjunta. Si un archivo falla,
+  /// el ticket ya quedó creado: se avisa cuál y con qué número.
   Future<void> enviar({required String usuarioNombre, required RolUsuario rol}) async {
     final errores = FormularioMantenimientoService.validar(state.datos, rol: rol, ahora: DateTime.now());
     if (errores.isNotEmpty) {
@@ -109,29 +142,36 @@ class MantenimientoInternoCubit extends Cubit<MantenimientoInternoState> {
       return;
     }
 
+    // Foto de la lectura primero, luego fotos y videos, en ese orden.
+    final archivos = [if (state.fotoLectura != null) state.fotoLectura!, ...state.fotos, ...state.videos];
     final urls = <String>[];
-    for (final foto in state.fotos) {
-      emit(state.copyWith(mensaje: 'Subiendo fotos a ${ticket.id} (${urls.length + 1}/${state.fotos.length})...'));
-      final r = await subirEvidencia(foto, ticket.id);
+    for (final archivo in archivos) {
+      emit(state.copyWith(mensaje: 'Subiendo evidencias a ${ticket.id} (${urls.length + 1}/${archivos.length})...'));
+      final r = await subirEvidencia(archivo, ticket.id);
       final url = r.fold((_) => null, (u) => u);
       if (url == null) {
         final msg = r.fold((f) => f.message, (_) => '');
         emit(state.copyWith(
           envio: EstadoEnvioMantenimiento.error,
           ticketCreadoId: ticket.id,
-          mensaje: 'El requerimiento ${ticket.id} se creó, pero no se pudo subir la foto "${foto.name}": $msg',
+          mensaje: 'El requerimiento ${ticket.id} se creó, pero no se pudo subir "${archivo.name}": $msg',
         ));
         return;
       }
       urls.add(url);
     }
-
-    final adjunto = await adjuntarEvidencias(ticket, urls);
+    final conLectura = state.fotoLectura != null ? 1 : 0;
+    final adjunto = await adjuntarEvidencias(
+      ticket,
+      urls.sublist(conLectura, conLectura + state.fotos.length),
+      urlFotoLectura: conLectura == 1 ? urls.first : null,
+      videosUrls: urls.sublist(conLectura + state.fotos.length),
+    );
     adjunto.fold(
       (f) => emit(state.copyWith(
         envio: EstadoEnvioMantenimiento.error,
         ticketCreadoId: ticket.id,
-        mensaje: 'El requerimiento ${ticket.id} se creó, pero no se pudieron guardar las fotos: ${f.message}',
+        mensaje: 'El requerimiento ${ticket.id} se creó, pero no se pudieron guardar las evidencias: ${f.message}',
       )),
       (_) => emit(state.copyWith(
         envio: EstadoEnvioMantenimiento.creado,

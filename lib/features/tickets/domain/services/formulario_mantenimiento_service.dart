@@ -8,12 +8,12 @@
 //   Preventivo; el resto de roles queda fijo en Correctivo (se valida
 //   también al crear, no solo en la pantalla).
 // - Campos según el tipo de máquina:
-//     Cosechadora: serie, horómetro
+//     Cosechadora: serie, horómetro + foto del horómetro (obligatorios)
 //     Contador / Caracol: serie, fecha y hora (de la falla; en preventivo,
 //       la programada)
-//     Vehículo: placa, kilometraje
+//     Vehículo: placa, kilometraje + foto del kilometraje (obligatorios)
 //   y en todos: detalle de la falla (o del trabajo, si es preventivo) y al
-//   menos una foto.
+//   menos una evidencia, foto o video (máximo 3 videos de 60 s).
 // - La serie y la placa salen de un catálogo fijo (catalogo); para agregar
 //   una máquina se agrega aquí.
 // - El ticket se crea en estado "creado", sin cliente ("AQUASPOT
@@ -36,6 +36,8 @@ class DatosMantenimientoInterno {
   final DateTime? fechaHora;
   final String detalle;
   final int cantidadFotos;
+  final int cantidadVideos;
+  final bool tieneFotoLectura; // foto del horómetro / kilometraje
 
   const DatosMantenimientoInterno({
     this.tipoMantenimiento = TipoMantenimiento.correctivo,
@@ -46,6 +48,8 @@ class DatosMantenimientoInterno {
     this.fechaHora,
     this.detalle = '',
     this.cantidadFotos = 0,
+    this.cantidadVideos = 0,
+    this.tieneFotoLectura = false,
   });
 
   DatosMantenimientoInterno copyWith({
@@ -57,6 +61,8 @@ class DatosMantenimientoInterno {
     DateTime? fechaHora,
     String? detalle,
     int? cantidadFotos,
+    int? cantidadVideos,
+    bool? tieneFotoLectura,
     bool limpiarSerieOPlaca = false,
     bool limpiarHorometro = false,
     bool limpiarKilometraje = false,
@@ -70,6 +76,8 @@ class DatosMantenimientoInterno {
       fechaHora: fechaHora ?? this.fechaHora,
       detalle: detalle ?? this.detalle,
       cantidadFotos: cantidadFotos ?? this.cantidadFotos,
+      cantidadVideos: cantidadVideos ?? this.cantidadVideos,
+      tieneFotoLectura: tieneFotoLectura ?? this.tieneFotoLectura,
     );
   }
 }
@@ -77,6 +85,8 @@ class DatosMantenimientoInterno {
 class FormularioMantenimientoService {
   static const String clienteInterno = 'AQUASPOT (interno)';
   static const int minimoCaracteresDetalle = 10;
+  static const int maximoVideos = 3;
+  static const Duration duracionMaximaVideo = Duration(seconds: 60);
 
   /// Series (máquinas) y placas (vehículos) disponibles por tipo.
   static const Map<TipoActivoMantenimiento, List<String>> catalogo = {
@@ -101,6 +111,12 @@ class FormularioMantenimientoService {
       t == TipoActivoMantenimiento.contador || t == TipoActivoMantenimiento.caracol;
   static bool pideKilometraje(TipoActivoMantenimiento? t) => esVehiculo(t);
 
+  /// Foto obligatoria de la lectura: horómetro (cosechadora) o kilometraje
+  /// (vehículo).
+  static bool pideFotoLectura(TipoActivoMantenimiento? t) => pideHorometro(t) || pideKilometraje(t);
+  static String etiquetaFotoLectura(TipoActivoMantenimiento? t) =>
+      esVehiculo(t) ? 'Foto del kilometraje' : 'Foto del horómetro';
+
   static String etiquetaSerieOPlaca(TipoActivoMantenimiento? t) => esVehiculo(t) ? 'Placa' : 'Serie de máquina';
 
   static String etiquetaDetalle(TipoMantenimiento m) =>
@@ -118,7 +134,8 @@ class FormularioMantenimientoService {
       };
 
   /// Al cambiar de tipo de máquina se borran los campos que ya no aplican
-  /// (serie/placa, horómetro, kilometraje) para no guardar datos cruzados.
+  /// (serie/placa, horómetro, kilometraje y su foto) para no guardar datos
+  /// cruzados.
   static DatosMantenimientoInterno cambiarTipoActivo(DatosMantenimientoInterno d, TipoActivoMantenimiento nuevo) {
     if (d.tipoActivo == nuevo) return d;
     final opciones = opcionesDe(nuevo);
@@ -128,6 +145,7 @@ class FormularioMantenimientoService {
       limpiarSerieOPlaca: opciones.length != 1,
       limpiarHorometro: !pideHorometro(nuevo),
       limpiarKilometraje: !pideKilometraje(nuevo),
+      tieneFotoLectura: false,
     );
   }
 
@@ -163,6 +181,9 @@ class FormularioMantenimientoService {
         errores.add('El kilometraje no puede ser negativo.');
       }
     }
+    if (pideFotoLectura(tipo) && !d.tieneFotoLectura) {
+      errores.add('Agregue la ${etiquetaFotoLectura(tipo).toLowerCase()}.');
+    }
     if (pideFechaHora(tipo)) {
       if (d.fechaHora == null) {
         errores.add('Seleccione la fecha y hora.');
@@ -173,8 +194,11 @@ class FormularioMantenimientoService {
     if (d.detalle.trim().length < minimoCaracteresDetalle) {
       errores.add('${etiquetaDetalle(d.tipoMantenimiento)}: escriba al menos $minimoCaracteresDetalle caracteres.');
     }
-    if (d.cantidadFotos < 1) {
-      errores.add('Agregue al menos una foto de evidencia.');
+    if (d.cantidadFotos + d.cantidadVideos < 1) {
+      errores.add('Agregue al menos una evidencia (foto o video).');
+    }
+    if (d.cantidadVideos > maximoVideos) {
+      errores.add('Máximo $maximoVideos videos de evidencia.');
     }
     return errores;
   }

@@ -85,6 +85,69 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
     }
   }
 
+  Future<void> _agregarVideo({required bool camara}) async {
+    final cubit = context.read<MantenimientoInternoCubit>();
+    if (cubit.state.videos.length >= _F.maximoVideos) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('⚠️ Máximo ${_F.maximoVideos} videos de evidencia.')),
+      );
+      return;
+    }
+    try {
+      final video = await ImagePicker().pickVideo(
+        source: camara ? ImageSource.camera : ImageSource.gallery,
+        maxDuration: _F.duracionMaximaVideo,
+      );
+      if (video != null) cubit.agregarVideos([video]);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('🛑 Error al adjuntar el video: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _fotoLectura({required bool camara}) async {
+    final cubit = context.read<MantenimientoInternoCubit>();
+    try {
+      final foto = await ImagePicker()
+          .pickImage(source: camara ? ImageSource.camera : ImageSource.gallery, imageQuality: 70);
+      if (foto != null) cubit.ponerFotoLectura(foto);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('🛑 Error al adjuntar la foto: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  /// Foto obligatoria del horómetro / kilometraje: botones o la miniatura.
+  Widget _seccionFotoLectura(MantenimientoInternoState s, TipoActivoMantenimiento tipo) {
+    final cubit = context.read<MantenimientoInternoCubit>();
+    final foto = s.fotoLectura;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _titulo('${_F.etiquetaFotoLectura(tipo)} (obligatoria)'),
+        if (foto != null)
+          _MiniaturaFoto(foto: foto, onQuitar: cubit.quitarFotoLectura)
+        else
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            OutlinedButton.icon(
+              icon: const Icon(Icons.photo_camera_outlined),
+              label: const Text('Tomar foto'),
+              onPressed: () => _fotoLectura(camara: true),
+            ),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.photo_library_outlined),
+              label: const Text('Desde archivos'),
+              onPressed: () => _fotoLectura(camara: false),
+            ),
+          ]),
+      ],
+    );
+  }
+
   String _dosDigitos(int v) => v.toString().padLeft(2, '0');
   String _fmtFechaHora(DateTime f) =>
       '${_dosDigitos(f.day)}/${_dosDigitos(f.month)}/${f.year} ${_dosDigitos(f.hour)}:${_dosDigitos(f.minute)}';
@@ -209,6 +272,7 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
                     onChanged: (v) => cubit.cambiarKilometraje(_numero(v)),
                   ),
                 ],
+                if (_F.pideFotoLectura(tipo)) _seccionFotoLectura(s, tipo),
                 if (_F.pideFechaHora(tipo)) ...[
                   _titulo(_F.etiquetaFechaHora(d.tipoMantenimiento)),
                   OutlinedButton.icon(
@@ -236,7 +300,7 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
                 ),
                 onChanged: cubit.cambiarDetalle,
               ),
-              _titulo('Evidencias (mínimo 1 foto)'),
+              _titulo('Evidencias (mínimo 1 foto o video)'),
               Wrap(spacing: 8, runSpacing: 8, children: [
                 OutlinedButton.icon(
                   icon: const Icon(Icons.photo_camera_outlined),
@@ -248,13 +312,42 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
                   label: const Text('Desde archivos'),
                   onPressed: () => _agregarFotos(camara: false),
                 ),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.videocam_outlined),
+                  label: const Text('Grabar video'),
+                  onPressed: () => _agregarVideo(camara: true),
+                ),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.video_library_outlined),
+                  label: const Text('Video desde archivos'),
+                  onPressed: () => _agregarVideo(camara: false),
+                ),
               ]),
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'Videos: máximo ${_F.maximoVideos}, de hasta ${_F.duracionMaximaVideo.inSeconds} segundos.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ),
               if (s.fotos.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: Wrap(spacing: 8, runSpacing: 8, children: [
                     for (var i = 0; i < s.fotos.length; i++)
                       _MiniaturaFoto(foto: s.fotos[i], onQuitar: () => cubit.quitarFoto(i)),
+                  ]),
+                ),
+              if (s.videos.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Wrap(spacing: 8, runSpacing: 8, children: [
+                    for (var i = 0; i < s.videos.length; i++)
+                      InputChip(
+                        avatar: const Icon(Icons.play_circle_outline),
+                        label: Text('Video ${i + 1}'),
+                        onDeleted: () => cubit.quitarVideo(i),
+                      ),
                   ]),
                 ),
 

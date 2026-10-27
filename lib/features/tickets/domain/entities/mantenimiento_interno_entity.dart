@@ -3,7 +3,9 @@
 // 🛠️ Datos propios de un requerimiento de MANTENIMIENTO INTERNO (máquinas y
 // vehículos de Aquaspot). La serie, el horómetro, el detalle de la falla y
 // las evidencias van en los campos de siempre del ticket (numeroSerie,
-// horometro, fallaReportada, fotosUrls); aquí solo lo que no existe.
+// horometro, fallaReportada, fotosUrls); aquí solo lo que no existe:
+// placa, kilometraje, fecha y hora, la foto del horómetro / kilometraje y
+// los videos de evidencia.
 
 import 'package:equatable/equatable.dart';
 
@@ -33,6 +35,8 @@ class MantenimientoInternoEntity extends Equatable {
   final String? placa; // solo vehículos
   final double? kilometraje; // solo vehículos
   final DateTime? fechaHoraFalla; // contador / caracol (en preventivo: fecha programada)
+  final String? urlFotoLectura; // foto del horómetro (cosechadora) o del kilometraje (vehículo)
+  final List<String> videosUrls; // videos de evidencia
 
   const MantenimientoInternoEntity({
     required this.tipoMantenimiento,
@@ -40,8 +44,23 @@ class MantenimientoInternoEntity extends Equatable {
     this.placa,
     this.kilometraje,
     this.fechaHoraFalla,
+    this.urlFotoLectura,
+    this.videosUrls = const [],
   });
 
+  MantenimientoInternoEntity copyWith({String? urlFotoLectura, List<String>? videosUrls}) {
+    return MantenimientoInternoEntity(
+      tipoMantenimiento: tipoMantenimiento,
+      tipoActivo: tipoActivo,
+      placa: placa,
+      kilometraje: kilometraje,
+      fechaHoraFalla: fechaHoraFalla,
+      urlFotoLectura: urlFotoLectura ?? this.urlFotoLectura,
+      videosUrls: videosUrls ?? this.videosUrls,
+    );
+  }
+
   @override
-  List<Object?> get props => [tipoMantenimiento, tipoActivo, placa, kilometraje, fechaHoraFalla];
+  List<Object?> get props =>
+      [tipoMantenimiento, tipoActivo, placa, kilometraje, fechaHoraFalla, urlFotoLectura, videosUrls];
 }

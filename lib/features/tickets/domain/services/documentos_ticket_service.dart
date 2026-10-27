@@ -17,6 +17,9 @@
 //   lo de tickets viejos.
 // - `codigoOrdenVenta` / `codigoOrdenCompra` guardan URLs de los documentos
 //   de OV / OC (al aprobar la proforma), no códigos.
+// - Mantenimiento interno: sus fotos van en `fotosUrls` (como las de
+//   recepción); la foto del horómetro / kilometraje y los videos, en
+//   `mantenimientoInterno`.
 
 import '../../../../core/enum/ticket_enums.dart';
 import '../entities/ticket_entity.dart';
@@ -68,11 +71,17 @@ class DocumentosTicketService {
   static List<CarpetaDocumentos> carpetas(TicketEntity t) {
     final esVenta = t.tipoRequerimiento == TipoRequerimiento.ventaRepuesto;
     final ev = t.evaluacionTecnica;
+    final mi = t.mantenimientoInterno;
     final definicion = <(String, String, ColumnaDocumentos, Iterable<String?>)>[
       // Recepción
       ('fotosRecepcion', 'Fotos de Recepción', ColumnaDocumentos.evidenciaRecepcion, esVenta ? const [] : t.fotosUrls),
       ('actaRecepcion', 'Acta de Recepción (PDF)', ColumnaDocumentos.acta, [t.pdfActaUrl]),
       ('evidenciasGarantia', 'Evidencias de Garantía', ColumnaDocumentos.fotoHorometro, t.urlsEvidenciasGarantia ?? const []),
+      // Mantenimiento interno
+      ('mantenimientoFotoLectura', 'Mantenimiento Interno — Foto de horómetro / kilometraje', ColumnaDocumentos.fotoHorometro,
+          [mi?.urlFotoLectura]),
+      ('mantenimientoVideos', 'Mantenimiento Interno — Videos', ColumnaDocumentos.evidenciaRecepcion,
+          mi?.videosUrls ?? const []),
       // Venta de repuesto
       ('ventaEvidencias', 'Venta de Repuesto — Evidencias', ColumnaDocumentos.evidenciaVenta, esVenta ? t.fotosUrls : const []),
       ('audios', 'Audios (venta / asistencia técnica)', ColumnaDocumentos.audios, t.urlsAudiosAsistencia),

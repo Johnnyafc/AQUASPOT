@@ -13,6 +13,8 @@ class MantenimientoInternoModel {
         if (e.placa != null) 'placa': e.placa,
         if (e.kilometraje != null) 'kilometraje': e.kilometraje,
         if (e.fechaHoraFalla != null) 'fechaHoraFalla': Timestamp.fromDate(e.fechaHoraFalla!),
+        if (e.urlFotoLectura != null) 'urlFotoLectura': e.urlFotoLectura,
+        if (e.videosUrls.isNotEmpty) 'videosUrls': e.videosUrls,
       };
 
   /// null si el mapa no existe o no trae un tipo de máquina reconocible.
@@ -30,6 +32,8 @@ class MantenimientoInternoModel {
       fechaHoraFalla: fecha is Timestamp
           ? fecha.toDate()
           : (fecha is String ? DateTime.tryParse(fecha) : null),
+      urlFotoLectura: json['urlFotoLectura']?.toString(),
+      videosUrls: [for (final u in (json['videosUrls'] as List?) ?? const []) u.toString()],
     );
   }
 }

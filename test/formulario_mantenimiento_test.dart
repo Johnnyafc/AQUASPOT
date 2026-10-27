@@ -3,7 +3,8 @@
 // Mantenimiento interno (Crear Ticket): tipo de mantenimiento por rol,
 // campos por tipo de máquina, catálogo de series / placas, validaciones,
 // ticket que se crea, guardado en Firestore, use case y exclusión de los
-// Indicadores de Postventa.
+// Indicadores de Postventa; videos de evidencia y foto obligatoria del
+// horómetro / kilometraje.
 
 import 'package:aquaspot_postventa/core/enum/rol_usuario.dart';
 import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
@@ -12,8 +13,10 @@ import 'package:aquaspot_postventa/features/tickets/data/models/ticket_model.dar
 import 'package:aquaspot_postventa/features/tickets/domain/entities/mantenimiento_interno_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/ticket_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/repositories/ticket_repository.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/services/documentos_ticket_service.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/services/formulario_mantenimiento_service.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/services/indicadores_postventa_service.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/adjuntar_evidencias_mantenimiento_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/crear_mantenimiento_interno_usecase.dart';
 import 'package:dartz/dartz.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,10 +33,18 @@ DatosMantenimientoInterno cosechadoraValida({TipoMantenimiento tipo = TipoManten
       horometro: 1520.5,
       detalle: 'Fuga de aceite en el motor',
       cantidadFotos: 1,
+      tieneFotoLectura: true,
     );
 
 class _RepoFalso implements ITicketRepository {
   TicketEntity? creado;
+  TicketEntity? actualizado;
+
+  @override
+  Future<Either<Failure, TicketEntity>> actualizarTicket(TicketEntity ticket) async {
+    actualizado = ticket;
+    return Right(ticket);
+  }
 
   @override
   Future<Either<Failure, TicketEntity>> crearTicket(TicketEntity ticket) async {
@@ -84,6 +95,7 @@ void main() {
       final vehiculo = F.cambiarTipoActivo(cosechadoraValida(), TipoActivoMantenimiento.vehiculo);
       expect(vehiculo.serieOPlaca, 'GTA1234');
       expect(vehiculo.horometro, isNull);
+      expect(vehiculo.tieneFotoLectura, isFalse, reason: 'la foto del horómetro no sirve como foto del kilometraje');
       expect(vehiculo.detalle, 'Fuga de aceite en el motor', reason: 'el detalle se conserva');
     });
   });
@@ -98,18 +110,19 @@ void main() {
       expect(F.validar(cosechadoraValida(), rol: RolUsuario.requerimiento, ahora: ahora), isEmpty);
     });
 
-    test('Faltantes: horómetro, detalle corto, sin fotos, serie fuera del catálogo', () {
+    test('Faltantes: horómetro y su foto, detalle corto, sin evidencias, serie fuera del catálogo', () {
       final d = DatosMantenimientoInterno(
         tipoActivo: TipoActivoMantenimiento.cosechadora,
         serieOPlaca: 'XX9',
         detalle: 'falla',
       );
       final e = F.validar(d, rol: RolUsuario.requerimiento, ahora: ahora);
-      expect(e.length, 4);
+      expect(e.length, 5);
       expect(e.any((x) => x.contains('catálogo')), isTrue);
-      expect(e.any((x) => x.contains('horómetro')), isTrue);
+      expect(e, contains('Ingrese el horómetro.'));
+      expect(e, contains('Agregue la foto del horómetro.'));
       expect(e.any((x) => x.contains('10 caracteres')), isTrue);
-      expect(e.any((x) => x.contains('foto')), isTrue);
+      expect(e, contains('Agregue al menos una evidencia (foto o video).'));
     });
 
     test('Fecha de la falla: nunca futura en correctivo; en preventivo sí (programada)', () {
@@ -134,8 +147,34 @@ void main() {
         kilometraje: -5,
         detalle: 'Frenos desgastados',
         cantidadFotos: 1,
+        tieneFotoLectura: true,
       );
       expect(F.validar(d, rol: RolUsuario.requerimiento, ahora: ahora).single, contains('negativo'));
+    });
+
+    test('Vehículo: kilometraje y su foto son obligatorios', () {
+      const d = DatosMantenimientoInterno(
+        tipoActivo: TipoActivoMantenimiento.vehiculo,
+        serieOPlaca: 'GTA1234',
+        detalle: 'Frenos desgastados',
+        cantidadFotos: 1,
+      );
+      expect(F.validar(d, rol: RolUsuario.requerimiento, ahora: ahora),
+          ['Ingrese el kilometraje.', 'Agregue la foto del kilometraje.']);
+    });
+
+    test('Contador / caracol no piden foto de lectura', () {
+      expect(F.pideFotoLectura(TipoActivoMantenimiento.caracol), isFalse);
+      expect(F.pideFotoLectura(TipoActivoMantenimiento.contador), isFalse);
+      expect(F.pideFotoLectura(TipoActivoMantenimiento.cosechadora), isTrue);
+      expect(F.pideFotoLectura(TipoActivoMantenimiento.vehiculo), isTrue);
+    });
+
+    test('Un video sirve como evidencia; más de 3 videos no', () {
+      final soloVideo = cosechadoraValida().copyWith(cantidadFotos: 0, cantidadVideos: 1);
+      expect(F.validar(soloVideo, rol: RolUsuario.requerimiento, ahora: ahora), isEmpty);
+      final muchos = cosechadoraValida().copyWith(cantidadVideos: 4);
+      expect(F.validar(muchos, rol: RolUsuario.requerimiento, ahora: ahora).single, contains('Máximo 3 videos'));
     });
   });
 
@@ -163,6 +202,7 @@ void main() {
         kilometraje: 45200,
         detalle: 'Cambio de aceite y filtros',
         cantidadFotos: 1,
+        tieneFotoLectura: true,
       );
       final t = F.construirTicket(d, usuarioNombre: 'Ana', rol: RolUsuario.supervisor, ahora: ahora);
       expect(t.numeroSerie, isNull);
@@ -213,6 +253,30 @@ void main() {
       );
       expect(r.fold((_) => null, (t) => t.id), 'REQ-00100');
       expect(repo.creado!.esMantenimientoInterno, isTrue);
+    });
+
+    test('Adjunta fotos, videos y la foto del horómetro, y se guardan en Firestore', () async {
+      final repo = _RepoFalso();
+      final ticket = F.construirTicket(cosechadoraValida(), usuarioNombre: 'Ana', rol: RolUsuario.requerimiento, ahora: ahora)
+          .copyWith(id: 'REQ-2');
+      await AdjuntarEvidenciasMantenimientoUseCase(repo)(
+        ticket,
+        ['https://f/foto1.jpg'],
+        videosUrls: ['https://f/video1.mp4'],
+        urlFotoLectura: 'https://f/horometro.jpg',
+      );
+      final t = repo.actualizado!;
+      expect(t.fotosUrls, ['https://f/foto1.jpg']);
+      expect(t.mantenimientoInterno!.videosUrls, ['https://f/video1.mp4']);
+      expect(t.mantenimientoInterno!.urlFotoLectura, 'https://f/horometro.jpg');
+
+      final json = TicketModel.fromEntity(t).toJson()..['id'] = 'REQ-2';
+      expect(TicketModel.fromJson(json).mantenimientoInterno, t.mantenimientoInterno);
+
+      // Biblioteca / Dashboard: la foto del horómetro y los videos en su carpeta.
+      final carpetas = {for (final c in DocumentosTicketService.carpetas(t)) c.id: c};
+      expect(carpetas['mantenimientoFotoLectura']!.urls, ['https://f/horometro.jpg']);
+      expect(carpetas['mantenimientoVideos']!.urls, ['https://f/video1.mp4']);
     });
   });
 

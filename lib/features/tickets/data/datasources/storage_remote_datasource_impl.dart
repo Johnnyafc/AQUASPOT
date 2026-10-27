@@ -24,7 +24,7 @@ class StorageRemoteDataSourceImpl implements StorageRemoteDataSource {
       // putData no distingue entre si es web o nativo, simplemente recibe el buffer
       final uploadTask = await ref.putData(
         bytes, 
-        SettableMetadata(contentType: 'image/jpeg') // Ajusta según el tipo de archivo
+        SettableMetadata(contentType: _tipoContenido(file)) // imagen o video, según el archivo
       );
       
       return await uploadTask.ref.getDownloadURL();
@@ -33,4 +33,23 @@ class StorageRemoteDataSourceImpl implements StorageRemoteDataSource {
       throw ServerException('Fallo crítico al subir a Firebase Storage: $e');
     }
 }
+
+  /// Tipo del archivo para Storage (así los videos se reproducen en el
+  /// navegador). Si no se puede saber, se asume foto JPEG como antes.
+  static String _tipoContenido(XFile file) {
+    final mime = file.mimeType;
+    if (mime != null && mime.contains('/')) return mime;
+    final nombre = file.name.toLowerCase();
+    final extension = nombre.contains('.') ? nombre.split('.').last : '';
+    return switch (extension) {
+      'mp4' || 'm4v' => 'video/mp4',
+      'mov' => 'video/quicktime',
+      'webm' => 'video/webm',
+      '3gp' => 'video/3gpp',
+      'png' => 'image/png',
+      'heic' => 'image/heic',
+      'webp' => 'image/webp',
+      _ => 'image/jpeg',
+    };
+  }
 }
