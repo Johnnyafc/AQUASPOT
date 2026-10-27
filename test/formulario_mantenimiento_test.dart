@@ -6,6 +6,7 @@
 // Indicadores de Postventa; videos de evidencia y foto obligatoria del
 // horómetro / kilometraje.
 
+import 'package:aquaspot_postventa/core/enum/proceso_auditoria.dart';
 import 'package:aquaspot_postventa/core/enum/rol_usuario.dart';
 import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
 import 'package:aquaspot_postventa/core/errors/failures.dart';
@@ -183,7 +184,8 @@ void main() {
       final t = F.construirTicket(cosechadoraValida(), usuarioNombre: 'Ana', rol: RolUsuario.requerimiento, ahora: ahora);
       expect(t.tipoRequerimiento, TipoRequerimiento.mantenimientoInterno);
       expect(t.esMantenimientoInterno, isTrue);
-      expect(t.estadoActual, EstadoTicket.creado);
+      expect(t.estadoActual, EstadoTicket.recepcionFisica, reason: 'entra directo a Evaluación Técnica');
+      expect(t.historialEventos.single.habilita, [ProcesoAuditoria.evaluacion]);
       expect(t.equipo, TipoEquipo.Cosechadora);
       expect(t.numeroSerie, 'AQ2');
       expect(t.horometro, 1520.5);

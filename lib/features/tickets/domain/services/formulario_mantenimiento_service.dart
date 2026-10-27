@@ -16,7 +16,8 @@
 //   menos una evidencia, foto o video (máximo 3 videos de 60 s).
 // - La serie y la placa salen de un catálogo fijo (catalogo); para agregar
 //   una máquina se agrega aquí.
-// - El ticket se crea en estado "creado", sin cliente ("AQUASPOT
+// - El ticket se crea directo en Evaluación Técnica (recepcionFisica: la
+//   máquina es nuestra, no hay recepción física), sin cliente ("AQUASPOT
 //   (interno)") ni contacto, así no dispara correos a clientes.
 
 import '../../../../core/enum/proceso_auditoria.dart';
@@ -216,7 +217,7 @@ class FormularioMantenimientoService {
     final valor = d.serieOPlaca!.trim();
     return TicketEntity(
       id: 'TEMP',
-      estadoActual: EstadoTicket.creado,
+      estadoActual: EstadoTicket.recepcionFisica,
       sede: Sede.NINGUNO,
       clienteId: clienteInterno,
       campamento: '',
@@ -238,6 +239,7 @@ class FormularioMantenimientoService {
           timestamp: ahora,
           proceso: ProcesoAuditoria.recepcion,
           hito: HitoProceso.fin,
+          habilita: const [ProcesoAuditoria.evaluacion],
         ),
       ],
       tipoRequerimiento: TipoRequerimiento.mantenimientoInterno,

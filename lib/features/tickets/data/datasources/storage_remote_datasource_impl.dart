@@ -34,12 +34,30 @@ class StorageRemoteDataSourceImpl implements StorageRemoteDataSource {
     }
 }
 
+  @override
+  Future<String> subirBytes({
+    required Uint8List bytes,
+    required String nombre,
+    String? tipoContenido,
+    required String ticketId,
+    required String carpeta,
+  }) async {
+    try {
+      final ref = storage.ref().child('tickets/$ticketId/$carpeta/${DateTime.now().millisecondsSinceEpoch}_$nombre');
+      final subida = await ref.putData(bytes, SettableMetadata(contentType: _tipoDe(tipoContenido, nombre)));
+      return await subida.ref.getDownloadURL();
+    } catch (e) {
+      throw ServerException('Fallo crítico al subir a Firebase Storage: $e');
+    }
+  }
+
   /// Tipo del archivo para Storage (así los videos se reproducen en el
   /// navegador). Si no se puede saber, se asume foto JPEG como antes.
-  static String _tipoContenido(XFile file) {
-    final mime = file.mimeType;
+  static String _tipoContenido(XFile file) => _tipoDe(file.mimeType, file.name);
+
+  static String _tipoDe(String? mime, String nombreArchivo) {
     if (mime != null && mime.contains('/')) return mime;
-    final nombre = file.name.toLowerCase();
+    final nombre = nombreArchivo.toLowerCase();
     final extension = nombre.contains('.') ? nombre.split('.').last : '';
     return switch (extension) {
       'mp4' || 'm4v' => 'video/mp4',

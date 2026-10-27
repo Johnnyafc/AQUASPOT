@@ -12,6 +12,7 @@ import '../../../../core/enum/ticket_enums.dart';
 import '../../domain/entities/ticket_entity.dart'; // ⚙️ Necesario para el extension getter fechaInicioEstadoActual
 import '../widgets/tiempo_en_curso_widget.dart';
 import 'detalle_ticket_page.dart';
+import 'evaluacion_mantenimiento_page.dart';
 import 'evaluacion_tecnica_page.dart';
 import 'evaluacion_venta_repuesto_page.dart';
 import '../../../../core/theme/ticket_visual_theme.dart';
@@ -134,14 +135,17 @@ class _BandejaEvaluacionesPageState extends State<BandejaEvaluacionesPage> {
                     onTap: () {
                       // 🔧 Venta de Repuesto con líneas → evaluación de venta (supervisor).
                       // Ventas antiguas sin líneas siguen con la evaluación anterior.
+                      // 🛠️ Mantenimiento interno → su propia evaluación técnica.
                       final esVentaConLineas = ticket.tipoRequerimiento == TipoRequerimiento.ventaRepuesto &&
                           ticket.lineasRepuestoVenta.isNotEmpty;
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => esVentaConLineas
-                              ? EvaluacionVentaRepuestoPage(ticket: ticket)
-                              : EvaluacionTecnicaPage(ticket: ticket),
+                          builder: (_) => ticket.esMantenimientoInterno
+                              ? EvaluacionMantenimientoPage(ticket: ticket)
+                              : esVentaConLineas
+                                  ? EvaluacionVentaRepuestoPage(ticket: ticket)
+                                  : EvaluacionTecnicaPage(ticket: ticket),
                         ),
                       );
                     },

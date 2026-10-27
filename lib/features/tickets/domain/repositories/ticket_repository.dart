@@ -4,6 +4,7 @@ import 'package:dartz/dartz.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/errors/failures.dart';
+import '../entities/archivo_adjunto.dart';
 import '../entities/cliente_entity.dart';
 import '../entities/ticket_entity.dart';
 import '../entities/cambio_venta_repuesto.dart';
@@ -65,6 +66,9 @@ abstract class ITicketRepository {
 Future<Either<Failure, String>> subirActaPdfStorage(String ticketId, Uint8List pdfBytes);
   // Añadir en ITicketRepository
   Future<Either<Failure, String>> subirEvidencia(XFile file, String ticketId);
+  /// Sube un archivo a `tickets/{ticketId}/{carpeta}/` y devuelve su URL
+  /// (código nuevo: sin XFile en el dominio).
+  Future<Either<Failure, String>> subirArchivoAdjunto(ArchivoAdjunto archivo, String ticketId, String carpeta);
   Future<Either<Failure, Uint8List>> generarActaPdf({
     required TicketEntity ticket,
     required String tipoRequerimiento,

@@ -23,6 +23,9 @@ import 'package:aquaspot_postventa/features/tickets/domain/usecases/cerrar_entre
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/crear_mantenimiento_interno_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/adjuntar_evidencias_mantenimiento_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/mantenimiento_interno_cubit.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_archivo_adjunto_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/guardar_evaluacion_mantenimiento_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/bloc/evaluacion_mantenimiento_cubit.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -203,6 +206,8 @@ sl.registerLazySingleton(() => SubirOrdenCompraUseCase(sl()));
   sl.registerLazySingleton(() => CerrarEntregaVentaUseCase(sl()));
   sl.registerLazySingleton(() => CrearMantenimientoInternoUseCase(sl()));
   sl.registerLazySingleton(() => AdjuntarEvidenciasMantenimientoUseCase(sl()));
+  sl.registerLazySingleton(() => SubirArchivoAdjuntoUseCase(sl()));
+  sl.registerLazySingleton(() => GuardarEvaluacionMantenimientoUseCase(sl()));
 sl.registerLazySingleton(() => EscucharEstadoExcelUseCase(sl()));
 
   // ===========================================================================
@@ -212,6 +217,12 @@ sl.registerLazySingleton(() => EscucharEstadoExcelUseCase(sl()));
         crearMantenimiento: sl(),
         subirEvidencia: sl(),
         adjuntarEvidencias: sl(),
+      ));
+  sl.registerFactory(() => EvaluacionMantenimientoCubit(
+        obtenerActividades: sl(),
+        obtenerInventario: sl(),
+        subirArchivo: sl(),
+        guardarEvaluacion: sl(),
       ));
   sl.registerFactory(() => TicketBloc(
         obtenerClientes: sl(),

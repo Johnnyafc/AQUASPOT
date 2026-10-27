@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../core/errors/exceptions.dart';
 import '../../../../core/errors/failures.dart';
 import '../../../../core/network/network_info.dart';
+import '../../domain/entities/archivo_adjunto.dart';
 import '../../domain/entities/cliente_entity.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/repositories/ticket_repository.dart';
@@ -176,6 +177,26 @@ Future<Either<Failure, List<TicketEntity>>> obtenerTickets(SegmentoOperativo seg
     }
   }
 
+
+  @override
+  Future<Either<Failure, String>> subirArchivoAdjunto(ArchivoAdjunto archivo, String ticketId, String carpeta) async {
+    if (!await networkInfo.isConnected) {
+      return const Left(NetworkFailure('Operación abortada: No hay conexión a internet para subir archivos pesados.'));
+    }
+    try {
+      return Right(await storageDataSource.subirBytes(
+        bytes: archivo.bytes,
+        nombre: archivo.nombre,
+        tipoContenido: archivo.tipoContenido,
+        ticketId: ticketId,
+        carpeta: carpeta,
+      ));
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure('Fallo catastrófico del sistema de archivos: $e'));
+    }
+  }
 
   @override
   Future<Either<Failure, String>> subirEvidencia(XFile file, String ticketId) async {
