@@ -1,7 +1,8 @@
 // lib/features/tickets/domain/usecases/guardar_evaluacion_mantenimiento_usecase.dart
 //
 // Guarda la EVALUACIÓN TÉCNICA de un mantenimiento interno (actividades con
-// sus fotos ya subidas) y pasa el ticket a Compras. Valida antes de escribir
+// sus fotos ya subidas, informe PDF y Solicitud de materiales ya subidos) y
+// pasa el ticket a Compras. Valida antes de escribir
 // (EvaluacionMantenimientoService); en Caracol aparta el stock en la misma
 // transacción, igual que en reparación.
 
@@ -26,6 +27,8 @@ class GuardarEvaluacionMantenimientoUseCase {
     required String usuarioNombre,
     required RolUsuario rol,
     DateTime? ahora,
+    String? urlInformePdf,
+    String? urlSolicitudExcel,
   }) async {
     final errores = EvaluacionMantenimientoService.validar(actividades);
     if (errores.isNotEmpty) return Left(ValidationFailure(errores.join('\n')));
@@ -38,6 +41,8 @@ class GuardarEvaluacionMantenimientoUseCase {
       usuarioNombre: usuarioNombre,
       rol: rol,
       ahora: ahora ?? DateTime.now(),
+      urlInformePdf: urlInformePdf,
+      urlSolicitudExcel: urlSolicitudExcel,
     );
 
     if (!EvaluacionMantenimientoService.reservaStock(evaluado)) {

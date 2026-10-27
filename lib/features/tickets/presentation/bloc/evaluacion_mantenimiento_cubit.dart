@@ -3,7 +3,10 @@
 // Estado de la EVALUACIÓN TÉCNICA de un mantenimiento interno. Las reglas
 // (repuestos en una sola lista, consolidado, validación, paso a Compras)
 // están en EvaluacionMantenimientoService; aquí solo se guarda lo que el
-// técnico arma y se orquesta el envío: subir fotos → guardar evaluación.
+// técnico arma y se orquesta el envío (desde la revisión del informe):
+// subir fotos → subir informe PDF y Solicitud de materiales → guardar.
+
+import 'dart:typed_data';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -119,14 +122,24 @@ class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
 
   // ------------------------------------------------------------ Actividades
   void agregarActividad(ActividadCatalogoEntity a) => _actividades([...state.actividades, _S.desdeCatalogo(a)]);
+  void agregarActividadNueva(String nombre, double? horas) =>
+      _actividades([...state.actividades, _S.actividadNueva(state.actividades, nombre: nombre, horasHombre: horas)]);
   void quitarActividad(int i) => _actividades([...state.actividades]..removeAt(i));
   void cambiarHoras(int i, double? horas) => _cambiar(i, (a) => a.copyWith(horasHombre: horas ?? 0));
   void cambiarObservacion(int i, String texto) => _cambiar(i, (a) => a.copyWith(observacion: texto));
   void agregarFotos(int i, List<ArchivoAdjunto> fotos) => _cambiar(i, (a) => a.copyWith(fotos: [...a.fotos, ...fotos]));
-  void quitarFoto(int i, int j) => _cambiar(i, (a) => a.copyWith(fotos: [...a.fotos]..removeAt(j)));
+  void quitarFoto(int i, int j) => _cambiar(
+        i,
+        (a) => a.copyWith(
+          fotos: [...a.fotos]..removeAt(j),
+          fotosUrls: j < a.fotosUrls.length ? ([...a.fotosUrls]..removeAt(j)) : a.fotosUrls,
+        ),
+      );
 
   // ------------------------------------------------------------ Repuestos
   void agregarRepuesto(int i, ItemInventarioEntity item) => _cambiar(i, (a) => _S.agregarRepuesto(a, item));
+  void agregarRepuestoNoRegistrado(int i, {required String descripcion, required String unidad, required double cantidad}) =>
+      _cambiar(i, (a) => _S.agregarRepuestoNoRegistrado(a, descripcion: descripcion, unidad: unidad, cantidad: cantidad));
   void cambiarCantidad(int i, int j, double cantidad) => _cambiar(i, (a) => _S.cambiarCantidad(a, j, cantidad));
   void quitarRepuesto(int i, int j) => _cambiar(i, (a) => _S.quitarRepuesto(a, j));
 
@@ -134,51 +147,71 @@ class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
   void cambiarNecesitaCompras(bool v) => emit(state.copyWith(necesitaCompras: v));
   void cambiarMotivoNoCompras(String texto) => emit(state.copyWith(motivoNoCompras: texto));
 
-  /// Valida, sube las fotos de cada actividad y guarda la evaluación.
-  Future<void> enviar({required String usuarioNombre, required RolUsuario rol}) async {
-    final ticket = state.ticket;
-    if (ticket == null) return;
+  /// Antes de generar el informe: true si la evaluación está completa; si
+  /// no, deja los errores a la vista.
+  bool validarParaInforme() {
     final errores = _S.validar(state.actividades);
-    if (errores.isNotEmpty) {
-      emit(state.copyWith(errores: errores));
-      return;
-    }
-    emit(state.copyWith(envio: EnvioEvaluacionMantenimiento.enviando, mensaje: 'Guardando evaluación...', errores: const []));
+    emit(state.copyWith(errores: errores, envio: EnvioEvaluacionMantenimiento.editando));
+    return errores.isEmpty;
+  }
 
-    // Cada foto subida pasa de "fotos" a "fotosUrls" en el estado: si algo
-    // falla, un reintento solo sube lo que falta.
+  /// Desde la revisión del informe: sube las fotos que faltan, el informe
+  /// PDF y la Solicitud de materiales, y guarda la evaluación.
+  Future<void> confirmar({
+    required Uint8List informePdf,
+    required Uint8List solicitudExcel,
+    required String usuarioNombre,
+    required RolUsuario rol,
+  }) async {
+    final ticket = state.ticket;
+    if (ticket == null || !validarParaInforme()) return;
+    emit(state.copyWith(envio: EnvioEvaluacionMantenimiento.enviando, mensaje: 'Guardando evaluación...'));
+
+    // Cada foto subida queda en "fotosUrls" (mismo orden que "fotos"): si
+    // algo falla, un reintento solo sube lo que falta.
     final total = state.actividades.fold<int>(0, (s, a) => s + a.fotos.length);
-    var subidas = 0;
+    var subidas = state.actividades.fold<int>(0, (s, a) => s + a.fotosUrls.length);
     for (var i = 0; i < state.actividades.length; i++) {
-      while (state.actividades[i].fotos.isNotEmpty) {
+      while (state.actividades[i].fotosUrls.length < state.actividades[i].fotos.length) {
         final act = state.actividades[i];
-        final foto = act.fotos.first;
+        final foto = act.fotos[act.fotosUrls.length];
         emit(state.copyWith(mensaje: 'Subiendo fotos (${subidas + 1}/$total)...'));
-        final r = await subirArchivo(foto, ticket.id, carpeta: 'evaluaciones/actividades');
-        final url = r.fold((_) => null, (u) => u);
-        if (url == null) {
-          emit(state.copyWith(
-            envio: EnvioEvaluacionMantenimiento.error,
-            mensaje: 'No se pudo subir la foto "${foto.nombre}": ${r.fold((f) => f.message, (_) => '')}',
-          ));
-          return;
-        }
-        final lista = [...state.actividades]
-          ..[i] = act.copyWith(fotos: act.fotos.sublist(1), fotosUrls: [...act.fotosUrls, url]);
-        emit(state.copyWith(actividades: lista));
+        final url = await _subir(foto, ticket.id, 'evaluaciones/actividades');
+        if (url == null) return;
+        emit(state.copyWith(actividades: [...state.actividades]..[i] = act.copyWith(fotosUrls: [...act.fotosUrls, url])));
         subidas++;
       }
     }
-    final actividades = state.actividades;
+
+    emit(state.copyWith(mensaje: 'Subiendo informe técnico...'));
+    final urlPdf = await _subir(
+      ArchivoAdjunto(bytes: informePdf, nombre: 'Informe_Tecnico_${ticket.id}.pdf', tipoContenido: 'application/pdf'),
+      ticket.id,
+      'evaluaciones/generales',
+    );
+    if (urlPdf == null) return;
+    emit(state.copyWith(mensaje: 'Subiendo solicitud de materiales...'));
+    final urlExcel = await _subir(
+      ArchivoAdjunto(
+        bytes: solicitudExcel,
+        nombre: 'Solicitud_Materiales_${ticket.id}.xlsx',
+        tipoContenido: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      ),
+      ticket.id,
+      'evaluaciones/proformas',
+    );
+    if (urlExcel == null) return;
 
     emit(state.copyWith(mensaje: 'Guardando evaluación...'));
     final r = await guardarEvaluacion(
       ticket,
-      actividades,
+      state.actividades,
       necesitaCompras: state.necesitaCompras,
       motivoNoCompras: state.motivoNoCompras,
       usuarioNombre: usuarioNombre,
       rol: rol,
+      urlInformePdf: urlPdf,
+      urlSolicitudExcel: urlExcel,
     );
     r.fold(
       (f) => emit(state.copyWith(
@@ -190,5 +223,17 @@ class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
         mensaje: 'Evaluación de ${ticket.id} guardada. Pasa a Compras.',
       )),
     );
+  }
+
+  /// Sube un archivo; si falla deja el error a la vista y devuelve null.
+  Future<String?> _subir(ArchivoAdjunto archivo, String ticketId, String carpeta) async {
+    final r = await subirArchivo(archivo, ticketId, carpeta: carpeta);
+    return r.fold((f) {
+      emit(state.copyWith(
+        envio: EnvioEvaluacionMantenimiento.error,
+        mensaje: 'No se pudo subir "${archivo.nombre}": ${f.message}',
+      ));
+      return null;
+    }, (u) => u);
   }
 }

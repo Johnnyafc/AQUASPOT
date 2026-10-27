@@ -5,10 +5,15 @@
 // test/evaluacion_mantenimiento_test.dart.
 //
 // - Las actividades se agregan del Plan Maestro del equipo (cosechadora,
-//   contador, caracol; el vehículo aún no tiene plan) y son modificables.
+//   contador, caracol; el vehículo aún no tiene plan) o son NUEVAS (código
+//   NUEVA-01…, solo en este ticket); todas son modificables.
 // - No hay propuesta comercial: cada actividad tiene UNA lista de repuestos
 //   (al agregarla se juntan los internos y los comerciales del plan, sin
-//   repetir) y se agregan repuestos solo de lo registrado en el inventario.
+//   repetir). Se agregan del inventario registrado o, si no está, como
+//   repuesto NO REGISTRADO (sin código: Compras sabe que hay que comprarlo).
+// - Informe técnico y Solicitud de materiales: los datos y textos salen de
+//   aquí (datosInforme, encabezadoSolicitud, firma); los generadores solo
+//   les dan formato.
 // - TODOS los repuestos de todas las actividades van a bodega (solicitud de
 //   materiales / picking), sumando los iguales.
 // - Al guardar, el ticket pasa a Compras como en reparación, pero sin
@@ -31,6 +36,18 @@ import '../entities/ticket_entity.dart';
 
 class EvaluacionMantenimientoService {
   static const int limiteBusqueda = 30;
+  static const String prefijoActividadNueva = 'NUEVA-';
+  static const int minimoCaracteresNombre = 3;
+
+  /// Unidades para un repuesto no registrado.
+  static const List<String> unidades = ['UNIDAD', 'METRO', 'CENTÍMETRO', 'LITRO', 'GALÓN', 'KILOGRAMO', 'JUEGO'];
+
+  /// Encabezado de la Solicitud de materiales de un mantenimiento interno.
+  static const encabezadoSolicitud = (
+    proyecto: 'AQUASPOT',
+    centroCosto: 'MANTENIMIENTO INTERNO',
+    cargo: 'CONSUMO MANTENIMIENTO INTERNO',
+  );
 
   /// Equipo del Plan Maestro para este ticket (null = sin plan: vehículo).
   static String? equipoCatalogo(TicketEntity t) => switch (t.mantenimientoInterno?.tipoActivo) {
@@ -79,6 +96,35 @@ class EvaluacionMantenimientoService {
     return [for (final a in catalogo) if (!ya.contains(a.codigo)) a];
   }
 
+  // ------------------------------------------------------------ Actividad nueva
+  static bool esActividadNueva(ActividadMantenimiento a) => a.codigo.startsWith(prefijoActividadNueva);
+
+  /// Siguiente código libre: NUEVA-01, NUEVA-02…
+  static String codigoActividadNueva(List<ActividadMantenimiento> actividades) {
+    final usados = {for (final a in actividades) a.codigo};
+    var n = 1;
+    while (usados.contains('$prefijoActividadNueva${n.toString().padLeft(2, '0')}')) {
+      n++;
+    }
+    return '$prefijoActividadNueva${n.toString().padLeft(2, '0')}';
+  }
+
+  /// Error al crear una actividad nueva (null = válida).
+  static String? validarActividadNueva(String nombre) => nombre.trim().length < minimoCaracteresNombre
+      ? 'Escriba el nombre de la actividad (mínimo $minimoCaracteresNombre caracteres).'
+      : null;
+
+  static ActividadMantenimiento actividadNueva(
+    List<ActividadMantenimiento> actividades, {
+    required String nombre,
+    double? horasHombre,
+  }) =>
+      ActividadMantenimiento(
+        codigo: codigoActividadNueva(actividades),
+        nombre: nombre.trim(),
+        horasHombre: horasHombre ?? 0,
+      );
+
   /// Filtra actividades por código o nombre (todas las palabras).
   static List<ActividadCatalogoEntity> buscarActividades(List<ActividadCatalogoEntity> lista, String texto) {
     final palabras = texto.trim().toUpperCase().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
@@ -107,6 +153,39 @@ class EvaluacionMantenimientoService {
     }
     return act.copyWith(repuestos: repuestos);
   }
+
+  /// Repuesto que no está en el inventario: sin código, descripción en
+  /// MAYÚSCULAS; si ya está (misma descripción), suma la cantidad.
+  static ActividadMantenimiento agregarRepuestoNoRegistrado(
+    ActividadMantenimiento act, {
+    required String descripcion,
+    required String unidad,
+    required double cantidad,
+  }) {
+    final desc = descripcion.trim().toUpperCase();
+    final k = clave('', desc);
+    final i = act.repuestos.indexWhere((r) => esSinCodigo(r) && clave('', r.descripcion) == k);
+    final repuestos = [...act.repuestos];
+    if (i >= 0) {
+      repuestos[i] = repuestos[i].copyWith(cantidad: repuestos[i].cantidad + cantidad);
+    } else {
+      repuestos.add(RepuestoRegistradoEntity(codigo: '', descripcion: desc, unidad: unidad, cantidad: cantidad));
+    }
+    return act.copyWith(repuestos: repuestos);
+  }
+
+  /// Error al agregar un repuesto no registrado (null = válido).
+  static String? validarRepuestoNoRegistrado(String descripcion, double? cantidad) {
+    if (descripcion.trim().length < minimoCaracteresNombre) {
+      return 'Escriba la descripción del repuesto (mínimo $minimoCaracteresNombre caracteres).';
+    }
+    if (cantidad == null || cantidad <= 0) return 'La cantidad debe ser mayor a 0.';
+    return null;
+  }
+
+  /// Sin código = no registrado en el inventario (Compras debe comprarlo o
+  /// crearlo).
+  static bool esSinCodigo(RepuestoRegistradoEntity r) => r.codigo.trim().isEmpty;
 
   static ActividadMantenimiento cambiarCantidad(ActividadMantenimiento act, int indice, double cantidad) {
     final repuestos = [...act.repuestos];
@@ -169,6 +248,50 @@ class EvaluacionMantenimientoService {
     return '$cant $desc';
   }
 
+  // ------------------------------------------------------------ Informe
+  static const _meses = [
+    'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+  ];
+
+  static String fechaLarga(DateTime f) => '${f.day} de ${_meses[f.month - 1]} de ${f.year}';
+
+  static String _dos(int v) => v.toString().padLeft(2, '0');
+  static String _numero(double v) => v % 1 == 0 ? v.toInt().toString() : v.toString();
+
+  /// Filas de datos del encabezado del informe técnico.
+  static List<(String, String)> datosInforme(TicketEntity t, {required DateTime fecha}) {
+    final m = t.mantenimientoInterno;
+    final tipo = m?.tipoActivo;
+    final esVehiculo = tipo == TipoActivoMantenimiento.vehiculo;
+    final f = m?.fechaHoraFalla;
+    return [
+      ('FECHA:', fechaLarga(fecha)),
+      ('INGRESO:', t.id),
+      ('ACTIVIDAD:', 'MANTENIMIENTO INTERNO ${m?.tipoMantenimiento.etiqueta.toUpperCase() ?? ''}'.trim()),
+      ('MÁQUINA:', tipo?.etiqueta.toUpperCase() ?? t.equipo.name.toUpperCase()),
+      (esVehiculo ? 'PLACA:' : 'N° SERIE:', (esVehiculo ? m?.placa : t.numeroSerie) ?? 'S/N'),
+      if (t.horometro != null) ('HORÓMETRO:', '${_numero(t.horometro!)} h'),
+      if (m?.kilometraje != null) ('KILOMETRAJE:', '${_numero(m!.kilometraje!)} km'),
+      if (f != null)
+        (m!.tipoMantenimiento == TipoMantenimiento.preventivo ? 'PROGRAMADO:' : 'FECHA FALLA:',
+            '${_dos(f.day)}/${_dos(f.month)}/${f.year} ${_dos(f.hour)}:${_dos(f.minute)}'),
+      if (t.historialEventos.isNotEmpty) ('SOLICITADO POR:', t.historialEventos.first.usuarioNombre),
+    ];
+  }
+
+  /// Texto del hallazgo de una actividad: su observación (o su nombre).
+  static String hallazgo(ActividadMantenimiento a) => a.observacion.trim().isNotEmpty ? a.observacion.trim() : a.nombre;
+
+  /// "Ing. Nombre" sin duplicar el prefijo si ya viene.
+  static String firma(String nombre) {
+    final n = nombre.trim().replaceFirst(RegExp(r'^ing(\.\s*|\s+)', caseSensitive: false), '');
+    return 'Ing. ${n.isEmpty ? 'Técnico de Servicio' : n}';
+  }
+
+  static double totalHoras(List<ActividadMantenimiento> actividades) =>
+      actividades.fold<double>(0, (s, a) => s + a.horasHombre);
+
   // ------------------------------------------------------------ Validación
   /// Errores de la evaluación (vacío = se puede guardar).
   static List<String> validar(List<ActividadMantenimiento> actividades) {
@@ -198,6 +321,8 @@ class EvaluacionMantenimientoService {
     required String usuarioNombre,
     required RolUsuario rol,
     required DateTime ahora,
+    String? urlInformePdf,
+    String? urlSolicitudExcel,
   }) {
     final repuestos = consolidar(actividades);
     final motivo = motivoNoCompras?.trim() ?? '';
@@ -208,8 +333,10 @@ class EvaluacionMantenimientoService {
     }
     return ticket.copyWith(
       evaluacionTecnica: EvaluacionTecnicaEntity(
-        urlsAdjuntosPdf: const [],
-        totalHorasHombre: actividades.fold<double>(0, (s, a) => s + a.horasHombre),
+        urlProformaExcel: urlSolicitudExcel,
+        urlsAdjuntosPdf: [?urlInformePdf],
+        observacion: 'Evaluación técnica de mantenimiento interno: informe y solicitud de materiales generados en la app.',
+        totalHorasHombre: totalHoras(actividades),
         actividades: [
           for (final a in actividades)
             ActividadRegistradaEntity(

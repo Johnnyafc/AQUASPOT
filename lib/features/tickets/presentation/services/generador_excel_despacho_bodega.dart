@@ -3,6 +3,7 @@ import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xlsio;
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/entities/item_despacho_bodega_entity.dart';
 import '../../domain/entities/registro_despacho_entity.dart';
+import '../../domain/services/evaluacion_mantenimiento_service.dart';
 
 enum ModoExcelDespacho {
   seleccionActual,  // Solo los repuestos validados y cantidades seleccionadas para descontar ahora
@@ -143,9 +144,12 @@ class GeneradorExcelDespachoBodega {
     sheet.getRangeByName('A3').setText('CENTRO DE COSTO:');
     sheet.getRangeByName('A3').cellStyle.bold = true;
     sheet.getRangeByName('B3:C3').merge();
-    final centroCosto = (ticket.esGarantia == true)
-        ? (ticket.numeroSerie ?? 'GARANTÍA')
-        : 'Reparacion Cliente';
+    // 🛠️ Mantenimiento interno: proyecto / centro de costo / cargo propios.
+    final encMantenimiento = ticket.esMantenimientoInterno ? EvaluacionMantenimientoService.encabezadoSolicitud : null;
+    final centroCosto = encMantenimiento?.centroCosto ??
+        ((ticket.esGarantia == true)
+            ? (ticket.numeroSerie ?? 'GARANTÍA')
+            : 'Reparacion Cliente');
     sheet.getRangeByName('B3').setText(centroCosto);
 
     sheet.getRangeByName('D3').setText('EQUIPO:');
@@ -161,15 +165,16 @@ class GeneradorExcelDespachoBodega {
     sheet.getRangeByName('A4').setText('PROYECTO:');
     sheet.getRangeByName('A4').cellStyle.bold = true;
     sheet.getRangeByName('B4:C4').merge();
-    final proyecto = ticket.codigoProyecto != null && ticket.codigoProyecto!.isNotEmpty
-        ? ticket.codigoProyecto!
-        : (ticket.campamento.isNotEmpty ? ticket.campamento : 'SIN PROYECTO');
+    final proyecto = encMantenimiento?.proyecto ??
+        (ticket.codigoProyecto != null && ticket.codigoProyecto!.isNotEmpty
+            ? ticket.codigoProyecto!
+            : (ticket.campamento.isNotEmpty ? ticket.campamento : 'SIN PROYECTO'));
     sheet.getRangeByName('B4').setText(proyecto);
 
     sheet.getRangeByName('D4').setText('CARGO:');
     sheet.getRangeByName('D4').cellStyle.bold = true;
     sheet.getRangeByName('E4:H4').merge();
-    sheet.getRangeByName('E4').setText('CONSUMO SERVICIOS');
+    sheet.getRangeByName('E4').setText(encMantenimiento?.cargo ?? 'CONSUMO SERVICIOS');
 
     // R4: SERIE Y CONSUMO / TRANSFERENCIA
     sheet.getRangeByName('A5').setText('SERIE:');

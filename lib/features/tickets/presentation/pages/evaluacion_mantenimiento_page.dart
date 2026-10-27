@@ -1,17 +1,18 @@
 // lib/features/tickets/presentation/pages/evaluacion_mantenimiento_page.dart
 //
 // 🛠️ EVALUACIÓN TÉCNICA de un MANTENIMIENTO INTERNO (se abre desde la
-// Bandeja de Evaluaciones). Actividades del Plan Maestro modificables, con
-// una sola lista de repuestos tomados del inventario registrado, y
-// "¿Necesita compras?". Solo dibuja: el estado y el envío están en
-// EvaluacionMantenimientoCubit y las reglas en EvaluacionMantenimientoService.
+// Bandeja de Evaluaciones). Actividades del Plan Maestro o NUEVAS, todas
+// modificables, con una sola lista de repuestos (del inventario registrado
+// o no registrados, "SIN CÓDIGO") y "¿Necesita compras?". "Generar y revisar
+// informe" arma el PDF y la Solicitud de materiales y abre su revisión. Solo
+// dibuja: el estado y el envío están en EvaluacionMantenimientoCubit y las
+// reglas en EvaluacionMantenimientoService.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../../core/enum/rol_usuario.dart';
 import '../../../../injection_container.dart' as di;
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_state.dart';
@@ -24,6 +25,9 @@ import '../../domain/entities/ticket_entity.dart';
 import '../../domain/services/evaluacion_mantenimiento_service.dart';
 import '../../domain/services/formulario_mantenimiento_service.dart';
 import '../bloc/evaluacion_mantenimiento_cubit.dart';
+import '../services/generador_excel_mantenimiento.dart';
+import '../services/generador_pdf_mantenimiento.dart';
+import 'revision_evaluacion_mantenimiento_page.dart';
 
 typedef _S = EvaluacionMantenimientoService;
 
@@ -43,35 +47,59 @@ class EvaluacionMantenimientoPage extends StatelessWidget {
   }
 }
 
-class _VistaEvaluacionMantenimiento extends StatelessWidget {
+class _VistaEvaluacionMantenimiento extends StatefulWidget {
   const _VistaEvaluacionMantenimiento();
 
-  ({String nombre, RolUsuario rol}) _usuario(BuildContext context) {
+  @override
+  State<_VistaEvaluacionMantenimiento> createState() => _VistaEvaluacionMantenimientoState();
+}
+
+class _VistaEvaluacionMantenimientoState extends State<_VistaEvaluacionMantenimiento> {
+  bool _generando = false;
+
+  String _nombreUsuario() {
     final auth = context.read<AuthBloc>().state;
-    if (auth is Authenticated) return (nombre: auth.usuario.nombre, rol: auth.usuario.rol);
-    return (nombre: 'SISTEMA', rol: RolUsuario.desconocido);
+    return auth is Authenticated ? auth.usuario.nombre : 'SISTEMA';
+  }
+
+  /// Arma el informe PDF y la Solicitud de materiales y abre su revisión;
+  /// si allí se confirma y se guarda, cierra la evaluación.
+  Future<void> _generarYRevisar() async {
+    final cubit = context.read<EvaluacionMantenimientoCubit>();
+    if (!cubit.validarParaInforme()) return;
+    final s = cubit.state;
+    setState(() => _generando = true);
+    try {
+      final pdf = await GeneradorPdfMantenimiento.generar(
+        ticket: s.ticket!,
+        actividades: s.actividades,
+        nombreTecnico: _nombreUsuario(),
+      );
+      final excel = GeneradorExcelMantenimiento.generar(ticket: s.ticket!, actividades: s.actividades);
+      if (!mounted) return;
+      setState(() => _generando = false);
+      final guardada = await Navigator.of(context).push<bool>(MaterialPageRoute(
+        builder: (_) => BlocProvider.value(
+          value: cubit,
+          child: RevisionEvaluacionMantenimientoPage(pdfBytes: pdf, excelBytes: excel),
+        ),
+      ));
+      if (guardada == true && mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _generando = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al generar el informe: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return BlocConsumer<EvaluacionMantenimientoCubit, EvaluacionMantenimientoState>(
-      listenWhen: (a, b) => a.envio != b.envio,
-      listener: (context, s) {
-        if (s.envio == EnvioEvaluacionMantenimiento.guardada) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('✅ ${s.mensaje}'), backgroundColor: Colors.green),
-          );
-          Navigator.of(context).pop(true);
-        } else if (s.envio == EnvioEvaluacionMantenimiento.error) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(s.mensaje), backgroundColor: Colors.red, duration: const Duration(seconds: 8)),
-          );
-        }
-      },
+    return BlocBuilder<EvaluacionMantenimientoCubit, EvaluacionMantenimientoState>(
       builder: (context, s) {
         final ticket = s.ticket;
-        final cubit = context.read<EvaluacionMantenimientoCubit>();
-        final enviando = s.envio == EnvioEvaluacionMantenimiento.enviando;
+        final enviando = s.envio == EnvioEvaluacionMantenimiento.enviando || _generando;
         return Scaffold(
           appBar: AppBar(
             title: Text('Evaluación Técnica — Mantenimiento: ${ticket?.id ?? ''}'),
@@ -106,18 +134,15 @@ class _VistaEvaluacionMantenimiento extends StatelessWidget {
                               height: 52,
                               child: ElevatedButton.icon(
                                 style: ElevatedButton.styleFrom(backgroundColor: _azul, foregroundColor: Colors.white),
-                                icon: enviando
+                                icon: _generando
                                     ? const SizedBox(
                                         width: 18,
                                         height: 18,
                                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                       )
-                                    : const Icon(Icons.save_outlined),
-                                label: Text(enviando ? s.mensaje : 'GUARDAR EVALUACIÓN TÉCNICA'),
-                                onPressed: () {
-                                  final u = _usuario(context);
-                                  cubit.enviar(usuarioNombre: u.nombre, rol: u.rol);
-                                },
+                                    : const Icon(Icons.description_outlined),
+                                label: Text(_generando ? 'GENERANDO INFORME Y EXCEL...' : 'GENERAR Y REVISAR INFORME'),
+                                onPressed: _generarYRevisar,
                               ),
                             ),
                             const SizedBox(height: 24),
@@ -230,13 +255,12 @@ class _SeccionActividades extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(children: [
-          const Expanded(
-            child: Text('ACTIVIDADES A REALIZAR', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _azul)),
-          ),
+        const Text('ACTIVIDADES A REALIZAR', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _azul)),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, runSpacing: 8, children: [
           OutlinedButton.icon(
-            icon: const Icon(Icons.add),
-            label: const Text('Agregar actividad'),
+            icon: const Icon(Icons.menu_book_outlined),
+            label: const Text('Plan Maestro'),
             onPressed: sinPlan
                 ? null
                 : () async {
@@ -244,17 +268,25 @@ class _SeccionActividades extends StatelessWidget {
                     if (elegida != null) cubit.agregarActividad(elegida);
                   },
           ),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.add),
+            label: const Text('Actividad nueva'),
+            onPressed: () async {
+              final nueva = await _pedirActividadNueva(context);
+              if (nueva != null) cubit.agregarActividadNueva(nueva.nombre, nueva.horas);
+            },
+          ),
         ]),
         if (sinPlan)
           const Padding(
             padding: EdgeInsets.only(top: 8),
-            child: Text('Este equipo aún no tiene Plan Maestro: sus actividades vendrán del Plan preventivo.',
+            child: Text('Este equipo aún no tiene Plan Maestro: use "Actividad nueva".',
                 style: TextStyle(fontSize: 12, color: Colors.grey)),
           ),
-        if (estado.actividades.isEmpty && !sinPlan)
+        if (estado.actividades.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
-            child: Text('Agregue las actividades del Plan Maestro que se realizarán.', style: TextStyle(color: Colors.grey)),
+            child: Text('Agregue las actividades que se realizarán.', style: TextStyle(color: Colors.grey)),
           ),
         for (var i = 0; i < estado.actividades.length; i++)
           _TarjetaActividad(
@@ -264,6 +296,55 @@ class _SeccionActividades extends StatelessWidget {
             inventario: estado.inventario,
           ),
       ],
+    );
+  }
+
+  Future<({String nombre, double? horas})?> _pedirActividadNueva(BuildContext context) {
+    final nombreCtrl = TextEditingController();
+    final horasCtrl = TextEditingController();
+    String? error;
+    return showDialog<({String nombre, double? horas})>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Actividad nueva'),
+          content: SizedBox(
+            width: 460,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                controller: nombreCtrl,
+                autofocus: true,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: InputDecoration(labelText: 'Nombre de la actividad', errorText: error),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: horasCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+                decoration: const InputDecoration(labelText: 'Horas hombre (opcional)', suffixText: 'HH'),
+              ),
+              const SizedBox(height: 8),
+              const Text('Queda solo en este ticket, con la misma estructura: observación, fotos y repuestos.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey)),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+            ElevatedButton(
+              onPressed: () {
+                final e = _S.validarActividadNueva(nombreCtrl.text);
+                if (e != null) return setState(() => error = e);
+                Navigator.of(context).pop((
+                  nombre: nombreCtrl.text,
+                  horas: double.tryParse(horasCtrl.text.trim().replaceAll(',', '.')),
+                ));
+              },
+              child: const Text('Agregar'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -373,6 +454,79 @@ class _TarjetaActividad extends StatelessWidget {
     );
     if (valor != null) cubit.cambiarCantidad(indice, j, valor);
   }
+
+  /// Repuesto que no está en el inventario: descripción, unidad y cantidad.
+  Future<void> _pedirRepuestoNoRegistrado(BuildContext context) async {
+    final cubit = context.read<EvaluacionMantenimientoCubit>();
+    final descCtrl = TextEditingController();
+    final cantCtrl = TextEditingController(text: '1');
+    var unidad = _S.unidades.first;
+    String? error;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Repuesto no registrado'),
+          content: SizedBox(
+            width: 460,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                controller: descCtrl,
+                autofocus: true,
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(labelText: 'Descripción'),
+              ),
+              const SizedBox(height: 8),
+              Row(children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: unidad,
+                    decoration: const InputDecoration(labelText: 'Unidad'),
+                    items: [for (final u in _S.unidades) DropdownMenuItem(value: u, child: Text(u))],
+                    onChanged: (v) => unidad = v ?? unidad,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 110,
+                  child: TextField(
+                    controller: cantCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+                    decoration: const InputDecoration(labelText: 'Cantidad'),
+                  ),
+                ),
+              ]),
+              if (error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                ),
+              const SizedBox(height: 8),
+              Text('Se marcará "SIN CÓDIGO" para que Compras lo compre o lo cree.',
+                  style: TextStyle(fontSize: 12, color: Colors.orange.shade900)),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
+            ElevatedButton(
+              onPressed: () {
+                final e = _S.validarRepuestoNoRegistrado(descCtrl.text, _cantidad(cantCtrl.text));
+                if (e != null) return setState(() => error = e);
+                Navigator.of(context).pop(true);
+              },
+              child: const Text('Agregar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok == true) {
+      cubit.agregarRepuestoNoRegistrado(indice, descripcion: descCtrl.text, unidad: unidad, cantidad: _cantidad(cantCtrl.text)!);
+    }
+  }
+
+  double? _cantidad(String texto) => double.tryParse(texto.trim().replaceAll(',', '.'));
 
   Future<ItemInventarioEntity?> _elegirRepuesto(BuildContext context) {
     var texto = '';
@@ -492,7 +646,6 @@ class _TarjetaActividad extends StatelessWidget {
                     ),
                   ),
                 ]),
-              if (a.fotosUrls.isNotEmpty) Text('${a.fotosUrls.length} foto(s) ya subida(s)', style: const TextStyle(fontSize: 12)),
             ]),
             const Divider(height: 24),
             Row(children: [
@@ -506,6 +659,11 @@ class _TarjetaActividad extends StatelessWidget {
                   if (item != null) cubit.agregarRepuesto(indice, item);
                 },
               ),
+              TextButton.icon(
+                icon: Icon(Icons.post_add, size: 18, color: Colors.orange.shade900),
+                label: Text('No registrado', style: TextStyle(color: Colors.orange.shade900)),
+                onPressed: () => _pedirRepuestoNoRegistrado(context),
+              ),
             ]),
             if (a.repuestos.isEmpty)
               const Text('Sin repuestos.', style: TextStyle(fontSize: 12, color: Colors.grey)),
@@ -516,8 +674,12 @@ class _TarjetaActividad extends StatelessWidget {
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(a.repuestos[j].descripcion, style: const TextStyle(fontSize: 13)),
-                      Text('${a.repuestos[j].codigo.isEmpty ? 'S/C' : a.repuestos[j].codigo} · ${a.repuestos[j].unidad}',
-                          style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                      if (_S.esSinCodigo(a.repuestos[j]))
+                        Text('SIN CÓDIGO · ${a.repuestos[j].unidad}',
+                            style: TextStyle(fontSize: 11, color: Colors.orange.shade900, fontWeight: FontWeight.bold))
+                      else
+                        Text('${a.repuestos[j].codigo} · ${a.repuestos[j].unidad}',
+                            style: const TextStyle(fontSize: 11, color: Colors.grey)),
                     ]),
                   ),
                   IconButton(

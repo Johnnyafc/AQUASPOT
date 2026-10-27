@@ -1,9 +1,10 @@
 // lib/features/tickets/domain/entities/actividad_mantenimiento.dart
 //
 // 🛠️ Actividad de la EVALUACIÓN TÉCNICA de un mantenimiento interno, tal
-// como se va armando en pantalla: viene del Plan Maestro (o, más adelante,
-// del Plan preventivo) y es modificable: horas hombre, observación, fotos
-// y UNA sola lista de repuestos (no hay propuesta comercial).
+// como se va armando en pantalla: viene del Plan Maestro, del Plan
+// preventivo o es una actividad NUEVA (código NUEVA-01…, solo en este
+// ticket) y es modificable: horas hombre, observación, fotos y UNA sola
+// lista de repuestos (no hay propuesta comercial).
 
 import 'package:equatable/equatable.dart';
 import 'archivo_adjunto.dart';
@@ -15,8 +16,8 @@ class ActividadMantenimiento extends Equatable {
   final double horasHombre;
   final String observacion;
   final List<RepuestoRegistradoEntity> repuestos;
-  final List<ArchivoAdjunto> fotos; // por subir
-  final List<String> fotosUrls; // ya subidas
+  final List<ArchivoAdjunto> fotos; // todas (los bytes van al informe)
+  final List<String> fotosUrls; // las ya subidas, en el mismo orden que fotos
 
   const ActividadMantenimiento({
     required this.codigo,

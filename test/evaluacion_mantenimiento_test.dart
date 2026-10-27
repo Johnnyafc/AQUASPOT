@@ -3,7 +3,9 @@
 // Evaluación técnica de MANTENIMIENTO INTERNO: actividades del Plan Maestro
 // con una sola lista de repuestos, agregar / quitar / cambiar repuestos del
 // inventario, consolidado para bodega, validación, ticket evaluado (pasa a
-// Compras sin Comercial ni Costos) y use case (reserva de stock en Caracol).
+// Compras sin Comercial ni Costos) y use case (reserva de stock en Caracol);
+// actividades nuevas, repuestos no registrados ("SIN CÓDIGO"), datos del
+// informe técnico y generación del PDF y la Solicitud de materiales.
 
 import 'package:aquaspot_postventa/core/enum/proceso_auditoria.dart';
 import 'package:aquaspot_postventa/core/enum/rol_usuario.dart';
@@ -20,6 +22,10 @@ import 'package:aquaspot_postventa/features/tickets/domain/repositories/ticket_r
 import 'package:aquaspot_postventa/features/tickets/domain/services/evaluacion_mantenimiento_service.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/services/formulario_mantenimiento_service.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/guardar_evaluacion_mantenimiento_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/archivo_adjunto.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/services/generador_excel_mantenimiento.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/services/generador_pdf_mantenimiento.dart';
+import 'dart:io';
 import 'package:dartz/dartz.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -179,6 +185,99 @@ void main() {
     expect(ev.accion, contains('NO REQUIERE COMPRAS (Hay stock)'));
     expect(ev.proceso, ProcesoAuditoria.evaluacion);
     expect(ev.habilita, [ProcesoAuditoria.compras]);
+  });
+
+  group('Actividad nueva', () {
+    test('Código NUEVA-01, NUEVA-02… sin repetir y misma estructura', () {
+      var acts = <ActividadMantenimiento>[lista()];
+      final a1 = S.actividadNueva(acts, nombre: '  Cambio de banda ', horasHombre: 2);
+      expect(a1.codigo, 'NUEVA-01');
+      expect(a1.nombre, 'Cambio de banda');
+      expect(S.esActividadNueva(a1), isTrue);
+      expect(S.esActividadNueva(lista()), isFalse);
+      acts = [...acts, a1];
+      expect(S.codigoActividadNueva(acts), 'NUEVA-02');
+      // Admite repuestos igual que las del plan.
+      final conRepuesto = S.agregarRepuesto(a1, inv('F-7', 'FILTRO DE ACEITE'));
+      expect(conRepuesto.repuestos.single.codigo, 'F-7');
+    });
+
+    test('Nombre obligatorio (mínimo 3 caracteres)', () {
+      expect(S.validarActividadNueva('ab'), isNotNull);
+      expect(S.validarActividadNueva('Cambio de banda'), isNull);
+    });
+  });
+
+  group('Repuesto no registrado', () {
+    test('Sin código, en MAYÚSCULAS; si se repite suma la cantidad', () {
+      var a = S.agregarRepuestoNoRegistrado(lista(), descripcion: 'banda en v a-42', unidad: 'UNIDAD', cantidad: 2);
+      final r = a.repuestos.last;
+      expect(r.codigo, '');
+      expect(r.descripcion, 'BANDA EN V A-42');
+      expect(S.esSinCodigo(r), isTrue);
+      a = S.agregarRepuestoNoRegistrado(a, descripcion: 'BANDA EN V A-42 ', unidad: 'UNIDAD', cantidad: 1);
+      expect(a.repuestos.last.cantidad, 3);
+      expect(S.consolidar([a]).where(S.esSinCodigo).map((r) => r.descripcion), ['Grasa', 'BANDA EN V A-42']);
+    });
+
+    test('Validación: descripción y cantidad > 0', () {
+      expect(S.validarRepuestoNoRegistrado('ab', 1), isNotNull);
+      expect(S.validarRepuestoNoRegistrado('Banda', 0), isNotNull);
+      expect(S.validarRepuestoNoRegistrado('Banda', null), isNotNull);
+      expect(S.validarRepuestoNoRegistrado('Banda', 1.5), isNull);
+    });
+  });
+
+  group('Informe técnico y solicitud de materiales', () {
+    test('Datos del informe: mantenimiento, máquina, serie, fecha y solicitante (sin cliente)', () {
+      final datos = {for (final (k, v) in S.datosInforme(ticketDe(TipoActivoMantenimiento.caracol), fecha: ahora)) k: v};
+      expect(datos['FECHA:'], '27 de octubre de 2026');
+      expect(datos['INGRESO:'], 'REQ-00200');
+      expect(datos['ACTIVIDAD:'], 'MANTENIMIENTO INTERNO CORRECTIVO');
+      expect(datos['MÁQUINA:'], 'CARACOL');
+      expect(datos['N° SERIE:'], 'AQ2');
+      expect(datos['FECHA FALLA:'], '27/10/2026 10:00');
+      expect(datos['SOLICITADO POR:'], 'Op');
+      expect(datos.containsKey('CLIENTE:'), isFalse);
+      final vehiculo = {for (final (k, v) in S.datosInforme(ticketDe(TipoActivoMantenimiento.vehiculo), fecha: ahora)) k: v};
+      expect(vehiculo['PLACA:'], 'GTA1234');
+      expect(vehiculo['KILOMETRAJE:'], '100 km');
+    });
+
+    test('Firma "Ing." sin duplicar y encabezado de la solicitud', () {
+      expect(S.firma('Tyrone Villavicencio'), 'Ing. Tyrone Villavicencio');
+      expect(S.firma('ING. Tyrone'), 'Ing. Tyrone');
+      expect(S.firma(''), 'Ing. Técnico de Servicio');
+      expect(S.encabezadoSolicitud.proyecto, 'AQUASPOT');
+      expect(S.encabezadoSolicitud.centroCosto, 'MANTENIMIENTO INTERNO');
+    });
+
+    test('El ticket evaluado guarda el PDF y el Excel subidos', () {
+      final t = S.construirTicketEvaluado(ticketDe(TipoActivoMantenimiento.caracol), [lista()],
+          necesitaCompras: true, usuarioNombre: 'Téc', rol: RolUsuario.tecnico, ahora: ahora,
+          urlInformePdf: 'https://f/informe.pdf', urlSolicitudExcel: 'https://f/solicitud.xlsx');
+      expect(t.evaluacionTecnica!.urlsAdjuntosPdf, ['https://f/informe.pdf']);
+      expect(t.evaluacionTecnica!.urlProformaExcel, 'https://f/solicitud.xlsx');
+    });
+
+    test('Genera el Excel y el PDF (con actividad nueva, foto y repuesto sin código)', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final foto = ArchivoAdjunto(bytes: File('assets/images/logo.png').readAsBytesSync(), nombre: 'foto.png');
+      final nueva = S.agregarRepuestoNoRegistrado(
+        S.actividadNueva([lista()], nombre: 'Cambio de banda', horasHombre: 1)
+            .copyWith(observacion: 'Banda rota', fotos: [foto]),
+        descripcion: 'Banda A-42', unidad: 'UNIDAD', cantidad: 1,
+      );
+      final acts = [lista(), nueva];
+      final excel = GeneradorExcelMantenimiento.generar(ticket: ticketDe(TipoActivoMantenimiento.caracol), actividades: acts);
+      expect(excel.sublist(0, 2), [0x50, 0x4B], reason: 'xlsx = zip');
+      final pdf = await GeneradorPdfMantenimiento.generar(
+        ticket: ticketDe(TipoActivoMantenimiento.caracol),
+        actividades: acts,
+        nombreTecnico: 'Tyrone',
+      );
+      expect(String.fromCharCodes(pdf.sublist(0, 4)), '%PDF');
+    });
   });
 
   group('Use case', () {
