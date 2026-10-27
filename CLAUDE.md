@@ -62,18 +62,25 @@ arranque con la misma memoria, sin tener que repetir todo desde cero.
       `fallas`/`tecnicos` sin dominio, `TicketBloc` con escrituras Firestore
       y 21 accesos directos al repositorio, `XFile`/`PlatformFile` en domain.
 
-## Estado del repositorio (actualizado 2026-10-13)
+## Estado del repositorio (actualizado 2026-10-27)
 
-Commit más reciente: `0f1c1f0`. **Todo lo trabajado del 05 al 13/10/2026
-está SIN commitear** (pendiente de prueba y autorización del usuario).
-Verificación al cierre: `flutter analyze` 0 errores (151 avisos previos),
-`flutter test` 111 tests pasando, `functions/` compila (`npm run build`).
+Último commit de código: `7e3a87e` (rama `aquaspot_optimizado`). Lo trabajado
+hasta el 27/10/2026 está **commiteado y subido**. Verificación al cierre:
+`flutter analyze` 0 errores (151 avisos = línea base), `flutter test`
+**246** tests pasando, `flutter build web` compila.
+
+**Link de prueba "desarrollo":** cada push a `aquaspot_optimizado` lo
+publica solo (GitHub Actions → canal `desarrollo` de Firebase Hosting; usa la
+base de datos REAL). `prueba-rapida` y producción son **intocables**.
+
+**Agentes** en `.claude/agents/`: `tester` → `revisor` después de cada cambio;
+`preparador-commit` solo cuando el usuario autoriza el commit.
 
 **Leer antes de continuar, en este orden:**
 1. `Claude outputs/CONTEXTO_SESION_2026-10-05_al_07.md` — Venta de Repuesto
    (fases 1–3), Validación simple de Bodega, trazabilidad por proceso,
    opciones de admin, Dashboard.
-2. `Claude outputs/CONTEXTO_SESION_2026-10-08_al_13.md` — lo más reciente:
+2. `Claude outputs/CONTEXTO_SESION_2026-10-08_al_13.md`:
    - **Revisión de Códigos del Plan Maestro** (tarjeta en menú, colección
      `historial_plan_maestro`).
    - **Borrador completo de Evaluación Técnica** (IndexedDB en web).
@@ -94,8 +101,19 @@ Verificación al cierre: `flutter analyze` 0 errores (151 avisos previos),
    - Comercial: chip "Costo M.O." = Total HH × $25 en la propuesta (solo
      se muestra, no se guarda).
    - Cloud Functions nuevas/cambiadas **sin desplegar**.
+3. `Claude outputs/CONTEXTO_SESION_2026-10-23_al_27.md` — **lo más reciente**:
+   - Dashboard: fallas por **Parte** (antes Componente) con pasteles por
+     equipo, garantías por equipo y filtradas por falla, creados por mes →
+     semana → día, documentos nuevos, Despacho con tiempo de picking.
+   - Link de prueba "desarrollo" con GitHub Actions.
+   - **Mantenimiento interno**: creación (videos, foto de horómetro / km),
+     entra directo a Evaluación Técnica, evaluación propia (Plan Maestro +
+     actividades nuevas, repuestos del inventario o SIN CÓDIGO), informe PDF
+     y Solicitud de materiales; pasa a Compras sin Comercial ni Costos.
+   - **Siguiente:** paso 2 Plan preventivo con frecuencia (horas / km / días)
+     y paso 3 cierre del flujo (Proceso de Trabajo → Finalizado directo).
 
-Pendiente inmediato: Excel "Baja ERP" del menú "Excels" de la ventana de
+Pendiente inmediato (anterior al 23/10, por confirmar si sigue vigente): Excel "Baja ERP" del menú "Excels" de la ventana de
 picking trae todos los repuestos (plan hecho, falta confirmación); reglas de
 Storage para el enlace externo (`Claude outputs/storage_rules_con_retiro_externo.txt`)
 y rol IAM "Firebase Rules Firestore Service Agent".
