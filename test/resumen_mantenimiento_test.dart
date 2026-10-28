@@ -42,8 +42,7 @@ void main() {
     final filas = {for (final (k, v) in R.filas(ticket(TipoActivoMantenimiento.cosechadora))) k: v};
     expect(filas['Tipo de mantenimiento'], 'Correctivo');
     expect(filas['Máquina'], 'Cosechadora');
-    expect(filas['Marca'], 'JOHN DEERE');
-    expect(filas['Especificación'], 'S700 2020');
+    expect(filas.containsKey('Marca'), isFalse, reason: 'marca y especificación solo en aire y herramientas');
     expect(filas['Serie de máquina'], 'AQ2');
     expect(filas['Horómetro'], '1520 h');
     expect(filas['Creado por'], 'Ana');
@@ -56,11 +55,14 @@ void main() {
     expect(v['Kilometraje'], '45200 km');
     final a = {for (final (k, x) in R.filas(ticket(TipoActivoMantenimiento.aireAcondicionado))) k: x};
     expect(a['Fecha de la falla'], '28/10/2026');
+    expect(a['Marca'], 'JOHN DEERE');
+    expect(a['Especificación'], 'S700 2020');
     expect(a['Serie de máquina'], '—');
   });
 
   test('Línea corta para las bandejas', () {
-    expect(R.lineaCorta(ticket(TipoActivoMantenimiento.cosechadora)), 'MANTENIMIENTO CORRECTIVO · COSECHADORA · JOHN DEERE · AQ2');
+    expect(R.lineaCorta(ticket(TipoActivoMantenimiento.cosechadora)), 'MANTENIMIENTO CORRECTIVO · COSECHADORA · AQ2');
+    expect(R.lineaCorta(ticket(TipoActivoMantenimiento.herramientas)), 'MANTENIMIENTO CORRECTIVO · HERRAMIENTAS · JOHN DEERE');
   });
 
   test('Fotos: primero la del horómetro / kilometraje, luego las evidencias; y los videos', () {

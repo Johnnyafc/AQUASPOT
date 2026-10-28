@@ -109,16 +109,36 @@ void main() {
           ['Seleccione el tipo de máquina.']);
     });
 
-    test('Marca y especificación del equipo: obligatorias y se guardan en MAYÚSCULAS', () {
-      final sin = cosechadoraValida().copyWith(marca: ' ', especificacion: '');
-      expect(F.validar(sin, rol: RolUsuario.requerimiento, ahora: ahora),
+    test('Marca y especificación: solo aire acondicionado y herramientas, obligatorias y en MAYÚSCULAS', () {
+      expect(F.pideMarcaYEspecificacion(TipoActivoMantenimiento.aireAcondicionado), isTrue);
+      expect(F.pideMarcaYEspecificacion(TipoActivoMantenimiento.herramientas), isTrue);
+      expect(F.pideMarcaYEspecificacion(TipoActivoMantenimiento.cosechadora), isFalse);
+      expect(F.pideMarcaYEspecificacion(TipoActivoMantenimiento.vehiculo), isFalse);
+      final cosechadora = cosechadoraValida().copyWith(marca: ' ', especificacion: '');
+      expect(F.validar(cosechadora, rol: RolUsuario.requerimiento, ahora: ahora), isEmpty, reason: 'la cosechadora no las pide');
+      final aire = DatosMantenimientoInterno(
+        tipoActivo: TipoActivoMantenimiento.aireAcondicionado,
+        fechaHora: DateTime(2026, 10, 20),
+        detalle: 'No enfría la oficina',
+        cantidadFotos: 1,
+      );
+      expect(F.validar(aire, rol: RolUsuario.requerimiento, ahora: ahora),
           containsAll(['Ingrese la marca.', 'Ingrese la especificación del equipo.']));
-      final t = F.construirTicket(cosechadoraValida().copyWith(marca: ' john deere ', especificacion: 's700 2020'),
+      final t = F.construirTicket(aire.copyWith(marca: ' lg ', especificacion: 'split 12000 btu'),
           usuarioNombre: 'Ana', rol: RolUsuario.requerimiento, ahora: ahora);
-      expect(t.marca, 'JOHN DEERE');
-      expect(t.mantenimientoInterno!.especificacion, 'S700 2020');
+      expect(t.marca, 'LG');
+      expect(t.mantenimientoInterno!.especificacion, 'SPLIT 12000 BTU');
+      final tc = F.construirTicket(cosechadoraValida(), usuarioNombre: 'Ana', rol: RolUsuario.requerimiento, ahora: ahora);
+      expect(tc.mantenimientoInterno!.especificacion, isEmpty);
+      // Al pasar a una máquina que no las pide, se vacían (sus campos se ocultan).
+      final escrito = aire.copyWith(marca: 'LG', especificacion: 'SPLIT');
+      final cambiado = F.cambiarTipoActivo(escrito, TipoActivoMantenimiento.cosechadora);
+      expect(cambiado.marca, isEmpty);
+      expect(cambiado.especificacion, isEmpty);
+      expect(F.cambiarTipoActivo(escrito, TipoActivoMantenimiento.herramientas).marca, 'LG',
+          reason: 'entre aire y herramientas los campos siguen a la vista');
       final json = TicketModel.fromEntity(t.copyWith(id: 'REQ-3')).toJson()..['id'] = 'REQ-3';
-      expect(TicketModel.fromJson(json).mantenimientoInterno!.especificacion, 'S700 2020');
+      expect(TicketModel.fromJson(json).mantenimientoInterno!.especificacion, 'SPLIT 12000 BTU');
     });
 
     test('Cosechadora válida no tiene errores', () {

@@ -14,8 +14,9 @@
 //     Vehículo: placa, kilometraje + foto del kilometraje (obligatorios)
 //     Aire acondicionado / Herramientas: fecha (solo fecha; de la falla o
 //       la programada) y serie OPCIONAL escrita a mano (en MAYÚSCULAS)
-//   y en todos: marca y especificación del equipo (obligatorias, en
-//   MAYÚSCULAS), detalle de la falla (o del trabajo, si es preventivo) y al
+//   Aire acondicionado / Herramientas además: marca y especificación del
+//   equipo (obligatorias, en MAYÚSCULAS);
+//   y en todos: detalle de la falla (o del trabajo, si es preventivo) y al
 //   menos una evidencia, foto o video (máximo 3 videos de 60 s).
 // - La serie y la placa salen de un catálogo fijo (catalogo); para agregar
 //   una máquina se agrega aquí. Aire acondicionado y Herramientas no tienen
@@ -132,6 +133,10 @@ class FormularioMantenimientoService {
   /// Solo fecha, sin hora.
   static bool pideFecha(TipoActivoMantenimiento? t) => serieManual(t);
 
+  /// Marca y especificación del equipo (obligatorias): solo aire
+  /// acondicionado y herramientas.
+  static bool pideMarcaYEspecificacion(TipoActivoMantenimiento? t) => serieManual(t);
+
   /// Foto obligatoria de la lectura: horómetro (cosechadora) o kilometraje
   /// (vehículo).
   static bool pideFotoLectura(TipoActivoMantenimiento? t) => pideHorometro(t) || pideKilometraje(t);
@@ -183,6 +188,10 @@ class FormularioMantenimientoService {
       limpiarHorometro: !pideHorometro(nuevo),
       limpiarKilometraje: !pideKilometraje(nuevo),
       limpiarFechaHora: pideFecha(nuevo) != pideFecha(d.tipoActivo),
+      // Si la nueva máquina no las pide, los campos se ocultan: se vacían
+      // para no guardar una marca que ya no se ve.
+      marca: pideMarcaYEspecificacion(nuevo) ? null : '',
+      especificacion: pideMarcaYEspecificacion(nuevo) ? null : '',
       tieneFotoLectura: false,
     );
   }
@@ -240,8 +249,10 @@ class FormularioMantenimientoService {
         errores.add('La fecha de la falla no puede ser futura.');
       }
     }
-    if (d.marca.trim().isEmpty) errores.add('Ingrese la marca.');
-    if (d.especificacion.trim().isEmpty) errores.add('Ingrese la especificación del equipo.');
+    if (pideMarcaYEspecificacion(tipo)) {
+      if (d.marca.trim().isEmpty) errores.add('Ingrese la marca.');
+      if (d.especificacion.trim().isEmpty) errores.add('Ingrese la especificación del equipo.');
+    }
     if (d.detalle.trim().length < minimoCaracteresDetalle) {
       errores.add('${etiquetaDetalle(d.tipoMantenimiento)}: escriba al menos $minimoCaracteresDetalle caracteres.');
     }
@@ -278,7 +289,7 @@ class FormularioMantenimientoService {
       telefonoContacto: '',
       equipo: equipoDe(tipo),
       equipoDetalle: tipo.etiqueta,
-      marca: d.marca.trim().toUpperCase(),
+      marca: pideMarcaYEspecificacion(tipo) ? d.marca.trim().toUpperCase() : 'NO ESPECIFICADA',
       accesoriosRecibidos: null,
       fallaReportada: d.detalle.trim(),
       numeroSerie: esVehiculo(tipo) || valor.isEmpty ? null : valor,
@@ -303,7 +314,7 @@ class FormularioMantenimientoService {
         tipoActivo: tipo,
         placa: esVehiculo(tipo) ? valor : null,
         kilometraje: pideKilometraje(tipo) ? d.kilometraje : null,
-        especificacion: d.especificacion.trim().toUpperCase(),
+        especificacion: pideMarcaYEspecificacion(tipo) ? d.especificacion.trim().toUpperCase() : '',
         fechaHoraFalla: pideFechaHora(tipo)
             ? f
             : (pideFecha(tipo) && f != null ? DateTime(f.year, f.month, f.day) : null),

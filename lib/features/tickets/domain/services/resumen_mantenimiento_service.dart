@@ -25,8 +25,10 @@ class ResumenMantenimientoService {
     return [
       if (m != null) ('Tipo de mantenimiento', m.tipoMantenimiento.etiqueta),
       ('Máquina', tipo?.etiqueta ?? t.equipo.name),
-      ('Marca', _texto(t.marca)),
-      ('Especificación', _texto(m?.especificacion)),
+      if (FormularioMantenimientoService.pideMarcaYEspecificacion(tipo)) ...[
+        ('Marca', _texto(t.marca)),
+        ('Especificación', _texto(m?.especificacion)),
+      ],
       (FormularioMantenimientoService.etiquetaSerieOPlaca(tipo), _texto(m?.placa ?? t.numeroSerie)),
       if (t.horometro != null) ('Horómetro', '${_numero(t.horometro!)} h'),
       if (m?.kilometraje != null) ('Kilometraje', '${_numero(m!.kilometraje!)} km'),
