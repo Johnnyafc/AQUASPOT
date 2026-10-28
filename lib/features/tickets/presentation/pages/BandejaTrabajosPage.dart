@@ -167,6 +167,8 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
           minChildSize: 0.4,
           maxChildSize: 0.9,
           builder: (_, scrollController) {
+            // En el celular la etiqueta de cada repuesto va debajo de su texto.
+            final angosto = MediaQuery.sizeOf(ctx).width < 600;
             return Container(
               decoration: const BoxDecoration(
                 color: Color(0xFFF4F6F9),
@@ -274,9 +276,11 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
                             children: [
                               const Icon(Icons.inventory_2_outlined, size: 18, color: Color(0xFF2E7D32)),
                               const SizedBox(width: 6),
-                              Text(
-                                'REPUESTOS EN STOCK (Bodega puede despachar)',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green.shade900),
+                              Expanded(
+                                child: Text(
+                                  'REPUESTOS EN STOCK (Bodega puede despachar)',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green.shade900),
+                                ),
                               ),
                             ],
                           ),
@@ -293,11 +297,32 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
                               child: ListTile(
                                 dense: true,
                                 title: Text('${item.codigo} - ${item.descripcion}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                subtitle: Text(
-                                  'Requerido: ${item.cantidadSolicitada} ${item.unidad} | Despachado Bodega: ${item.cantidadDespachada} | En Taller: $enTaller ${item.unidad}',
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                                trailing: Container(
+                                subtitle: angosto
+                                    ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                        Text(
+                                          'Requerido: ${item.cantidadSolicitada} ${item.unidad} | Despachado Bodega: ${item.cantidadDespachada} | En Taller: $enTaller ${item.unidad}',
+                                          style: const TextStyle(fontSize: 11),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFE8F5E9),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            item.validadoPorCompras
+                                                ? 'COMPRAS VALIDÓ'
+                                                : 'STOCK: ${item.stockDisponibleAlEvaluar.toString().replaceAll(RegExp(r'\.0$'), '')}',
+                                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF2E7D32)),
+                                          ),
+                                        ),
+                                      ])
+                                    : Text(
+                                      'Requerido: ${item.cantidadSolicitada} ${item.unidad} | Despachado Bodega: ${item.cantidadDespachada} | En Taller: $enTaller ${item.unidad}',
+                                      style: const TextStyle(fontSize: 11),
+                                    ),
+                                trailing: angosto ? null : Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFE8F5E9),
@@ -320,9 +345,11 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
                             children: [
                               Icon(Icons.pending_actions_outlined, size: 18, color: Colors.orange.shade900),
                               const SizedBox(width: 6),
-                              Text(
-                                'REPUESTOS A LA ESPERA DE COMPRAS (Sin Stock)',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange.shade900),
+                              Expanded(
+                                child: Text(
+                                  'REPUESTOS A LA ESPERA DE COMPRAS (Sin Stock)',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange.shade900),
+                                ),
                               ),
                             ],
                           ),
@@ -338,11 +365,30 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
                               child: ListTile(
                                 dense: true,
                                 title: Text('${item.codigo} - ${item.descripcion}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                subtitle: Text(
-                                  'Requerido: ${item.cantidadSolicitada} ${item.unidad} | Stock en bodega: 0',
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                                trailing: Container(
+                                subtitle: angosto
+                                    ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                        Text(
+                                          'Requerido: ${item.cantidadSolicitada} ${item.unidad} | Stock en bodega: 0',
+                                          style: const TextStyle(fontSize: 11),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFFFF3E0),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: const Text(
+                                            'EN GESTIÓN COMPRAS',
+                                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.deepOrange),
+                                          ),
+                                        ),
+                                      ])
+                                    : Text(
+                                      'Requerido: ${item.cantidadSolicitada} ${item.unidad} | Stock en bodega: 0',
+                                      style: const TextStyle(fontSize: 11),
+                                    ),
+                                trailing: angosto ? null : Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFFFF3E0),
@@ -372,6 +418,23 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
   Widget _buildTicketCard(BuildContext context, TicketEntity ticket) {
     final bool estaEnProceso = ticket.trabajoIniciado;
     final colorEstadoTrabajo = estaEnProceso ? kTicketAcento : Colors.grey.shade400;
+    final insignias = <Widget>[
+      if (estaEnProceso) const InsigniaSuave(color: kTicketAcento, icono: Icons.settings, texto: 'EN PROCESO'),
+      if (ticket.noRequiereCompras) const InsigniaSuave(color: Colors.deepOrange, texto: 'SIN COMPRAS'),
+      if (ticket.comprasYBodegaTotalmenteCompletados)
+        const InsigniaSuave(color: Colors.green, icono: Icons.verified_user, texto: 'BODEGA Y COMPRAS 100%')
+      else if (ticket.hayMaterialesDespachadosPorAsignar)
+        const InsigniaSuave(color: Colors.teal, icono: Icons.local_shipping, texto: 'REPUESTOS EN BODEGA')
+      else if (ticket.tieneAlMenosUnDespachoBodega)
+        if (ticket.materialesValidadosEnTaller)
+          const InsigniaSuave(color: Colors.teal, icono: Icons.verified, texto: 'MATERIALES EN TALLER')
+        else if (ticket.bodegaDespachoCompleto)
+          const InsigniaSuave(color: Colors.green, icono: Icons.check_circle, texto: 'MATERIALES COMPLETOS')
+        else
+          const InsigniaSuave(color: Colors.amber, icono: Icons.local_shipping, texto: 'DESPACHO PARCIAL'),
+    ];
+    // En el celular los botones van uno debajo de otro, todos del mismo ancho.
+    final double? anchoBoton = MediaQuery.sizeOf(context).width < 600 ? double.infinity : null;
 
     return Card(
       key: ValueKey(ticket.id),
@@ -398,37 +461,14 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
                   ),
                 ),
                 CopyIconButtonWidget(etiqueta: 'Ticket', valor: ticket.id),
-                if (estaEnProceso)
-                  const InsigniaSuave(color: kTicketAcento, icono: Icons.settings, texto: 'EN PROCESO'),
-                if (ticket.noRequiereCompras) ...[
-                  const SizedBox(width: 6),
-                  const InsigniaSuave(color: Colors.deepOrange, texto: 'SIN COMPRAS'),
-                ],
-                if (ticket.comprasYBodegaTotalmenteCompletados) ...[
-                  const SizedBox(width: 6),
-                  const InsigniaSuave(
-                    color: Colors.green,
-                    icono: Icons.verified_user,
-                    texto: 'BODEGA Y COMPRAS 100%',
-                  ),
-                ] else if (ticket.hayMaterialesDespachadosPorAsignar) ...[
-                  const SizedBox(width: 6),
-                  const InsigniaSuave(
-                    color: Colors.teal,
-                    icono: Icons.local_shipping,
-                    texto: 'REPUESTOS EN BODEGA',
-                  ),
-                ] else if (ticket.tieneAlMenosUnDespachoBodega) ...[
-                  const SizedBox(width: 6),
-                  if (ticket.materialesValidadosEnTaller)
-                    const InsigniaSuave(color: Colors.teal, icono: Icons.verified, texto: 'MATERIALES EN TALLER')
-                  else if (ticket.bodegaDespachoCompleto)
-                    const InsigniaSuave(color: Colors.green, icono: Icons.check_circle, texto: 'MATERIALES COMPLETOS')
-                  else
-                    const InsigniaSuave(color: Colors.amber, icono: Icons.local_shipping, texto: 'DESPACHO PARCIAL'),
-                ],
               ],
             ),
+            // Insignias en su propia fila (bajan de línea si no caben): en la
+            // misma fila del ticket aplastaban el número en el celular.
+            if (insignias.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(spacing: 6, runSpacing: 6, children: insignias),
+            ],
 
             const SizedBox(height: 12),
 
@@ -615,13 +655,12 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              // En el celular los botones quedan uno debajo de otro: centrados.
-              alignment: MediaQuery.sizeOf(context).width < 600 ? WrapAlignment.center : WrapAlignment.end,
+              alignment: WrapAlignment.end,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 // 1. ACTUADOR DE INICIO (Se oculta o cambia si ya está activo)
                 if (!estaEnProceso)
-                  ElevatedButton.icon(
+                  SizedBox(width: anchoBoton, child: ElevatedButton.icon(
                     icon: const Icon(Icons.play_arrow, size: 18),
                     label: const Text('Iniciar Trabajo'),
                     style: ElevatedButton.styleFrom(
@@ -648,11 +687,11 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
                         ),
                       );
                     },
-                  ),
+                  )),
 
                 // DISPONIBILIDAD DE REPUESTOS (STOCK vs COMPRAS)
                 if (ticket.itemsDespachoBodega.isNotEmpty)
-                  ElevatedButton.icon(
+                  SizedBox(width: anchoBoton, child: ElevatedButton.icon(
                     icon: const Icon(Icons.analytics_outlined, size: 18),
                     label: const Text('Disponibilidad de repuestos'),
                     style: ElevatedButton.styleFrom(
@@ -662,10 +701,10 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                     onPressed: () => _mostrarModalDisponibilidadRepuestos(context, ticket),
-                  ),
+                  )),
 
                 // 5. MATERIALES EN BODEGA
-                ElevatedButton.icon(
+                SizedBox(width: anchoBoton, child: ElevatedButton.icon(
                   icon: const Icon(Icons.warehouse_outlined, size: 18),
                   label: const Text('Materiales en bodega'),
                   style: ElevatedButton.styleFrom(
@@ -688,10 +727,10 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
                       }
                     });
                   },
-                ),
+                )),
 
                 // 7. SUBIR EVIDENCIA (ENCLAVADO CON INICIAR TRABAJO)
-                ElevatedButton.icon(
+                SizedBox(width: anchoBoton, child: ElevatedButton.icon(
                   icon: const Icon(Icons.camera_alt, size: 18),
                   label: const Text('Subir evidencia'),
                   style: ElevatedButton.styleFrom(
@@ -761,7 +800,7 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
                       ),
                     );
                   },
-                ),
+                )),
               ],
             ),
           ],
