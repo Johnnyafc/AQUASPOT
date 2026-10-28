@@ -25,14 +25,18 @@ import '../../../../core/enum/rol_usuario.dart';
 import '../../../../core/enum/ticket_enums.dart';
 import '../../../catalogo/domain/entities/actividad_catalogo_entity.dart';
 import '../../../inventario/domain/entities/item_inventario_entity.dart';
+import '../../../plan_preventivo/domain/entities/actividad_preventiva_entity.dart';
 import '../entities/actividad_mantenimiento.dart';
 import '../entities/actividad_registrada_entity.dart';
 import '../entities/evaluacion_tecnica_entity.dart';
 import '../entities/evento_auditoria_entity.dart';
+import '../entities/ficha_creacion_repuesto_entity.dart';
 import '../entities/item_despacho_bodega_entity.dart';
 import '../entities/mantenimiento_interno_entity.dart';
 import '../entities/repuesto_registrado_entity.dart';
 import '../entities/ticket_entity.dart';
+import 'creacion_codigos_mantenimiento_service.dart';
+import 'formulario_mantenimiento_service.dart';
 
 class EvaluacionMantenimientoService {
   static const int limiteBusqueda = 30;
@@ -85,6 +89,24 @@ class EvaluacionMantenimientoService {
       horasHombre: a.horasHombre ?? 0,
       repuestos: repuestos.values.toList(),
     );
+  }
+
+  /// Actividad del Plan Preventivo lista para editar (mismo código PREV-…,
+  /// sus horas y sus repuestos).
+  static ActividadMantenimiento desdePreventivo(ActividadPreventivaEntity a) => ActividadMantenimiento(
+        codigo: a.codigo,
+        nombre: a.nombre,
+        horasHombre: a.horasHombre,
+        repuestos: [for (final r in a.repuestos) if (r.cantidad > 0) r],
+      );
+
+  /// Actividades preventivas activas que aún no se agregaron.
+  static List<ActividadPreventivaEntity> preventivasDisponibles(
+    List<ActividadPreventivaEntity> plan,
+    List<ActividadMantenimiento> agregadas,
+  ) {
+    final ya = {for (final a in agregadas) a.codigo};
+    return [for (final a in plan) if (a.activo && !ya.contains(a.codigo)) a]..sort((x, y) => x.codigo.compareTo(y.codigo));
   }
 
   /// Actividades del catálogo que aún no se agregaron.
@@ -183,8 +205,8 @@ class EvaluacionMantenimientoService {
     return null;
   }
 
-  /// Sin código = no registrado en el inventario (Compras debe comprarlo o
-  /// crearlo).
+  /// Sin código = no registrado en el inventario: lleva ficha de creación
+  /// de código y Costos lo crea antes de que pase a Compras.
   static bool esSinCodigo(RepuestoRegistradoEntity r) => r.codigo.trim().isEmpty;
 
   static ActividadMantenimiento cambiarCantidad(ActividadMantenimiento act, int indice, double cantidad) {
@@ -256,7 +278,6 @@ class EvaluacionMantenimientoService {
 
   static String fechaLarga(DateTime f) => '${f.day} de ${_meses[f.month - 1]} de ${f.year}';
 
-  static String _dos(int v) => v.toString().padLeft(2, '0');
   static String _numero(double v) => v % 1 == 0 ? v.toInt().toString() : v.toString();
 
   /// Filas de datos del encabezado del informe técnico.
@@ -275,7 +296,7 @@ class EvaluacionMantenimientoService {
       if (m?.kilometraje != null) ('KILOMETRAJE:', '${_numero(m!.kilometraje!)} km'),
       if (f != null)
         (m!.tipoMantenimiento == TipoMantenimiento.preventivo ? 'PROGRAMADO:' : 'FECHA FALLA:',
-            '${_dos(f.day)}/${_dos(f.month)}/${f.year} ${_dos(f.hour)}:${_dos(f.minute)}'),
+            FormularioMantenimientoService.textoFecha(tipo, f)),
       if (t.historialEventos.isNotEmpty) ('SOLICITADO POR:', t.historialEventos.first.usuarioNombre),
     ];
   }
@@ -293,8 +314,13 @@ class EvaluacionMantenimientoService {
       actividades.fold<double>(0, (s, a) => s + a.horasHombre);
 
   // ------------------------------------------------------------ Validación
-  /// Errores de la evaluación (vacío = se puede guardar).
-  static List<String> validar(List<ActividadMantenimiento> actividades) {
+  /// Errores de la evaluación (vacío = se puede guardar). Cada repuesto sin
+  /// código necesita su ficha completa en [fichas] (clave:
+  /// CreacionCodigosMantenimientoService.claveFicha).
+  static List<String> validar(
+    List<ActividadMantenimiento> actividades, {
+    Map<String, FichaCreacionRepuestoEntity> fichas = const {},
+  }) {
     if (actividades.isEmpty) return const ['Agregue al menos una actividad.'];
     final errores = <String>[];
     for (final a in actividades) {
@@ -304,6 +330,7 @@ class EvaluacionMantenimientoService {
         errores.add('${a.nombre}: las cantidades de repuestos deben ser mayores a 0.');
       }
     }
+    errores.addAll(CreacionCodigosMantenimientoService.validarFichas(actividades, fichas));
     return errores;
   }
 
@@ -311,11 +338,14 @@ class EvaluacionMantenimientoService {
   /// En Caracol se aparta el stock al evaluar (el picking lo libera).
   static bool reservaStock(TicketEntity t) => t.equipo == TipoEquipo.Caracol;
 
-  /// Ticket evaluado: actividades (con sus fotos ya subidas), todos los
-  /// repuestos para bodega y paso a Compras sin Comercial ni Costos.
+  /// Ticket evaluado: actividades (con sus fotos ya subidas), los repuestos
+  /// CON código para bodega y paso a Compras sin Comercial ni Costos. Los
+  /// SIN código (con su ficha) esperan en Costos; si todos son sin código,
+  /// el ticket queda en Costos hasta que se creen.
   static TicketEntity construirTicketEvaluado(
     TicketEntity ticket,
     List<ActividadMantenimiento> actividades, {
+    Map<String, FichaCreacionRepuestoEntity> fichas = const {},
     required bool necesitaCompras,
     String? motivoNoCompras,
     required String usuarioNombre,
@@ -325,12 +355,19 @@ class EvaluacionMantenimientoService {
     String? urlSolicitudExcel,
   }) {
     final repuestos = consolidar(actividades);
+    final conCodigo = repuestos.where((r) => !esSinCodigo(r)).toList();
+    final porCodificar = CreacionCodigosMantenimientoService.porCodificar(actividades, fichas);
+    final soloSinCodigo = porCodificar.isNotEmpty && conCodigo.isEmpty;
     final motivo = motivoNoCompras?.trim() ?? '';
     final accion = StringBuffer('EVALUACIÓN TÉCNICA DE MANTENIMIENTO INTERNO REGISTRADA');
     if (!necesitaCompras) {
       accion.write(' — DECLARADO: NO REQUIERE COMPRAS');
       if (motivo.isNotEmpty) accion.write(' ($motivo)');
     }
+    if (porCodificar.isNotEmpty) {
+      accion.write(' — ${porCodificar.length} REPUESTO(S) SIN CÓDIGO A COSTOS PARA CREAR SU CÓDIGO');
+    }
+    final m = ticket.mantenimientoInterno;
     return ticket.copyWith(
       evaluacionTecnica: EvaluacionTecnicaEntity(
         urlProformaExcel: urlSolicitudExcel,
@@ -350,8 +387,9 @@ class EvaluacionMantenimientoService {
         ],
         repuestosTaller: repuestos,
       ),
+      mantenimientoInterno: m?.copyWith(repuestosPorCodificar: porCodificar),
       itemsDespachoBodega: [
-        for (final r in repuestos)
+        for (final r in conCodigo)
           ItemDespachoBodegaEntity(
             codigo: r.codigo,
             descripcion: r.descripcion,
@@ -360,8 +398,8 @@ class EvaluacionMantenimientoService {
             stockDisponibleAlEvaluar: 0,
           ),
       ],
-      estadoActual: EstadoTicket.compras,
-      isCostosCompletado: true, // sin Costos: Compras pasa directo a Bodega
+      estadoActual: soloSinCodigo ? EstadoTicket.costos : EstadoTicket.compras,
+      isCostosCompletado: true, // sin proyecto de Costos: Compras pasa directo a Bodega
       noRequiereCompras: !necesitaCompras,
       motivoNoRequiereCompras: !necesitaCompras && motivo.isNotEmpty ? motivo : null,
       supervisorNoRequiereCompras: !necesitaCompras ? usuarioNombre : null,
@@ -375,7 +413,10 @@ class EvaluacionMantenimientoService {
           timestamp: ahora,
           proceso: ProcesoAuditoria.evaluacion,
           hito: HitoProceso.fin,
-          habilita: const [ProcesoAuditoria.compras],
+          habilita: [
+            if (!soloSinCodigo) ProcesoAuditoria.compras,
+            if (porCodificar.isNotEmpty) ProcesoAuditoria.costos,
+          ],
         ),
       ],
     );

@@ -6,6 +6,8 @@ import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_sta
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/AsignacionCostosPage.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/creacion_codigos_venta_page.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/services/creacion_codigos_venta_service.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/services/creacion_codigos_mantenimiento_service.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/pages/creacion_codigos_mantenimiento_page.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/ticket_entity.dart'; // ⚙️ Necesario para el extension getter fechaInicioEstadoActual
 import 'package:aquaspot_postventa/features/tickets/presentation/widgets/tiempo_en_curso_widget.dart';
 import 'package:aquaspot_postventa/core/theme/ticket_visual_theme.dart';
@@ -53,9 +55,11 @@ class _BandejaCostosPageState extends State<BandejaCostosPage> {
           }
 
           // 3. Filtro industrial
+          // 🛠️ Mantenimiento interno con repuestos sin código: aparece aquí
+          // aunque sus otros repuestos ya estén en Compras / Bodega.
           final ticketsPendientes = listaAProcesar.where((t) {
             final esCostos = t.estadoActual == EstadoTicket.costos;
-            return esCostos;
+            return esCostos || CreacionCodigosMantenimientoService.requiereCreacionCodigos(t);
           }).toList();
 
           if (ticketsPendientes.isEmpty) {
@@ -83,6 +87,15 @@ class _BandejaCostosPageState extends State<BandejaCostosPage> {
                       'Contacto: ${ticket.nombreContacto} | Máquina: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}',
                     ),
                     // 🧾 Venta con repuestos fuera del sistema: crear códigos.
+                    if (CreacionCodigosMantenimientoService.requiereCreacionCodigos(ticket)) ...[
+                      const SizedBox(height: 4),
+                      InsigniaSuave(
+                        color: Colors.teal,
+                        icono: Icons.qr_code_2,
+                        texto: 'MANTENIMIENTO INTERNO: CREAR '
+                            '${CreacionCodigosMantenimientoService.indicesPendientes(ticket).length} CÓDIGO(S) DE REPUESTO',
+                      ),
+                    ],
                     if (CreacionCodigosVentaService.requiereCreacionCodigos(ticket)) ...[
                       const SizedBox(height: 4),
                       InsigniaSuave(
@@ -106,13 +119,24 @@ class _BandejaCostosPageState extends State<BandejaCostosPage> {
                   ],
                 ),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => CreacionCodigosVentaService.requiereCreacionCodigos(ticket)
-                        ? CreacionCodigosVentaPage(ticket: ticket)
-                        : AsignacionCostosPage(ticket: ticket),
-                  ),
-                ),
+                onTap: () async {
+                  if (CreacionCodigosMantenimientoService.requiereCreacionCodigos(ticket)) {
+                    final guardado = await Navigator.of(context).push<bool>(
+                      MaterialPageRoute(builder: (_) => CreacionCodigosMantenimientoPage(ticket: ticket)),
+                    );
+                    if (guardado == true && context.mounted) {
+                      context.read<TicketBloc>().add(ObtenerHistorialTicketsEvent(segmento: SegmentoOperativo.ninguno));
+                    }
+                    return;
+                  }
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => CreacionCodigosVentaService.requiereCreacionCodigos(ticket)
+                          ? CreacionCodigosVentaPage(ticket: ticket)
+                          : AsignacionCostosPage(ticket: ticket),
+                    ),
+                  );
+                },
               );
             },
           );

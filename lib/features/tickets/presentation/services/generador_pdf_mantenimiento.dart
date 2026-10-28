@@ -1,6 +1,6 @@
 // lib/features/tickets/presentation/services/generador_pdf_mantenimiento.dart
 //
-// 📄 Informe técnico de un MANTENIMIENTO INTERNO (mismo estilo que el de
+// 📄 Orden de trabajo (informe técnico) de un MANTENIMIENTO INTERNO (mismo estilo que el de
 // reparación, sin datos de cliente y sin la NOTA de daños ocultos). Solo da
 // formato: los datos, hallazgos, "Incluye" y firma salen de
 // EvaluacionMantenimientoService.
@@ -47,7 +47,7 @@ class GeneradorPdfMantenimiento {
                   pw.Image(logo, width: 140)
                 else
                   pw.Text('AQUASPOT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 18, color: azul)),
-                pw.Text('REVISIÓN TÉCNICA #${ticket.id}',
+                pw.Text('ORDEN DE TRABAJO #${ticket.id}',
                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16, color: azul)),
               ],
             ),

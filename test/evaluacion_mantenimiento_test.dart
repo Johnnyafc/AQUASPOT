@@ -5,7 +5,8 @@
 // inventario, consolidado para bodega, validación, ticket evaluado (pasa a
 // Compras sin Comercial ni Costos) y use case (reserva de stock en Caracol);
 // actividades nuevas, repuestos no registrados ("SIN CÓDIGO"), datos del
-// informe técnico y generación del PDF y la Solicitud de materiales.
+// informe técnico y generación del PDF y la Solicitud de materiales. Los
+// repuestos sin código (con su ficha) esperan en Costos.
 
 import 'package:aquaspot_postventa/core/enum/proceso_auditoria.dart';
 import 'package:aquaspot_postventa/core/enum/rol_usuario.dart';
@@ -15,10 +16,12 @@ import 'package:aquaspot_postventa/features/catalogo/domain/entities/actividad_c
 import 'package:aquaspot_postventa/features/catalogo/domain/entities/item_catalogo_entity.dart';
 import 'package:aquaspot_postventa/features/inventario/domain/entities/item_inventario_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/actividad_mantenimiento.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/ficha_creacion_repuesto_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/mantenimiento_interno_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/repuesto_registrado_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/ticket_entity.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/repositories/ticket_repository.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/services/creacion_codigos_mantenimiento_service.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/services/evaluacion_mantenimiento_service.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/services/formulario_mantenimiento_service.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/guardar_evaluacion_mantenimiento_usecase.dart';
@@ -62,6 +65,16 @@ const actividadPlan = ActividadCatalogoEntity(
 
 ItemInventarioEntity inv(String codigo, String descripcion) =>
     ItemInventarioEntity(codigo: codigo, descripcion: descripcion, stockDisponible: 10, fechaActualizacion: ahora);
+
+/// Ficha de la "Grasa" del plan (no tiene código).
+final fichas = {
+  CreacionCodigosMantenimientoService.claveFicha('Grasa'): const FichaCreacionRepuestoEntity(
+    nombre: 'GRASA DE LITIO',
+    familiaPieza: 'LUBRICANTE',
+    categoria: 'INSUMOS',
+    udm: 'GRAMOS',
+  ),
+};
 
 ActividadMantenimiento lista() => S.desdeCatalogo(actividadPlan).copyWith(observacion: 'Rodamientos con juego');
 
@@ -156,15 +169,19 @@ void main() {
 
   test('Validación: actividades, horas, observación y cantidades', () {
     expect(S.validar(const []), ['Agregue al menos una actividad.']);
-    expect(S.validar([lista()]), isEmpty);
+    expect(S.validar([lista()]), ['Grasa: llene la ficha de creación de código (repuesto sin código).']);
+    expect(S.validar([lista()], fichas: fichas), isEmpty);
+    final incompleta = {CreacionCodigosMantenimientoService.claveFicha('Grasa'): const FichaCreacionRepuestoEntity(nombre: 'GRASA')};
+    expect(S.validar([lista()], fichas: incompleta).single, contains('falta Familia de pieza, Categoría'));
     final mal = S.cambiarCantidad(S.desdeCatalogo(actividadPlan).copyWith(horasHombre: 0), 0, 0);
-    expect(S.validar([mal]).length, 3);
+    expect(S.validar([mal], fichas: fichas).length, 3);
   });
 
-  test('Ticket evaluado: todos los repuestos a bodega, pasa a Compras sin Costos', () {
+  test('Ticket evaluado: repuestos con código a bodega y Compras; los sin código esperan en Costos', () {
     final t = S.construirTicketEvaluado(
       ticketDe(TipoActivoMantenimiento.caracol),
       [lista().copyWith(fotosUrls: ['https://f/1.jpg'])],
+      fichas: fichas,
       necesitaCompras: false,
       motivoNoCompras: 'Hay stock',
       usuarioNombre: 'Téc',
@@ -175,7 +192,13 @@ void main() {
     expect(t.isCostosCompletado, isTrue);
     expect(t.evaluacionTecnica!.repuestosTaller.length, 3);
     expect(t.evaluacionTecnica!.repuestosComercial, isEmpty);
-    expect(t.itemsDespachoBodega.map((i) => i.cantidadSolicitada), [2, 50, 1]);
+    expect(t.itemsDespachoBodega.map((i) => i.codigo), ['R-1', 'SELLO-9']);
+    expect(t.itemsDespachoBodega.map((i) => i.cantidadSolicitada), [2, 1]);
+    final porCodificar = t.mantenimientoInterno!.repuestosPorCodificar.single;
+    expect(porCodificar.descripcion, 'Grasa');
+    expect(porCodificar.cantidad, 50);
+    expect(porCodificar.ficha.nombre, 'GRASA DE LITIO');
+    expect(porCodificar.pendiente, isTrue);
     expect(t.evaluacionTecnica!.actividades.single.fotosUrls, ['https://f/1.jpg']);
     expect(t.evaluacionTecnica!.actividades.single.incluye, startsWith('Incluye: 2 RODAMIENTO'));
     expect(t.evaluacionTecnica!.totalHorasHombre, 3);
@@ -184,7 +207,8 @@ void main() {
     final ev = t.historialEventos.last;
     expect(ev.accion, contains('NO REQUIERE COMPRAS (Hay stock)'));
     expect(ev.proceso, ProcesoAuditoria.evaluacion);
-    expect(ev.habilita, [ProcesoAuditoria.compras]);
+    expect(ev.accion, contains('1 REPUESTO(S) SIN CÓDIGO A COSTOS'));
+    expect(ev.habilita, [ProcesoAuditoria.compras, ProcesoAuditoria.costos]);
   });
 
   group('Actividad nueva', () {
@@ -294,18 +318,19 @@ void main() {
       expect(repo.actualizado, isNull);
     });
 
-    test('Caracol: aparta el stock de todos los repuestos', () async {
+    test('Caracol: aparta el stock de los repuestos con código', () async {
       final repo = _RepoFalso();
       final r = await GuardarEvaluacionMantenimientoUseCase(repo)(
         ticketDe(TipoActivoMantenimiento.caracol),
         [lista()],
+        fichas: fichas,
         necesitaCompras: true,
         usuarioNombre: 'Téc',
         rol: RolUsuario.tecnico,
         ahora: ahora,
       );
       expect(r.isRight(), isTrue);
-      expect(repo.reservados!.map((m) => m['codigo']), ['R-1', '', 'SELLO-9']);
+      expect(repo.reservados!.map((m) => m['codigo']), ['R-1', 'SELLO-9'], reason: 'lo sin código no se aparta');
     });
 
     test('Cosechadora: guarda sin reserva', () async {
@@ -313,6 +338,7 @@ void main() {
       await GuardarEvaluacionMantenimientoUseCase(repo)(
         ticketDe(TipoActivoMantenimiento.cosechadora),
         [lista()],
+        fichas: fichas,
         necesitaCompras: true,
         usuarioNombre: 'Téc',
         rol: RolUsuario.tecnico,

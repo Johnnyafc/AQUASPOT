@@ -26,6 +26,8 @@ import 'package:aquaspot_postventa/features/tickets/presentation/bloc/mantenimie
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/subir_archivo_adjunto_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/guardar_evaluacion_mantenimiento_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/evaluacion_mantenimiento_cubit.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/registrar_codigos_mantenimiento_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/bloc/creacion_codigos_mantenimiento_cubit.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -70,6 +72,13 @@ import 'features/catalogo/data/repositories/catalogo_repository_impl.dart';
 import 'features/catalogo/domain/repositories/catalogo_repository.dart';
 import 'features/catalogo/domain/usecases/catalogo_usecases.dart';
 import 'features/catalogo/presentation/bloc/catalogo_bloc.dart';
+
+// --- FEATURE: PLAN PREVENTIVO ---
+import 'features/plan_preventivo/data/datasources/plan_preventivo_remote_datasource.dart';
+import 'features/plan_preventivo/data/repositories/plan_preventivo_repository_impl.dart';
+import 'features/plan_preventivo/domain/repositories/plan_preventivo_repository.dart';
+import 'features/plan_preventivo/domain/usecases/plan_preventivo_usecases.dart';
+import 'features/plan_preventivo/presentation/bloc/plan_preventivo_cubit.dart';
 
 // --- FEATURE: INVENTARIO ---
 import 'features/inventario/data/datasources/inventario_remote_datasource.dart';
@@ -161,6 +170,23 @@ Future<void> init() async {
     () => CatalogoRepositoryImpl(remoteDataSource: sl()),
   );
 
+  // --- PLAN PREVENTIVO ---
+  sl.registerLazySingleton<PlanPreventivoRemoteDataSource>(
+    () => PlanPreventivoRemoteDataSourceImpl(firestore: sl()),
+  );
+  sl.registerLazySingleton<PlanPreventivoRepository>(
+    () => PlanPreventivoRepositoryImpl(remoteDataSource: sl()),
+  );
+  sl.registerLazySingleton(() => ObtenerPlanPreventivoUseCase(sl()));
+  sl.registerLazySingleton(() => GuardarActividadPreventivaUseCase(sl()));
+  sl.registerLazySingleton(() => DesactivarActividadPreventivaUseCase(sl()));
+  sl.registerFactory(() => PlanPreventivoCubit(
+        obtenerPlan: sl(),
+        guardarActividad: sl(),
+        desactivarActividad: sl(),
+        obtenerInventario: sl(),
+      ));
+
   // --- INVENTARIO ---
   sl.registerLazySingleton<InventarioRemoteDataSource>(
     () => InventarioRemoteDataSourceImpl(firestore: sl()),
@@ -208,6 +234,7 @@ sl.registerLazySingleton(() => SubirOrdenCompraUseCase(sl()));
   sl.registerLazySingleton(() => AdjuntarEvidenciasMantenimientoUseCase(sl()));
   sl.registerLazySingleton(() => SubirArchivoAdjuntoUseCase(sl()));
   sl.registerLazySingleton(() => GuardarEvaluacionMantenimientoUseCase(sl()));
+  sl.registerLazySingleton(() => RegistrarCodigosMantenimientoUseCase(sl()));
 sl.registerLazySingleton(() => EscucharEstadoExcelUseCase(sl()));
 
   // ===========================================================================
@@ -223,7 +250,9 @@ sl.registerLazySingleton(() => EscucharEstadoExcelUseCase(sl()));
         obtenerInventario: sl(),
         subirArchivo: sl(),
         guardarEvaluacion: sl(),
+        obtenerPlanPreventivo: sl(),
       ));
+  sl.registerFactory(() => CreacionCodigosMantenimientoCubit(registrar: sl()));
   sl.registerFactory(() => TicketBloc(
         obtenerClientes: sl(),
         crearTicket: sl(),

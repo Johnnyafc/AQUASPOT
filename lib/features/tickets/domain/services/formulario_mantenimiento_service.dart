@@ -12,10 +12,13 @@
 //     Contador / Caracol: serie, fecha y hora (de la falla; en preventivo,
 //       la programada)
 //     Vehículo: placa, kilometraje + foto del kilometraje (obligatorios)
+//     Aire acondicionado / Herramientas: fecha (solo fecha; de la falla o
+//       la programada) y serie OPCIONAL escrita a mano (en MAYÚSCULAS)
 //   y en todos: detalle de la falla (o del trabajo, si es preventivo) y al
 //   menos una evidencia, foto o video (máximo 3 videos de 60 s).
 // - La serie y la placa salen de un catálogo fijo (catalogo); para agregar
-//   una máquina se agrega aquí.
+//   una máquina se agrega aquí. Aire acondicionado y Herramientas no tienen
+//   catálogo: la serie se escribe a mano y puede quedar vacía.
 // - El ticket se crea directo en Evaluación Técnica (recepcionFisica: la
 //   máquina es nuestra, no hay recepción física), sin cliente ("AQUASPOT
 //   (interno)") ni contacto, así no dispara correos a clientes.
@@ -67,6 +70,7 @@ class DatosMantenimientoInterno {
     bool limpiarSerieOPlaca = false,
     bool limpiarHorometro = false,
     bool limpiarKilometraje = false,
+    bool limpiarFechaHora = false,
   }) {
     return DatosMantenimientoInterno(
       tipoMantenimiento: tipoMantenimiento ?? this.tipoMantenimiento,
@@ -74,7 +78,7 @@ class DatosMantenimientoInterno {
       serieOPlaca: limpiarSerieOPlaca ? null : (serieOPlaca ?? this.serieOPlaca),
       horometro: limpiarHorometro ? null : (horometro ?? this.horometro),
       kilometraje: limpiarKilometraje ? null : (kilometraje ?? this.kilometraje),
-      fechaHora: fechaHora ?? this.fechaHora,
+      fechaHora: limpiarFechaHora ? null : (fechaHora ?? this.fechaHora),
       detalle: detalle ?? this.detalle,
       cantidadFotos: cantidadFotos ?? this.cantidadFotos,
       cantidadVideos: cantidadVideos ?? this.cantidadVideos,
@@ -112,6 +116,13 @@ class FormularioMantenimientoService {
       t == TipoActivoMantenimiento.contador || t == TipoActivoMantenimiento.caracol;
   static bool pideKilometraje(TipoActivoMantenimiento? t) => esVehiculo(t);
 
+  /// Serie escrita a mano y opcional (sin catálogo).
+  static bool serieManual(TipoActivoMantenimiento? t) =>
+      t == TipoActivoMantenimiento.aireAcondicionado || t == TipoActivoMantenimiento.herramientas;
+
+  /// Solo fecha, sin hora.
+  static bool pideFecha(TipoActivoMantenimiento? t) => serieManual(t);
+
   /// Foto obligatoria de la lectura: horómetro (cosechadora) o kilometraje
   /// (vehículo).
   static bool pideFotoLectura(TipoActivoMantenimiento? t) => pideHorometro(t) || pideKilometraje(t);
@@ -126,17 +137,33 @@ class FormularioMantenimientoService {
   static String etiquetaFechaHora(TipoMantenimiento m) =>
       m == TipoMantenimiento.preventivo ? 'Fecha y hora programada' : 'Fecha y hora de la falla';
 
+  static String etiquetaFecha(TipoMantenimiento m) =>
+      m == TipoMantenimiento.preventivo ? 'Fecha programada' : 'Fecha de la falla';
+
+  /// Etiqueta de la fecha guardada según la máquina (con o sin hora).
+  static String etiquetaFechaDe(TipoActivoMantenimiento? t, TipoMantenimiento m) =>
+      pideFecha(t) ? etiquetaFecha(m) : etiquetaFechaHora(m);
+
+  /// dd/mm/aaaa (y hh:mm si la máquina pide la hora).
+  static String textoFecha(TipoActivoMantenimiento? t, DateTime f) {
+    String dos(int v) => v.toString().padLeft(2, '0');
+    final fecha = '${dos(f.day)}/${dos(f.month)}/${f.year}';
+    return pideFecha(t) ? fecha : '$fecha ${dos(f.hour)}:${dos(f.minute)}';
+  }
+
   /// Equipo del ticket (filtros por equipo del Dashboard).
   static TipoEquipo equipoDe(TipoActivoMantenimiento t) => switch (t) {
         TipoActivoMantenimiento.cosechadora => TipoEquipo.Cosechadora,
         TipoActivoMantenimiento.contador => TipoEquipo.Contador,
         TipoActivoMantenimiento.caracol => TipoEquipo.Caracol,
         TipoActivoMantenimiento.vehiculo => TipoEquipo.Otros,
+        TipoActivoMantenimiento.aireAcondicionado => TipoEquipo.Otros,
+        TipoActivoMantenimiento.herramientas => TipoEquipo.Otros,
       };
 
   /// Al cambiar de tipo de máquina se borran los campos que ya no aplican
-  /// (serie/placa, horómetro, kilometraje y su foto) para no guardar datos
-  /// cruzados.
+  /// (serie/placa, horómetro, kilometraje y su foto; la fecha si cambia
+  /// entre "fecha y hora" y "solo fecha") para no guardar datos cruzados.
   static DatosMantenimientoInterno cambiarTipoActivo(DatosMantenimientoInterno d, TipoActivoMantenimiento nuevo) {
     if (d.tipoActivo == nuevo) return d;
     final opciones = opcionesDe(nuevo);
@@ -146,6 +173,7 @@ class FormularioMantenimientoService {
       limpiarSerieOPlaca: opciones.length != 1,
       limpiarHorometro: !pideHorometro(nuevo),
       limpiarKilometraje: !pideKilometraje(nuevo),
+      limpiarFechaHora: pideFecha(nuevo) != pideFecha(d.tipoActivo),
       tieneFotoLectura: false,
     );
   }
@@ -163,7 +191,9 @@ class FormularioMantenimientoService {
       return errores;
     }
     final valor = d.serieOPlaca?.trim() ?? '';
-    if (valor.isEmpty) {
+    if (serieManual(tipo)) {
+      // Opcional y sin catálogo.
+    } else if (valor.isEmpty) {
       errores.add('Seleccione la ${etiquetaSerieOPlaca(tipo).toLowerCase()}.');
     } else if (!opcionesDe(tipo).contains(valor)) {
       errores.add('La ${etiquetaSerieOPlaca(tipo).toLowerCase()} "$valor" no está en el catálogo de ${tipo.etiqueta}.');
@@ -192,6 +222,15 @@ class FormularioMantenimientoService {
         errores.add('La fecha y hora de la falla no puede ser futura.');
       }
     }
+    if (pideFecha(tipo)) {
+      final f = d.fechaHora;
+      if (f == null) {
+        errores.add('Seleccione la fecha.');
+      } else if (d.tipoMantenimiento == TipoMantenimiento.correctivo &&
+          DateTime(f.year, f.month, f.day).isAfter(DateTime(ahora.year, ahora.month, ahora.day))) {
+        errores.add('La fecha de la falla no puede ser futura.');
+      }
+    }
     if (d.detalle.trim().length < minimoCaracteresDetalle) {
       errores.add('${etiquetaDetalle(d.tipoMantenimiento)}: escriba al menos $minimoCaracteresDetalle caracteres.');
     }
@@ -214,7 +253,9 @@ class FormularioMantenimientoService {
     required DateTime ahora,
   }) {
     final tipo = d.tipoActivo!;
-    final valor = d.serieOPlaca!.trim();
+    final escrito = (d.serieOPlaca ?? '').trim();
+    final valor = serieManual(tipo) ? escrito.toUpperCase() : escrito;
+    final f = d.fechaHora;
     return TicketEntity(
       id: 'TEMP',
       estadoActual: EstadoTicket.recepcionFisica,
@@ -228,12 +269,12 @@ class FormularioMantenimientoService {
       equipoDetalle: tipo.etiqueta,
       accesoriosRecibidos: null,
       fallaReportada: d.detalle.trim(),
-      numeroSerie: esVehiculo(tipo) ? null : valor,
+      numeroSerie: esVehiculo(tipo) || valor.isEmpty ? null : valor,
       horometro: pideHorometro(tipo) ? d.horometro : null,
       historialEventos: [
         EventoAuditoriaEntity(
           accion: 'CREACIÓN DE REQUERIMIENTO — MANTENIMIENTO INTERNO '
-              '${d.tipoMantenimiento.etiqueta.toUpperCase()} (${tipo.etiqueta.toUpperCase()} $valor)',
+              '${d.tipoMantenimiento.etiqueta.toUpperCase()} (${tipo.etiqueta.toUpperCase()} ${valor.isEmpty ? 'S/N' : valor})',
           usuarioNombre: usuarioNombre,
           usuarioRol: rol.name.toUpperCase(),
           timestamp: ahora,
@@ -250,7 +291,9 @@ class FormularioMantenimientoService {
         tipoActivo: tipo,
         placa: esVehiculo(tipo) ? valor : null,
         kilometraje: pideKilometraje(tipo) ? d.kilometraje : null,
-        fechaHoraFalla: pideFechaHora(tipo) ? d.fechaHora : null,
+        fechaHoraFalla: pideFechaHora(tipo)
+            ? f
+            : (pideFecha(tipo) && f != null ? DateTime(f.year, f.month, f.day) : null),
       ),
     );
   }

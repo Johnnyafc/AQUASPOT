@@ -42,7 +42,11 @@ abstract class TicketRemoteDataSource {
   // Las excepciones que lance [calcular] se propagan tal cual.
   Future<TicketModel> actualizarEnTransaccion({
     required String ticketId,
-    required ({Map<String, dynamic> campos, List<Map<String, dynamic>> inventarioNuevos}) Function(TicketModel actual)
+    required ({
+      Map<String, dynamic> campos,
+      List<Map<String, dynamic>> inventarioNuevos,
+      Map<String, double> reservas,
+    }) Function(TicketModel actual)
         calcular,
   });
 

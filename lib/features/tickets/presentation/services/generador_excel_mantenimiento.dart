@@ -39,7 +39,7 @@ class GeneradorExcelMantenimiento {
       hoja.getRangeByName(celdaValor).setText(valor);
     }
 
-    dato('A2', 'REVISIÓN TÉCNICA:', 'B2', ticket.id);
+    dato('A2', 'ORDEN DE TRABAJO:', 'B2', ticket.id);
     dato('D2', 'FECHA:', 'E2', '${f.day.toString().padLeft(2, '0')}/${f.month.toString().padLeft(2, '0')}/${f.year}');
     dato('A3', m?.placa != null ? 'PLACA:' : 'SERIE:', 'B3', m?.placa ?? ticket.numeroSerie ?? 'S/N');
     dato('D3', 'EQUIPO:', 'E3', (m?.tipoActivo.etiqueta ?? ticket.equipo.name).toUpperCase());

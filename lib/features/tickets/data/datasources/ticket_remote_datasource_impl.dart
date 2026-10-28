@@ -328,7 +328,11 @@ Stream<String?> escucharEstadoExcel(String ticketId) {
   @override
   Future<TicketModel> actualizarEnTransaccion({
     required String ticketId,
-    required ({Map<String, dynamic> campos, List<Map<String, dynamic>> inventarioNuevos}) Function(TicketModel actual)
+    required ({
+      Map<String, dynamic> campos,
+      List<Map<String, dynamic>> inventarioNuevos,
+      Map<String, double> reservas,
+    }) Function(TicketModel actual)
         calcular,
   }) async {
     final docRef = firestore.collection('tickets').doc(ticketId);
@@ -351,9 +355,23 @@ Stream<String?> escucharEstadoExcel(String ticketId) {
           final invSnap = await tx.get(ref);
           if (!invSnap.exists) nuevos[ref] = inv; // nunca se pisa uno existente
         }
+        // Reservas (Caracol): se suman al stockReservado del código.
+        final reservasExistentes = <DocumentReference<Map<String, dynamic>>, double>{};
+        for (final e in r.reservas.entries) {
+          final docId = _idInventarioDesdeCodigo(e.key);
+          if (docId.isEmpty || e.value <= 0) continue;
+          final ref = firestore.collection('inventario_bodega').doc(docId);
+          if (nuevos.containsKey(ref)) {
+            nuevos[ref] = {...nuevos[ref]!, 'stockReservado': e.value};
+            continue;
+          }
+          final invSnap = await tx.get(ref);
+          if (invSnap.exists) reservasExistentes[ref] = e.value;
+        }
 
         if (r.campos.isNotEmpty) tx.update(docRef, r.campos); // nada que cambiar: no escribe
         nuevos.forEach((ref, inv) => tx.set(ref, inv));
+        reservasExistentes.forEach((ref, cantidad) => tx.update(ref, {'stockReservado': FieldValue.increment(cantidad)}));
       });
     } on FirebaseException catch (e) {
       throw ServerException(e.toString());

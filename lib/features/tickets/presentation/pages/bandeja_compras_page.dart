@@ -9,6 +9,7 @@ import '../bloc/ticket_state.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/services/ruteo_venta_repuesto_service.dart';
 import '../../domain/services/creacion_codigos_venta_service.dart';
+import '../../domain/services/creacion_codigos_mantenimiento_service.dart';
 import '../widgets/tiempo_en_curso_widget.dart';
 import '../../../../core/theme/ticket_visual_theme.dart';
 import 'cotizacion_venta_repuesto_page.dart';
@@ -41,6 +42,8 @@ class BandejaComprasPage extends StatelessWidget {
             final pendienteOC = t.gestionCompras == null;
             // 🧾 Venta en Costos solo para crear códigos: aún no hay OV ni OC.
             if (CreacionCodigosVentaService.requiereCreacionCodigos(t)) return false;
+            // 🛠️ Mantenimiento con todos sus repuestos sin código: aún nada para Compras.
+            if (CreacionCodigosMantenimientoService.esperaSoloCodigos(t)) return false;
             return enCompras && pendienteOC;
           }).toList();
 

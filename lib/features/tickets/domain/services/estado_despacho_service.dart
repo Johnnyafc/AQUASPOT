@@ -16,6 +16,7 @@
 import '../../../../core/enum/ticket_enums.dart';
 import '../entities/registro_despacho_entity.dart';
 import '../entities/ticket_entity.dart';
+import 'creacion_codigos_mantenimiento_service.dart';
 
 class EstadoDespachoService {
   static const String pendiente = 'pendiente';
@@ -53,6 +54,8 @@ class EstadoDespachoService {
   /// Todos los repuestos con check (despachados al 100 %) y todas las
   /// entregas con evidencia (salvo en ventas), con el picking abierto.
   static bool puedeFinalizarPicking(TicketEntity t) {
+    // Mantenimiento interno con repuestos esperando su código en Costos.
+    if (CreacionCodigosMantenimientoService.requiereCreacionCodigos(t)) return false;
     final estado = efectivo(t);
     if (estado != pickingEnCurso && estado != despachoParcial) return false;
     return t.bodegaDespachoCompleto && (!exigeEvidenciaParaFinalizar(t) || !t.tieneDespachoPendienteDeEvidencia);
@@ -87,6 +90,9 @@ class EstadoDespachoService {
     final estado = efectivo(t);
     if (estado == pendiente) return 'Inicie el picking primero.';
     if (estado == pickingFinalizado) return 'El picking ya fue finalizado.';
+    if (CreacionCodigosMantenimientoService.requiereCreacionCodigos(t)) {
+      return 'Hay repuestos esperando que Costos cree su código.';
+    }
     if (!t.bodegaDespachoCompleto) return 'Faltan repuestos por despachar.';
     if (exigeEvidenciaParaFinalizar(t) && t.tieneDespachoPendienteDeEvidencia) return 'Hay despachos sin evidencia.';
     return null;

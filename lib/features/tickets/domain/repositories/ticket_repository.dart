@@ -8,6 +8,7 @@ import '../entities/archivo_adjunto.dart';
 import '../entities/cliente_entity.dart';
 import '../entities/ticket_entity.dart';
 import '../entities/cambio_venta_repuesto.dart';
+import '../entities/cambio_mantenimiento_interno.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import '../../../../core/enum/segmento_operativo.dart';
@@ -90,5 +91,14 @@ Future<Either<Failure, String>> subirActaPdfStorage(String ticketId, Uint8List p
   Future<Either<Failure, TicketEntity>> actualizarVentaRepuestoEnTransaccion({
     required String ticketId,
     required CambioVentaRepuesto Function(TicketEntity actual) aplicar,
+  });
+
+  // 🛠️ Mantenimiento interno: igual, pero guarda el mantenimiento, los
+  // repuestos de despacho, los de la evaluación y el estado del ticket que
+  // devuelve [aplicar]. Si [aplicar] lanza CambioMantenimientoRechazado →
+  // ValidationFailure.
+  Future<Either<Failure, TicketEntity>> actualizarMantenimientoEnTransaccion({
+    required String ticketId,
+    required CambioMantenimientoInterno Function(TicketEntity actual) aplicar,
   });
 }

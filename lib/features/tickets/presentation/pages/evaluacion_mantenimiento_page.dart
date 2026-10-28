@@ -1,9 +1,11 @@
 // lib/features/tickets/presentation/pages/evaluacion_mantenimiento_page.dart
 //
 // 🛠️ EVALUACIÓN TÉCNICA de un MANTENIMIENTO INTERNO (se abre desde la
-// Bandeja de Evaluaciones). Actividades del Plan Maestro o NUEVAS, todas
+// Bandeja de Evaluaciones). Actividades del Plan Maestro, del Plan
+// Preventivo (con su frecuencia) o NUEVAS, todas
 // modificables, con una sola lista de repuestos (del inventario registrado
-// o no registrados, "SIN CÓDIGO") y "¿Necesita compras?". "Generar y revisar
+// o no registrados, "SIN CÓDIGO", con su ficha de creación de código para
+// Costos) y "¿Necesita compras?". "Generar y revisar
 // informe" arma el PDF y la Solicitud de materiales y abre su revisión. Solo
 // dibuja: el estado y el envío están en EvaluacionMantenimientoCubit y las
 // reglas en EvaluacionMantenimientoService.
@@ -18,15 +20,21 @@ import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_state.dart';
 import '../../../catalogo/domain/entities/actividad_catalogo_entity.dart';
 import '../../../inventario/domain/entities/item_inventario_entity.dart';
+import '../../../plan_preventivo/domain/entities/actividad_preventiva_entity.dart';
+import '../../../plan_preventivo/domain/services/plan_preventivo_service.dart';
 import '../../domain/entities/actividad_mantenimiento.dart';
 import '../../domain/entities/archivo_adjunto.dart';
+import '../../domain/entities/ficha_creacion_repuesto_entity.dart';
 import '../../domain/entities/mantenimiento_interno_entity.dart';
+import '../../domain/entities/repuesto_registrado_entity.dart';
 import '../../domain/entities/ticket_entity.dart';
+import '../../domain/services/creacion_codigos_mantenimiento_service.dart';
 import '../../domain/services/evaluacion_mantenimiento_service.dart';
 import '../../domain/services/formulario_mantenimiento_service.dart';
 import '../bloc/evaluacion_mantenimiento_cubit.dart';
 import '../services/generador_excel_mantenimiento.dart';
 import '../services/generador_pdf_mantenimiento.dart';
+import '../widgets/ficha_creacion_repuesto_dialog.dart';
 import 'revision_evaluacion_mantenimiento_page.dart';
 
 typedef _S = EvaluacionMantenimientoService;
@@ -164,8 +172,6 @@ class _FichaMantenimiento extends StatelessWidget {
 
   const _FichaMantenimiento({required this.ticket});
 
-  String _dos(int v) => v.toString().padLeft(2, '0');
-  String _fecha(DateTime f) => '${_dos(f.day)}/${_dos(f.month)}/${f.year} ${_dos(f.hour)}:${_dos(f.minute)}';
   String _numero(double v) => v % 1 == 0 ? v.toInt().toString() : v.toString();
 
   Future<void> _abrir(String url) async {
@@ -184,7 +190,8 @@ class _FichaMantenimiento extends StatelessWidget {
       if (ticket.horometro != null) ('Horómetro:', '${_numero(ticket.horometro!)} h'),
       if (m?.kilometraje != null) ('Kilometraje:', '${_numero(m!.kilometraje!)} km'),
       if (m?.fechaHoraFalla != null)
-        (FormularioMantenimientoService.etiquetaFechaHora(m!.tipoMantenimiento), _fecha(m.fechaHoraFalla!)),
+        (FormularioMantenimientoService.etiquetaFechaDe(tipo, m!.tipoMantenimiento),
+            FormularioMantenimientoService.textoFecha(tipo, m.fechaHoraFalla!)),
       if (creador != null) ('Creado por:', creador),
     ];
     return Card(
@@ -269,6 +276,15 @@ class _SeccionActividades extends StatelessWidget {
                   },
           ),
           OutlinedButton.icon(
+            icon: const Icon(Icons.event_repeat),
+            label: const Text('Plan preventivo'),
+            onPressed: () async {
+              final elegida =
+                  await _elegirPreventiva(context, _S.preventivasDisponibles(estado.planPreventivo, estado.actividades));
+              if (elegida != null) cubit.agregarActividadPreventiva(elegida);
+            },
+          ),
+          OutlinedButton.icon(
             icon: const Icon(Icons.add),
             label: const Text('Actividad nueva'),
             onPressed: () async {
@@ -294,6 +310,7 @@ class _SeccionActividades extends StatelessWidget {
             indice: i,
             actividad: estado.actividades[i],
             inventario: estado.inventario,
+            fichas: estado.fichas,
           ),
       ],
     );
@@ -344,6 +361,57 @@ class _SeccionActividades extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Actividades del Plan Preventivo de la máquina, con su frecuencia.
+  Future<ActividadPreventivaEntity?> _elegirPreventiva(BuildContext context, List<ActividadPreventivaEntity> lista) {
+    var texto = '';
+    return showDialog<ActividadPreventivaEntity>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          final filtradas = PlanPreventivoService.buscar(lista, texto);
+          return AlertDialog(
+            title: const Text('Agregar actividad del Plan Preventivo'),
+            content: SizedBox(
+              width: 560,
+              height: 460,
+              child: Column(children: [
+                TextField(
+                  autofocus: true,
+                  decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Buscar por código o nombre'),
+                  onChanged: (v) => setState(() => texto = v),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: filtradas.isEmpty
+                      ? const Center(
+                          child: Text('Sin actividades preventivas disponibles para esta máquina.\n'
+                              'Se agregan desde el menú → Plan Preventivo.',
+                              textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)))
+                      : ListView.builder(
+                          itemCount: filtradas.length,
+                          itemBuilder: (context, i) {
+                            final a = filtradas[i];
+                            final hh = a.horasHombre % 1 == 0 ? a.horasHombre.toInt() : a.horasHombre;
+                            return ListTile(
+                              dense: true,
+                              leading: const Icon(Icons.event_repeat, color: Color(0xFF2E7D32)),
+                              title: Text('${a.codigo} — ${a.nombre}'),
+                              subtitle: Text('${PlanPreventivoService.textoFrecuencia(a)} · $hh HH · '
+                                  '${a.repuestos.length} repuesto(s)'),
+                              onTap: () => Navigator.of(context).pop(a),
+                            );
+                          },
+                        ),
+                ),
+              ]),
+            ),
+            actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar'))],
+          );
+        },
       ),
     );
   }
@@ -399,8 +467,15 @@ class _TarjetaActividad extends StatelessWidget {
   final int indice;
   final ActividadMantenimiento actividad;
   final List<ItemInventarioEntity> inventario;
+  final Map<String, FichaCreacionRepuestoEntity> fichas;
 
-  const _TarjetaActividad({super.key, required this.indice, required this.actividad, required this.inventario});
+  const _TarjetaActividad({
+    super.key,
+    required this.indice,
+    required this.actividad,
+    required this.inventario,
+    required this.fichas,
+  });
 
   String _numero(double v) => v % 1 == 0 ? v.toInt().toString() : v.toString();
 
@@ -455,7 +530,22 @@ class _TarjetaActividad extends StatelessWidget {
     if (valor != null) cubit.cambiarCantidad(indice, j, valor);
   }
 
-  /// Repuesto que no está en el inventario: descripción, unidad y cantidad.
+  /// Ficha de creación de código del repuesto sin código [j] (la misma para
+  /// ese repuesto en todas las actividades).
+  Future<void> _editarFicha(BuildContext context, int j) async {
+    final cubit = context.read<EvaluacionMantenimientoCubit>();
+    final r = actividad.repuestos[j];
+    final ficha = await FichaCreacionRepuestoDialog.mostrar(
+      context,
+      inicial: fichas[CreacionCodigosMantenimientoService.claveFicha(r.descripcion)] ??
+          CreacionCodigosMantenimientoService.fichaInicial(r),
+      titulo: r.descripcion,
+    );
+    if (ficha != null) cubit.ponerFicha(r.descripcion, ficha);
+  }
+
+  /// Repuesto que no está en el inventario: descripción, unidad y cantidad;
+  /// enseguida se pide su ficha de creación de código.
   Future<void> _pedirRepuestoNoRegistrado(BuildContext context) async {
     final cubit = context.read<EvaluacionMantenimientoCubit>();
     final descCtrl = TextEditingController();
@@ -503,7 +593,7 @@ class _TarjetaActividad extends StatelessWidget {
                   child: Text(error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
                 ),
               const SizedBox(height: 8),
-              Text('Se marcará "SIN CÓDIGO" para que Compras lo compre o lo cree.',
+              Text('Se marcará "SIN CÓDIGO": llene su ficha de creación de código para que Costos lo cree.',
                   style: TextStyle(fontSize: 12, color: Colors.orange.shade900)),
             ]),
           ),
@@ -521,9 +611,17 @@ class _TarjetaActividad extends StatelessWidget {
         ),
       ),
     );
-    if (ok == true) {
-      cubit.agregarRepuestoNoRegistrado(indice, descripcion: descCtrl.text, unidad: unidad, cantidad: _cantidad(cantCtrl.text)!);
-    }
+    if (ok != true) return;
+    cubit.agregarRepuestoNoRegistrado(indice, descripcion: descCtrl.text, unidad: unidad, cantidad: _cantidad(cantCtrl.text)!);
+    final desc = descCtrl.text.trim().toUpperCase();
+    if (!context.mounted || fichas.containsKey(CreacionCodigosMantenimientoService.claveFicha(desc))) return;
+    final ficha = await FichaCreacionRepuestoDialog.mostrar(
+      context,
+      inicial: CreacionCodigosMantenimientoService.fichaInicial(
+          RepuestoRegistradoEntity(codigo: '', descripcion: desc, unidad: unidad)),
+      titulo: desc,
+    );
+    if (ficha != null) cubit.ponerFicha(desc, ficha);
   }
 
   double? _cantidad(String texto) => double.tryParse(texto.trim().replaceAll(',', '.'));
@@ -674,10 +772,14 @@ class _TarjetaActividad extends StatelessWidget {
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(a.repuestos[j].descripcion, style: const TextStyle(fontSize: 13)),
-                      if (_S.esSinCodigo(a.repuestos[j]))
+                      if (_S.esSinCodigo(a.repuestos[j])) ...[
                         Text('SIN CÓDIGO · ${a.repuestos[j].unidad}',
-                            style: TextStyle(fontSize: 11, color: Colors.orange.shade900, fontWeight: FontWeight.bold))
-                      else
+                            style: TextStyle(fontSize: 11, color: Colors.orange.shade900, fontWeight: FontWeight.bold)),
+                        _BotonFicha(
+                          ficha: fichas[CreacionCodigosMantenimientoService.claveFicha(a.repuestos[j].descripcion)],
+                          onPressed: () => _editarFicha(context, j),
+                        ),
+                      ] else
                         Text('${a.repuestos[j].codigo} · ${a.repuestos[j].unidad}',
                             style: const TextStyle(fontSize: 11, color: Colors.grey)),
                     ]),
@@ -713,6 +815,35 @@ class _TarjetaActividad extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// "Llenar ficha" (naranja) o "Ficha lista" (verde) de un repuesto sin código.
+class _BotonFicha extends StatelessWidget {
+  final FichaCreacionRepuestoEntity? ficha;
+  final VoidCallback onPressed;
+
+  const _BotonFicha({required this.ficha, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    final lista = ficha?.completa ?? false;
+    final color = lista ? Colors.green.shade700 : Colors.orange.shade900;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          minimumSize: const Size(0, 28),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          foregroundColor: color,
+        ),
+        icon: Icon(lista ? Icons.check_circle : Icons.assignment_late_outlined, size: 16),
+        label: Text(lista ? 'Ficha de creación lista (editar)' : 'Llenar ficha de creación de código',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        onPressed: onPressed,
       ),
     );
   }

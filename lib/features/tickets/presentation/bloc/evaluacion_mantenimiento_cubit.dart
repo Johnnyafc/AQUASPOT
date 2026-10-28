@@ -3,7 +3,8 @@
 // Estado de la EVALUACIÓN TÉCNICA de un mantenimiento interno. Las reglas
 // (repuestos en una sola lista, consolidado, validación, paso a Compras)
 // están en EvaluacionMantenimientoService; aquí solo se guarda lo que el
-// técnico arma y se orquesta el envío (desde la revisión del informe):
+// técnico arma (incluidas las fichas de creación de código de los repuestos
+// sin código) y se orquesta el envío (desde la revisión del informe):
 // subir fotos → subir informe PDF y Solicitud de materiales → guardar.
 
 import 'dart:typed_data';
@@ -15,9 +16,13 @@ import '../../../catalogo/domain/entities/actividad_catalogo_entity.dart';
 import '../../../catalogo/domain/usecases/catalogo_usecases.dart';
 import '../../../inventario/domain/entities/item_inventario_entity.dart';
 import '../../../inventario/domain/usecases/obtener_stock_inventario_usecase.dart';
+import '../../../plan_preventivo/domain/entities/actividad_preventiva_entity.dart';
+import '../../../plan_preventivo/domain/usecases/plan_preventivo_usecases.dart';
 import '../../domain/entities/actividad_mantenimiento.dart';
 import '../../domain/entities/archivo_adjunto.dart';
+import '../../domain/entities/ficha_creacion_repuesto_entity.dart';
 import '../../domain/entities/ticket_entity.dart';
+import '../../domain/services/creacion_codigos_mantenimiento_service.dart';
 import '../../domain/services/evaluacion_mantenimiento_service.dart';
 import '../../domain/usecases/guardar_evaluacion_mantenimiento_usecase.dart';
 import '../../domain/usecases/subir_archivo_adjunto_usecase.dart';
@@ -32,8 +37,12 @@ class EvaluacionMantenimientoState extends Equatable {
   final TicketEntity? ticket;
   final CargaEvaluacionMantenimiento carga;
   final List<ActividadCatalogoEntity> catalogo;
+  final List<ActividadPreventivaEntity> planPreventivo; // de la máquina
   final List<ItemInventarioEntity> inventario;
   final List<ActividadMantenimiento> actividades;
+  // Fichas de creación de código de los repuestos sin código (clave:
+  // CreacionCodigosMantenimientoService.claveFicha).
+  final Map<String, FichaCreacionRepuestoEntity> fichas;
   final bool necesitaCompras;
   final String motivoNoCompras;
   final EnvioEvaluacionMantenimiento envio;
@@ -44,8 +53,10 @@ class EvaluacionMantenimientoState extends Equatable {
     this.ticket,
     this.carga = CargaEvaluacionMantenimiento.cargando,
     this.catalogo = const [],
+    this.planPreventivo = const [],
     this.inventario = const [],
     this.actividades = const [],
+    this.fichas = const {},
     this.necesitaCompras = true,
     this.motivoNoCompras = '',
     this.envio = EnvioEvaluacionMantenimiento.editando,
@@ -57,8 +68,10 @@ class EvaluacionMantenimientoState extends Equatable {
     TicketEntity? ticket,
     CargaEvaluacionMantenimiento? carga,
     List<ActividadCatalogoEntity>? catalogo,
+    List<ActividadPreventivaEntity>? planPreventivo,
     List<ItemInventarioEntity>? inventario,
     List<ActividadMantenimiento>? actividades,
+    Map<String, FichaCreacionRepuestoEntity>? fichas,
     bool? necesitaCompras,
     String? motivoNoCompras,
     EnvioEvaluacionMantenimiento? envio,
@@ -69,8 +82,10 @@ class EvaluacionMantenimientoState extends Equatable {
       ticket: ticket ?? this.ticket,
       carga: carga ?? this.carga,
       catalogo: catalogo ?? this.catalogo,
+      planPreventivo: planPreventivo ?? this.planPreventivo,
       inventario: inventario ?? this.inventario,
       actividades: actividades ?? this.actividades,
+      fichas: fichas ?? this.fichas,
       necesitaCompras: necesitaCompras ?? this.necesitaCompras,
       motivoNoCompras: motivoNoCompras ?? this.motivoNoCompras,
       envio: envio ?? this.envio,
@@ -80,7 +95,7 @@ class EvaluacionMantenimientoState extends Equatable {
   }
 
   @override
-  List<Object?> get props => [ticket?.id, carga, catalogo, inventario.length, actividades, necesitaCompras,
+  List<Object?> get props => [ticket?.id, carga, catalogo, planPreventivo, inventario.length, actividades, fichas, necesitaCompras,
         motivoNoCompras, envio, mensaje, errores];
 }
 
@@ -89,28 +104,35 @@ class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
   final ObtenerStockInventarioUseCase obtenerInventario;
   final SubirArchivoAdjuntoUseCase subirArchivo;
   final GuardarEvaluacionMantenimientoUseCase guardarEvaluacion;
+  final ObtenerPlanPreventivoUseCase obtenerPlanPreventivo;
 
   EvaluacionMantenimientoCubit({
     required this.obtenerActividades,
     required this.obtenerInventario,
     required this.subirArchivo,
     required this.guardarEvaluacion,
+    required this.obtenerPlanPreventivo,
   }) : super(const EvaluacionMantenimientoState());
 
-  /// Carga el Plan Maestro del equipo y el inventario registrado.
+  /// Carga el Plan Maestro del equipo, el Plan Preventivo de la máquina y
+  /// el inventario registrado.
   Future<void> cargar(TicketEntity ticket) async {
     emit(state.copyWith(ticket: ticket, carga: CargaEvaluacionMantenimiento.cargando));
     final equipo = _S.equipoCatalogo(ticket);
+    final tipo = ticket.mantenimientoInterno?.tipoActivo;
     final catalogo = equipo == null ? null : await obtenerActividades(equipo);
+    final preventivo = tipo == null ? null : await obtenerPlanPreventivo(tipo);
     final inventario = await obtenerInventario();
     final fallo = [
       if (catalogo != null) catalogo.fold((f) => 'Plan Maestro: ${f.message}', (_) => null),
+      if (preventivo != null) preventivo.fold((f) => 'Plan Preventivo: ${f.message}', (_) => null),
       inventario.fold((f) => 'Inventario: ${f.message}', (_) => null),
     ].whereType<String>();
     emit(state.copyWith(
       carga: fallo.isEmpty ? CargaEvaluacionMantenimiento.lista : CargaEvaluacionMantenimiento.error,
       mensaje: fallo.join('\n'),
       catalogo: catalogo?.getOrElse(() => const []) ?? const [],
+      planPreventivo: preventivo?.getOrElse(() => const []) ?? const [],
       inventario: inventario.getOrElse(() => const []),
     ));
   }
@@ -122,6 +144,8 @@ class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
 
   // ------------------------------------------------------------ Actividades
   void agregarActividad(ActividadCatalogoEntity a) => _actividades([...state.actividades, _S.desdeCatalogo(a)]);
+  void agregarActividadPreventiva(ActividadPreventivaEntity a) =>
+      _actividades([...state.actividades, _S.desdePreventivo(a)]);
   void agregarActividadNueva(String nombre, double? horas) =>
       _actividades([...state.actividades, _S.actividadNueva(state.actividades, nombre: nombre, horasHombre: horas)]);
   void quitarActividad(int i) => _actividades([...state.actividades]..removeAt(i));
@@ -143,6 +167,12 @@ class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
   void cambiarCantidad(int i, int j, double cantidad) => _cambiar(i, (a) => _S.cambiarCantidad(a, j, cantidad));
   void quitarRepuesto(int i, int j) => _cambiar(i, (a) => _S.quitarRepuesto(a, j));
 
+  /// Ficha de creación de código de un repuesto sin código.
+  void ponerFicha(String descripcion, FichaCreacionRepuestoEntity ficha) => emit(state.copyWith(
+        fichas: {...state.fichas, CreacionCodigosMantenimientoService.claveFicha(descripcion): ficha},
+        errores: const [],
+      ));
+
   // ------------------------------------------------------------ Compras
   void cambiarNecesitaCompras(bool v) => emit(state.copyWith(necesitaCompras: v));
   void cambiarMotivoNoCompras(String texto) => emit(state.copyWith(motivoNoCompras: texto));
@@ -150,7 +180,7 @@ class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
   /// Antes de generar el informe: true si la evaluación está completa; si
   /// no, deja los errores a la vista.
   bool validarParaInforme() {
-    final errores = _S.validar(state.actividades);
+    final errores = _S.validar(state.actividades, fichas: state.fichas);
     emit(state.copyWith(errores: errores, envio: EnvioEvaluacionMantenimiento.editando));
     return errores.isEmpty;
   }
@@ -206,6 +236,7 @@ class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
     final r = await guardarEvaluacion(
       ticket,
       state.actividades,
+      fichas: state.fichas,
       necesitaCompras: state.necesitaCompras,
       motivoNoCompras: state.motivoNoCompras,
       usuarioNombre: usuarioNombre,
@@ -218,11 +249,18 @@ class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
         envio: EnvioEvaluacionMantenimiento.error,
         mensaje: 'No se pudo guardar la evaluación: ${f.message}',
       )),
-      (_) => emit(state.copyWith(
+      (t) => emit(state.copyWith(
         envio: EnvioEvaluacionMantenimiento.guardada,
-        mensaje: 'Evaluación de ${ticket.id} guardada. Pasa a Compras.',
+        mensaje: 'Evaluación de ${ticket.id} guardada. ${_destino(t)}',
       )),
     );
+  }
+
+  static String _destino(TicketEntity t) {
+    final n = CreacionCodigosMantenimientoService.indicesPendientes(t).length;
+    if (n == 0) return 'Pasa a Compras.';
+    if (CreacionCodigosMantenimientoService.esperaSoloCodigos(t)) return 'Pasa a Costos para crear $n código(s).';
+    return 'Pasa a Compras; $n repuesto(s) sin código esperan en Costos.';
   }
 
   /// Sube un archivo; si falla deja el error a la vista y devuelve null.

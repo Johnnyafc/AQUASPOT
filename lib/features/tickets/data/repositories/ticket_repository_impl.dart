@@ -16,6 +16,10 @@ import '../models/ticket_model.dart';
 import '../models/evento_auditoria_model.dart';
 import '../models/linea_repuesto_venta_model.dart';
 import '../../domain/entities/cambio_venta_repuesto.dart';
+import '../../domain/entities/cambio_mantenimiento_interno.dart';
+import '../models/item_despacho_bodega_model.dart';
+import '../models/mantenimiento_interno_model.dart';
+import '../models/repuesto_registrado_model.dart';
 import '../datasources/storage_remote_datasource.dart';
 import '../../../../core/enum/segmento_operativo.dart';
 import '../../../../core/services/pdf_service.dart';
@@ -423,11 +427,61 @@ Future<Either<Failure, String>> subirOrdenCompra(XFile file, String ticketId) as
                 'fechaActualizacion': ahora,
               },
           ];
-          return (campos: campos, inventarioNuevos: inventarioNuevos);
+          return (campos: campos, inventarioNuevos: inventarioNuevos, reservas: const <String, double>{});
         },
       );
       return Right(guardado);
     } on CambioVentaRechazado catch (e) {
+      return Left(ValidationFailure(e.mensaje));
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure('No se pudo guardar el requerimiento: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, TicketEntity>> actualizarMantenimientoEnTransaccion({
+    required String ticketId,
+    required CambioMantenimientoInterno Function(TicketEntity actual) aplicar,
+  }) async {
+    if (!await networkInfo.isConnected) {
+      return const Left(NetworkFailure('Sin conexión a internet.'));
+    }
+    try {
+      final guardado = await firebaseDataSource.actualizarEnTransaccion(
+        ticketId: ticketId,
+        calcular: (actual) {
+          final cambio = aplicar(actual);
+          final t = cambio.ticket;
+          final campos = <String, dynamic>{
+            if (t.mantenimientoInterno != null)
+              'mantenimientoInterno': MantenimientoInternoModel.toJson(t.mantenimientoInterno!),
+            'itemsDespachoBodega': t.itemsDespachoBodega.map((e) => ItemDespachoBodegaModel.fromEntity(e).toJson()).toList(),
+            if (t.evaluacionTecnica != null)
+              'evaluacionTecnica.repuestosTaller':
+                  t.evaluacionTecnica!.repuestosTaller.map((r) => RepuestoRegistradoModel.fromEntity(r).toJson()).toList(),
+            if (t.estadoActual != actual.estadoActual) 'estadoActual': t.estadoActual.name,
+            'historialEventos': FieldValue.arrayUnion([EventoAuditoriaModel.fromEntity(cambio.evento).toJson()]),
+          };
+          final ahora = Timestamp.now();
+          final inventarioNuevos = [
+            for (final r in cambio.inventarioNuevos)
+              {
+                'codigo': r.codigo,
+                'descripcion': r.descripcion,
+                'stockDisponible': 0.0,
+                'stockReservado': 0.0,
+                'unidad': r.unidad,
+                'ubicacion': null,
+                'fechaActualizacion': ahora,
+              },
+          ];
+          return (campos: campos, inventarioNuevos: inventarioNuevos, reservas: cambio.reservas);
+        },
+      );
+      return Right(guardado);
+    } on CambioMantenimientoRechazado catch (e) {
       return Left(ValidationFailure(e.mensaje));
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));

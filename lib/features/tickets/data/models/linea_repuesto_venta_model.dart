@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/entities/ficha_creacion_repuesto_entity.dart';
 import '../../domain/entities/linea_repuesto_venta_entity.dart';
+import 'ficha_creacion_repuesto_model.dart';
 
 class LineaRepuestoVentaModel extends LineaRepuestoVentaEntity {
   const LineaRepuestoVentaModel({
@@ -26,53 +27,9 @@ class LineaRepuestoVentaModel extends LineaRepuestoVentaEntity {
     super.codigoCreadoEn,
   });
 
-  static FichaCreacionRepuestoEntity? _fichaDesdeJson(dynamic v) {
-    if (v is! Map) return null;
-    final m = Map<String, dynamic>.from(v);
-    String t(String k, [String d = '']) => m[k]?.toString() ?? d;
-    bool b(String k, bool d) => m[k] is bool ? m[k] as bool : d;
-    return FichaCreacionRepuestoEntity(
-      nombre: t('nombre'),
-      familiaPieza: t('familiaPieza'),
-      tipo: t('tipo'),
-      atributoAcabado: t('atributoAcabado'),
-      metrica: t('metrica'),
-      equivalencia: t('equivalencia'),
-      categoria: t('categoria'),
-      udm: t('udm', 'UNIDAD'),
-      tipoProducto: t('tipoProducto', 'ARTÍCULO'),
-      linkImagen: t('linkImagen'),
-      linkDescripcion: t('linkDescripcion'),
-      comprado: b('comprado', true),
-      vendido: b('vendido', true),
-      activo: b('activo', false),
-      almacenado: b('almacenado', true),
-      gravaIva: b('gravaIva', true),
-      fabricado: b('fabricado', false),
-    );
-  }
+  static FichaCreacionRepuestoEntity? _fichaDesdeJson(dynamic v) => FichaCreacionRepuestoModel.fromJson(v);
 
-  static Map<String, dynamic>? _fichaAJson(FichaCreacionRepuestoEntity? f) => f == null
-      ? null
-      : {
-          'nombre': f.nombre,
-          'familiaPieza': f.familiaPieza,
-          'tipo': f.tipo,
-          'atributoAcabado': f.atributoAcabado,
-          'metrica': f.metrica,
-          'equivalencia': f.equivalencia,
-          'categoria': f.categoria,
-          'udm': f.udm,
-          'tipoProducto': f.tipoProducto,
-          'linkImagen': f.linkImagen,
-          'linkDescripcion': f.linkDescripcion,
-          'comprado': f.comprado,
-          'vendido': f.vendido,
-          'activo': f.activo,
-          'almacenado': f.almacenado,
-          'gravaIva': f.gravaIva,
-          'fabricado': f.fabricado,
-        };
+  static Map<String, dynamic>? _fichaAJson(FichaCreacionRepuestoEntity? f) => FichaCreacionRepuestoModel.toJson(f);
 
   static DateTime? _fecha(dynamic v) {
     if (v is Timestamp) return v.toDate();

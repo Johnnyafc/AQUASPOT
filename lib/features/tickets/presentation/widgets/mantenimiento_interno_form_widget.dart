@@ -28,6 +28,7 @@ class MantenimientoInternoFormWidget extends StatefulWidget {
 class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFormWidget> {
   final _horometroCtrl = TextEditingController();
   final _kilometrajeCtrl = TextEditingController();
+  final _serieCtrl = TextEditingController();
   final _detalleCtrl = TextEditingController();
 
   static const _azul = Color(0xFF005A9C);
@@ -36,6 +37,7 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
   void dispose() {
     _horometroCtrl.dispose();
     _kilometrajeCtrl.dispose();
+    _serieCtrl.dispose();
     _detalleCtrl.dispose();
     super.dispose();
   }
@@ -64,6 +66,21 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
     final hora = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(actual));
     if (hora == null) return;
     cubit.cambiarFechaHora(DateTime(fecha.year, fecha.month, fecha.day, hora.hour, hora.minute));
+  }
+
+  /// Solo fecha (aire acondicionado / herramientas).
+  Future<void> _elegirFecha(MantenimientoInternoState s) async {
+    final cubit = context.read<MantenimientoInternoCubit>();
+    final ahora = DateTime.now();
+    final esPreventivo = s.datos.tipoMantenimiento == TipoMantenimiento.preventivo;
+    final fecha = await showDatePicker(
+      context: context,
+      initialDate: s.datos.fechaHora ?? ahora,
+      firstDate: DateTime(ahora.year - 2),
+      lastDate: esPreventivo ? DateTime(ahora.year + 2) : ahora,
+    );
+    if (fecha == null || !mounted) return;
+    cubit.cambiarFechaHora(DateTime(fecha.year, fecha.month, fecha.day));
   }
 
   Future<void> _agregarFotos({required bool camara}) async {
@@ -224,6 +241,8 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
                         TipoActivoMantenimiento.contador => Icons.calculate_outlined,
                         TipoActivoMantenimiento.caracol => Icons.water_outlined,
                         TipoActivoMantenimiento.vehiculo => Icons.local_shipping_outlined,
+                        TipoActivoMantenimiento.aireAcondicionado => Icons.ac_unit,
+                        TipoActivoMantenimiento.herramientas => Icons.handyman_outlined,
                       },
                       size: 18,
                     ),
@@ -232,6 +251,7 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
                     onSelected: (_) {
                       _horometroCtrl.clear();
                       _kilometrajeCtrl.clear();
+                      _serieCtrl.clear();
                       cubit.elegirTipoActivo(t);
                     },
                   ),
@@ -239,19 +259,30 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
 
               // 3. Campos según la máquina.
               if (tipo != null) ...[
-                _titulo(_F.etiquetaSerieOPlaca(tipo)),
-                DropdownButtonFormField<String>(
-                  key: ValueKey('serie_${tipo.name}'),
-                  initialValue: opciones.contains(d.serieOPlaca) ? d.serieOPlaca : null,
-                  decoration: InputDecoration(
-                    border: const OutlineInputBorder(),
-                    hintText: 'Seleccione la ${_F.etiquetaSerieOPlaca(tipo).toLowerCase()}',
+                _titulo(_F.serieManual(tipo) ? 'Serie (opcional)' : _F.etiquetaSerieOPlaca(tipo)),
+                if (_F.serieManual(tipo))
+                  TextField(
+                    controller: _serieCtrl,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Escriba la serie si la tiene',
+                    ),
+                    onChanged: cubit.elegirSerieOPlaca,
+                  )
+                else
+                  DropdownButtonFormField<String>(
+                    key: ValueKey('serie_${tipo.name}'),
+                    initialValue: opciones.contains(d.serieOPlaca) ? d.serieOPlaca : null,
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      hintText: 'Seleccione la ${_F.etiquetaSerieOPlaca(tipo).toLowerCase()}',
+                    ),
+                    items: [for (final o in opciones) DropdownMenuItem(value: o, child: Text(o))],
+                    onChanged: (v) {
+                      if (v != null) cubit.elegirSerieOPlaca(v);
+                    },
                   ),
-                  items: [for (final o in opciones) DropdownMenuItem(value: o, child: Text(o))],
-                  onChanged: (v) {
-                    if (v != null) cubit.elegirSerieOPlaca(v);
-                  },
-                ),
                 if (_F.pideHorometro(tipo)) ...[
                   _titulo('Horómetro'),
                   TextField(
@@ -283,6 +314,18 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
                     icon: const Icon(Icons.event),
                     label: Text(d.fechaHora == null ? 'Seleccionar fecha y hora' : _fmtFechaHora(d.fechaHora!)),
                     onPressed: () => _elegirFechaHora(s),
+                  ),
+                ],
+                if (_F.pideFecha(tipo)) ...[
+                  _titulo(_F.etiquetaFecha(d.tipoMantenimiento)),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      alignment: Alignment.centerLeft,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                    ),
+                    icon: const Icon(Icons.event),
+                    label: Text(d.fechaHora == null ? 'Seleccionar fecha' : _F.textoFecha(tipo, d.fechaHora!)),
+                    onPressed: () => _elegirFecha(s),
                   ),
                 ],
               ],

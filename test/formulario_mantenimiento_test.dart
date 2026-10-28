@@ -214,6 +214,91 @@ void main() {
     });
   });
 
+  group('Aire acondicionado y Herramientas', () {
+    DatosMantenimientoInterno aire({String? serie, DateTime? fecha, TipoMantenimiento tipo = TipoMantenimiento.correctivo}) =>
+        DatosMantenimientoInterno(
+          tipoMantenimiento: tipo,
+          tipoActivo: TipoActivoMantenimiento.aireAcondicionado,
+          serieOPlaca: serie,
+          fechaHora: fecha,
+          detalle: 'No enfría la oficina',
+          cantidadFotos: 1,
+        );
+
+    test('Solo fecha y serie opcional escrita a mano, sin horómetro ni kilometraje', () {
+      for (final t in [TipoActivoMantenimiento.aireAcondicionado, TipoActivoMantenimiento.herramientas]) {
+        expect(F.serieManual(t), isTrue);
+        expect(F.pideFecha(t), isTrue);
+        expect(F.pideFechaHora(t), isFalse);
+        expect(F.pideHorometro(t), isFalse);
+        expect(F.pideKilometraje(t), isFalse);
+        expect(F.pideFotoLectura(t), isFalse);
+        expect(F.opcionesDe(t), isEmpty);
+        expect(F.equipoDe(t), TipoEquipo.Otros);
+      }
+      expect(F.serieManual(TipoActivoMantenimiento.cosechadora), isFalse);
+      expect(F.pideFecha(TipoActivoMantenimiento.contador), isFalse);
+      expect(TipoActivoMantenimiento.aireAcondicionado.etiqueta, 'Aire acondicionado');
+      expect(TipoActivoMantenimiento.herramientas.etiqueta, 'Herramientas');
+    });
+
+    test('Válido sin serie; la fecha es obligatoria y no puede ser futura en correctivo', () {
+      expect(F.validar(aire(fecha: DateTime(2026, 10, 26)), rol: RolUsuario.requerimiento, ahora: ahora), isEmpty);
+      expect(F.validar(aire(), rol: RolUsuario.requerimiento, ahora: ahora), contains('Seleccione la fecha.'));
+      expect(F.validar(aire(fecha: DateTime(2026, 10, 27)), rol: RolUsuario.requerimiento, ahora: ahora),
+          contains('La fecha de la falla no puede ser futura.'));
+      expect(
+          F.validar(aire(fecha: DateTime(2026, 12, 1), tipo: TipoMantenimiento.preventivo),
+              rol: RolUsuario.supervisor, ahora: ahora),
+          isEmpty);
+    });
+
+    test('El ticket guarda la serie en MAYÚSCULAS (o sin serie) y solo la fecha', () {
+      final con = F.construirTicket(aire(serie: ' lg-12k ', fecha: DateTime(2026, 10, 20, 15, 40)),
+          usuarioNombre: 'Ana', rol: RolUsuario.requerimiento, ahora: ahora);
+      expect(con.numeroSerie, 'LG-12K');
+      expect(con.equipo, TipoEquipo.Otros);
+      expect(con.equipoDetalle, 'Aire acondicionado');
+      expect(con.mantenimientoInterno!.fechaHoraFalla, DateTime(2026, 10, 20));
+      expect(con.historialEventos.first.accion, contains('AIRE ACONDICIONADO LG-12K'));
+
+      final sin = F.construirTicket(aire(fecha: DateTime(2026, 10, 20)),
+          usuarioNombre: 'Ana', rol: RolUsuario.requerimiento, ahora: ahora);
+      expect(sin.numeroSerie, isNull);
+      expect(sin.historialEventos.first.accion, contains('AIRE ACONDICIONADO S/N'));
+    });
+
+    test('Fecha sin hora en el texto y en la etiqueta', () {
+      final f = DateTime(2026, 10, 20, 15, 40);
+      expect(F.textoFecha(TipoActivoMantenimiento.herramientas, f), '20/10/2026');
+      expect(F.textoFecha(TipoActivoMantenimiento.contador, f), '20/10/2026 15:40');
+      expect(F.etiquetaFechaDe(TipoActivoMantenimiento.herramientas, TipoMantenimiento.correctivo), 'Fecha de la falla');
+      expect(F.etiquetaFechaDe(TipoActivoMantenimiento.caracol, TipoMantenimiento.preventivo), 'Fecha y hora programada');
+    });
+
+    test('Al pasar de "fecha y hora" a "solo fecha" se borra la fecha; entre iguales se conserva', () {
+      final contador = DatosMantenimientoInterno(
+        tipoActivo: TipoActivoMantenimiento.contador,
+        serieOPlaca: 'Contador AQUASPOT',
+        fechaHora: DateTime(2026, 10, 20, 9, 30),
+      );
+      expect(F.cambiarTipoActivo(contador, TipoActivoMantenimiento.aireAcondicionado).fechaHora, isNull);
+      expect(F.cambiarTipoActivo(contador, TipoActivoMantenimiento.aireAcondicionado).serieOPlaca, isNull);
+      expect(F.cambiarTipoActivo(contador, TipoActivoMantenimiento.caracol).fechaHora, DateTime(2026, 10, 20, 9, 30));
+      final aireConFecha = aire(fecha: DateTime(2026, 10, 20));
+      expect(F.cambiarTipoActivo(aireConFecha, TipoActivoMantenimiento.herramientas).fechaHora, DateTime(2026, 10, 20));
+    });
+
+    test('Se guarda y se lee igual en Firestore', () {
+      final t = F.construirTicket(aire(serie: 'X1', fecha: DateTime(2026, 10, 20)),
+          usuarioNombre: 'Ana', rol: RolUsuario.requerimiento, ahora: ahora);
+      final json = TicketModel.fromEntity(t.copyWith(id: 'REQ-2')).toJson()..['id'] = 'REQ-2';
+      final leido = TicketModel.fromJson(json);
+      expect(leido.mantenimientoInterno, t.mantenimientoInterno);
+      expect(leido.mantenimientoInterno!.tipoActivo, TipoActivoMantenimiento.aireAcondicionado);
+    });
+  });
+
   test('Se guarda y se lee igual en Firestore', () {
     final d = DatosMantenimientoInterno(
       tipoMantenimiento: TipoMantenimiento.preventivo,
