@@ -1212,7 +1212,10 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
 
                           // HORAS HOMBRE (Editable por Supervisor o si es variable)
                           if (esSupervisorOAdmin || actSel.actividad.esVariable) ...[
-                            Row(
+                            // Wrap: en el celular el campo baja de línea en vez de desbordarse.
+                            Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              runSpacing: 6,
                               children: [
                                 Icon(Icons.schedule, size: 18, color: actSel.actividad.esVariable ? Colors.orange : const Color(0xFF005A9C)),
                                 const SizedBox(width: 6),
@@ -1250,9 +1253,11 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
                               children: [
                                 const Icon(Icons.schedule, size: 18, color: Colors.blue),
                                 const SizedBox(width: 6),
-                                Text(
-                                  'Horas Hombre fijas: ${actSel.horasHombre} HH',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF005A9C)),
+                                Expanded(
+                                  child: Text(
+                                    'Horas Hombre fijas: ${actSel.horasHombre} HH',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF005A9C)),
+                                  ),
                                 ),
                               ],
                             ),
@@ -1283,9 +1288,11 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                'Fotografías de Hallazgo (${actSel.fotos.length})',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              Expanded(
+                                child: Text(
+                                  'Fotografías de Hallazgo (${actSel.fotos.length})',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
                               ),
                               Row(
                                 children: [
@@ -1465,15 +1472,20 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
         tilePadding: EdgeInsets.zero,
-        title: Row(
+        // Wrap: en el celular la etiqueta de modo baja de línea.
+        title: Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            const Icon(Icons.handyman_outlined, size: 18, color: Color(0xFF005A9C)),
-            const SizedBox(width: 8),
-            Text(
-              'Repuestos e Insumos ($totalItems)',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF005A9C)),
-            ),
-            const Spacer(),
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.handyman_outlined, size: 18, color: Color(0xFF005A9C)),
+              const SizedBox(width: 8),
+              Text(
+                'Repuestos e Insumos ($totalItems)',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF005A9C)),
+              ),
+            ]),
             if (esSupervisorOAdmin)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

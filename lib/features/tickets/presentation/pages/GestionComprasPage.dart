@@ -399,8 +399,11 @@ class _GestionComprasPageState extends State<GestionComprasPage> {
               // ==========================================
               // 🎛️ PANEL DE CONTROL (Actuadores Compras)
               // ==========================================
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 6,
                 children: [
                   const Text('Carga Documental (Órdenes de Compra)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   ElevatedButton.icon(
@@ -651,7 +654,13 @@ class _GestionComprasPageState extends State<GestionComprasPage> {
                         ),
                       ),
                     ),
-                    if (repuestosTaller.isNotEmpty) ...[
+                  ],
+                ),
+                // Botones de copiar debajo del título: en el celular no le quitan espacio.
+                if (repuestosTaller.isNotEmpty)
+                  Wrap(
+                    spacing: 4,
+                    children: [
                       TextButton.icon(
                         icon: const Icon(Icons.copy, size: 14),
                         label: const Text('Copiar Códigos', style: TextStyle(fontSize: 11)),
@@ -686,8 +695,7 @@ class _GestionComprasPageState extends State<GestionComprasPage> {
                         },
                       ),
                     ],
-                  ],
-                ),
+                  ),
                 const SizedBox(height: 4),
                 Text(
                   'Listado de solo lectura de los repuestos e insumos requeridos por taller, contrastados con el stock en bodega:',
@@ -721,10 +729,21 @@ class _GestionComprasPageState extends State<GestionComprasPage> {
                       final stock = stockItem?.stockDisponible ?? 0.0;
                       final bool tieneStock = stock >= cant;
 
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
+                      // Descripción en su propia línea; código, cantidad y stock debajo
+                      // (en el celular la fila no alcanza para los cuatro).
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Código con botón de copiado
+                          Text(
+                            desc,
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                          ),
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
                           InkWell(
                             onTap: () {
                               Clipboard.setData(ClipboardData(text: codigo));
@@ -759,18 +778,6 @@ class _GestionComprasPageState extends State<GestionComprasPage> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-
-                          // Descripción
-                          Expanded(
-                            child: Text(
-                              desc,
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-
-                          // Cantidad requerida
                           Text(
                             '$cant $und',
                             style: const TextStyle(
@@ -778,8 +785,6 @@ class _GestionComprasPageState extends State<GestionComprasPage> {
                               fontSize: 12,
                             ),
                           ),
-                          const SizedBox(width: 8),
-
                           // Badge de Stock
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -806,6 +811,8 @@ class _GestionComprasPageState extends State<GestionComprasPage> {
                                     : Colors.red.shade800,
                               ),
                             ),
+                          ),
+                            ],
                           ),
                         ],
                       );

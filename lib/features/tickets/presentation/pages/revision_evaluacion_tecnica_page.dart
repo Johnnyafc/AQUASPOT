@@ -2,6 +2,7 @@
 import 'dart:typed_data';
 import '../../domain/services/flujo_reportes_automaticos_service.dart';
 import 'package:flutter/material.dart';
+import '../widgets/tabla_desplazable_widget.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_picker/file_picker.dart' as fp;
 import 'package:printing/printing.dart';
@@ -135,6 +136,9 @@ class _RevisionEvaluacionTecnicaPageState extends State<RevisionEvaluacionTecnic
             foregroundColor: Colors.white,
             bottom: TabBar(
               controller: _tabController,
+              // En el celular las pestañas se desplazan para no cortar el texto.
+              isScrollable: MediaQuery.sizeOf(context).width < 600,
+              tabAlignment: MediaQuery.sizeOf(context).width < 600 ? TabAlignment.start : null,
               indicatorColor: Colors.white,
               labelColor: Colors.white,
               unselectedLabelColor: Colors.white70,
@@ -405,78 +409,81 @@ class _RevisionEvaluacionTecnicaPageState extends State<RevisionEvaluacionTecnic
                     if (mapaComerciales.isEmpty)
                       const Text('No hay repuestos comerciales requeridos.', style: TextStyle(color: Colors.grey, fontSize: 12))
                     else
-                      Table(
-                        columnWidths: const {
-                          0: FlexColumnWidth(2.5),
-                          1: FlexColumnWidth(5.0),
-                          2: FlexColumnWidth(2.0),
-                          3: FlexColumnWidth(2.0),
-                        },
-                        children: [
-                          TableRow(
-                            decoration: BoxDecoration(color: Colors.grey.shade100),
-                            children: const [
-                              Padding(padding: EdgeInsets.all(6), child: Text('Código', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                              Padding(padding: EdgeInsets.all(6), child: Text('Descripción / Nombre', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                              Padding(padding: EdgeInsets.all(6), child: Text('Cant.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
-                              Padding(padding: EdgeInsets.all(6), child: Text('Unidad', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
-                            ],
-                          ),
-                          ...mapaComerciales.values.map((it) {
-                            final cantStr = (it.cantidad % 1 == 0) ? it.cantidad.toInt().toString() : it.cantidad.toString();
-                            return TableRow(
-                              decoration: BoxDecoration(
-                                border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-                              ),
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.all(6),
-                                  child: Row(
-                                    children: [
-                                      Expanded(child: Text(it.codigo, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
-                                      CopyIconButtonWidget(etiqueta: 'Código', valor: it.codigo),
-                                    ],
-                                  ),
+                      // En el celular la tabla se desplaza de lado en vez de apretarse.
+                      TablaDesplazableWidget(
+                        child: Table(
+                          columnWidths: const {
+                            0: FlexColumnWidth(2.5),
+                            1: FlexColumnWidth(5.0),
+                            2: FlexColumnWidth(2.0),
+                            3: FlexColumnWidth(2.0),
+                          },
+                          children: [
+                            TableRow(
+                              decoration: BoxDecoration(color: Colors.grey.shade100),
+                              children: const [
+                                Padding(padding: EdgeInsets.all(6), child: Text('Código', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                                Padding(padding: EdgeInsets.all(6), child: Text('Descripción / Nombre', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                                Padding(padding: EdgeInsets.all(6), child: Text('Cant.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
+                                Padding(padding: EdgeInsets.all(6), child: Text('Unidad', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
+                              ],
+                            ),
+                            ...mapaComerciales.values.map((it) {
+                              final cantStr = (it.cantidad % 1 == 0) ? it.cantidad.toInt().toString() : it.cantidad.toString();
+                              return TableRow(
+                                decoration: BoxDecoration(
+                                  border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
                                 ),
-                                Padding(
-                                  padding: const EdgeInsets.all(6),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Tooltip(
-                                          message: 'Tocar para copiar nombre',
-                                          child: InkWell(
-                                            onTap: () {
-                                              Clipboard.setData(ClipboardData(text: it.descripcion));
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                SnackBar(
-                                                  content: Text('Copiado: ${it.descripcion}'),
-                                                  duration: const Duration(milliseconds: 1200),
-                                                  behavior: SnackBarBehavior.floating,
-                                                ),
-                                              );
-                                            },
-                                            child: Text(it.descripcion, style: const TextStyle(fontSize: 11)),
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.all(6),
+                                    child: Row(
+                                      children: [
+                                        Expanded(child: Text(it.codigo, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
+                                        CopyIconButtonWidget(etiqueta: 'Código', valor: it.codigo),
+                                      ],
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.all(6),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Tooltip(
+                                            message: 'Tocar para copiar nombre',
+                                            child: InkWell(
+                                              onTap: () {
+                                                Clipboard.setData(ClipboardData(text: it.descripcion));
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text('Copiado: ${it.descripcion}'),
+                                                    duration: const Duration(milliseconds: 1200),
+                                                    behavior: SnackBarBehavior.floating,
+                                                  ),
+                                                );
+                                              },
+                                              child: Text(it.descripcion, style: const TextStyle(fontSize: 11)),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      CopyIconButtonWidget(etiqueta: 'Nombre de repuesto', valor: it.descripcion),
-                                    ],
+                                        CopyIconButtonWidget(etiqueta: 'Nombre de repuesto', valor: it.descripcion),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.all(6),
-                                  child: Text(
-                                    cantStr,
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF005A9C)),
-                                    textAlign: TextAlign.center,
+                                  Padding(
+                                    padding: const EdgeInsets.all(6),
+                                    child: Text(
+                                      cantStr,
+                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF005A9C)),
+                                      textAlign: TextAlign.center,
+                                    ),
                                   ),
-                                ),
-                                Padding(padding: const EdgeInsets.all(6), child: Text(it.unidad, style: const TextStyle(fontSize: 11), textAlign: TextAlign.center)),
-                              ],
-                            );
-                          }),
-                        ],
+                                  Padding(padding: const EdgeInsets.all(6), child: Text(it.unidad, style: const TextStyle(fontSize: 11), textAlign: TextAlign.center)),
+                                ],
+                              );
+                            }),
+                          ],
+                        ),
                       ),
                   ],
                 ),
@@ -535,78 +542,81 @@ class _RevisionEvaluacionTecnicaPageState extends State<RevisionEvaluacionTecnic
                   if (mapaTaller.isEmpty)
                     const Text('No hay materiales internos requeridos.', style: TextStyle(color: Colors.grey, fontSize: 12))
                   else
-                    Table(
-                      columnWidths: const {
-                        0: FlexColumnWidth(2.5),
-                        1: FlexColumnWidth(5.0),
-                        2: FlexColumnWidth(2.0),
-                        3: FlexColumnWidth(2.0),
-                      },
-                      children: [
-                        TableRow(
-                          decoration: BoxDecoration(color: Colors.grey.shade100),
-                          children: const [
-                            Padding(padding: EdgeInsets.all(6), child: Text('Código', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                            Padding(padding: EdgeInsets.all(6), child: Text('Descripción / Nombre', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                            Padding(padding: EdgeInsets.all(6), child: Text('Cant.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
-                            Padding(padding: EdgeInsets.all(6), child: Text('Unidad', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
-                          ],
-                        ),
-                        ...mapaTaller.values.map((it) {
-                          final cantStr = (it.cantidad % 1 == 0) ? it.cantidad.toInt().toString() : it.cantidad.toString();
-                          return TableRow(
-                            decoration: BoxDecoration(
-                              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-                            ),
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(6),
-                                child: Row(
-                                  children: [
-                                    Expanded(child: Text(it.codigo, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
-                                    CopyIconButtonWidget(etiqueta: 'Código', valor: it.codigo),
-                                  ],
-                                ),
+                    // En el celular la tabla se desplaza de lado en vez de apretarse.
+                    TablaDesplazableWidget(
+                      child: Table(
+                        columnWidths: const {
+                          0: FlexColumnWidth(2.5),
+                          1: FlexColumnWidth(5.0),
+                          2: FlexColumnWidth(2.0),
+                          3: FlexColumnWidth(2.0),
+                        },
+                        children: [
+                          TableRow(
+                            decoration: BoxDecoration(color: Colors.grey.shade100),
+                            children: const [
+                              Padding(padding: EdgeInsets.all(6), child: Text('Código', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                              Padding(padding: EdgeInsets.all(6), child: Text('Descripción / Nombre', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                              Padding(padding: EdgeInsets.all(6), child: Text('Cant.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
+                              Padding(padding: EdgeInsets.all(6), child: Text('Unidad', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
+                            ],
+                          ),
+                          ...mapaTaller.values.map((it) {
+                            final cantStr = (it.cantidad % 1 == 0) ? it.cantidad.toInt().toString() : it.cantidad.toString();
+                            return TableRow(
+                              decoration: BoxDecoration(
+                                border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
                               ),
-                              Padding(
-                                padding: const EdgeInsets.all(6),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Tooltip(
-                                        message: 'Tocar para copiar nombre',
-                                        child: InkWell(
-                                          onTap: () {
-                                            Clipboard.setData(ClipboardData(text: it.descripcion));
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(
-                                                content: Text('Copiado: ${it.descripcion}'),
-                                                duration: const Duration(milliseconds: 1200),
-                                                behavior: SnackBarBehavior.floating,
-                                              ),
-                                            );
-                                          },
-                                          child: Text(it.descripcion, style: const TextStyle(fontSize: 11)),
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(6),
+                                  child: Row(
+                                    children: [
+                                      Expanded(child: Text(it.codigo, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
+                                      CopyIconButtonWidget(etiqueta: 'Código', valor: it.codigo),
+                                    ],
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.all(6),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Tooltip(
+                                          message: 'Tocar para copiar nombre',
+                                          child: InkWell(
+                                            onTap: () {
+                                              Clipboard.setData(ClipboardData(text: it.descripcion));
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(
+                                                  content: Text('Copiado: ${it.descripcion}'),
+                                                  duration: const Duration(milliseconds: 1200),
+                                                  behavior: SnackBarBehavior.floating,
+                                                ),
+                                              );
+                                            },
+                                            child: Text(it.descripcion, style: const TextStyle(fontSize: 11)),
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    CopyIconButtonWidget(etiqueta: 'Nombre de material', valor: it.descripcion),
-                                  ],
+                                      CopyIconButtonWidget(etiqueta: 'Nombre de material', valor: it.descripcion),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(6),
-                                child: Text(
-                                  cantStr,
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
-                                  textAlign: TextAlign.center,
+                                Padding(
+                                  padding: const EdgeInsets.all(6),
+                                  child: Text(
+                                    cantStr,
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
+                                    textAlign: TextAlign.center,
+                                  ),
                                 ),
-                              ),
-                              Padding(padding: const EdgeInsets.all(6), child: Text(it.unidad, style: const TextStyle(fontSize: 11), textAlign: TextAlign.center)),
-                            ],
-                          );
-                        }),
-                      ],
+                                Padding(padding: const EdgeInsets.all(6), child: Text(it.unidad, style: const TextStyle(fontSize: 11), textAlign: TextAlign.center)),
+                              ],
+                            );
+                          }),
+                        ],
+                      ),
                     ),
                 ],
               ),

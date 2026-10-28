@@ -651,7 +651,8 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
                   child: Card(
                     elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     child: Padding(
-                      padding: const EdgeInsets.all(32.0),
+                      // En el celular menos margen interno: más espacio para los campos.
+                      padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 600 ? 16.0 : 32.0),
                       child: state.tipoSeleccionado == TipoRequerimiento.mantenimientoInterno
                           // 🛠️ Mantenimiento interno: formulario y estado propios (cubit).
                           ? BlocProvider(

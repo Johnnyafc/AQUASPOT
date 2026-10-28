@@ -134,7 +134,9 @@ class _ValidacionBodegaComprasPageState
       backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
         title: Text(
-          'Validación Bodega: ${widget.ticket.id} (${widget.ticket.marca.toUpperCase()})',
+          widget.ticket.esMantenimientoInterno
+              ? 'Validación Bodega: ${widget.ticket.id}'
+              : 'Validación Bodega: ${widget.ticket.id} (${widget.ticket.marca.toUpperCase()})',
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
         backgroundColor: const Color(0xFF005A9C),
@@ -401,20 +403,24 @@ class _ValidacionBodegaComprasPageState
                         Text(
                           FlujoVentaRepuestoService.esVenta(widget.ticket)
                               ? 'Validación Bodega: Repuestos de la venta'
-                              : 'Validación Bodega: Repuestos Caracol',
+                              : (widget.ticket.esMantenimientoInterno
+                                  ? 'Validación Bodega: Repuestos del mantenimiento'
+                                  : 'Validación Bodega: Repuestos ${widget.ticket.equipo.name.toUpperCase()}'),
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        Text(
-                          'Marca: ${widget.ticket.marca.toUpperCase()}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF005A9C),
+                        // Mantenimiento interno no tiene marca de cliente.
+                        if (!widget.ticket.esMantenimientoInterno)
+                          Text(
+                            'Marca: ${widget.ticket.marca.toUpperCase()}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF005A9C),
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -479,9 +485,11 @@ class _ValidacionBodegaComprasPageState
                   children: [
                     const Icon(Icons.shopping_bag_outlined, color: Colors.orange, size: 18),
                     const SizedBox(width: 6),
-                    Text(
-                      'Repuestos Comprados / Por Validar en Bodega ($validadosSinStock/$totalSinStock)',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                    Expanded(
+                      child: Text(
+                        'Repuestos Comprados / Por Validar en Bodega ($validadosSinStock/$totalSinStock)',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                      ),
                     ),
                   ],
                 ),
@@ -582,7 +590,9 @@ class _ValidacionBodegaComprasPageState
                       ),
                       subtitle: Padding(
                         padding: const EdgeInsets.only(top: 4),
-                        child: Row(
+                        child: Wrap(
+                          spacing: 12,
+                          runSpacing: 2,
                           children: [
                             Text(
                               'Requerido: ${item.cantidadSolicitada} ${item.unidad}',
@@ -592,7 +602,6 @@ class _ValidacionBodegaComprasPageState
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
-                            const Spacer(),
                             Text(
                               check
                                   ? '✓ Listo en Bodega'
@@ -620,9 +629,11 @@ class _ValidacionBodegaComprasPageState
                   children: [
                     const Icon(Icons.check_circle, color: Color(0xFF2E7D32), size: 18),
                     const SizedBox(width: 6),
-                    Text(
-                      'Repuestos con Stock Local en Bodega (${itemsConStock.length})',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF2E7D32)),
+                    Expanded(
+                      child: Text(
+                        'Repuestos con Stock Local en Bodega (${itemsConStock.length})',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF2E7D32)),
+                      ),
                     ),
                   ],
                 ),

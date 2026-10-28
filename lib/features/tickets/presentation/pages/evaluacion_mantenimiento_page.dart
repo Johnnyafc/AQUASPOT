@@ -603,6 +603,30 @@ class _TarjetaActividad extends StatelessWidget {
   Widget build(BuildContext context) {
     final cubit = context.read<EvaluacionMantenimientoCubit>();
     final a = actividad;
+    // En el celular los campos van uno debajo de otro.
+    final angosto = MediaQuery.sizeOf(context).width < 600;
+    final nombre = TextFormField(
+      initialValue: a.nombre,
+      minLines: 1,
+      maxLines: 3,
+      textCapitalization: TextCapitalization.sentences,
+      style: const TextStyle(fontWeight: FontWeight.bold),
+      decoration: const InputDecoration(labelText: 'Nombre de la actividad', isDense: true),
+      onChanged: (v) => cubit.cambiarNombre(indice, v),
+    );
+    final horas = TextFormField(
+      initialValue: a.horasHombre > 0 ? _numero(a.horasHombre) : '',
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+      decoration: const InputDecoration(labelText: 'Horas hombre', border: OutlineInputBorder(), isDense: true),
+      onChanged: (v) => cubit.cambiarHoras(indice, double.tryParse(v.trim().replaceAll(',', '.'))),
+    );
+    final observacion = TextFormField(
+      initialValue: a.observacion,
+      maxLines: 2,
+      decoration: const InputDecoration(labelText: 'Observación', border: OutlineInputBorder(), isDense: true),
+      onChanged: (v) => cubit.cambiarObservacion(indice, v),
+    );
     return Card(
       margin: const EdgeInsets.only(top: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade300)),
@@ -615,43 +639,25 @@ class _TarjetaActividad extends StatelessWidget {
               Text('${indice + 1}. ${a.codigo}', style: const TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(width: 10),
               // El nombre se puede editar (el código no cambia).
-              Expanded(
-                child: TextFormField(
-                  initialValue: a.nombre,
-                  textCapitalization: TextCapitalization.sentences,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                  decoration: const InputDecoration(labelText: 'Nombre de la actividad', isDense: true),
-                  onChanged: (v) => cubit.cambiarNombre(indice, v),
-                ),
-              ),
+              if (angosto) const Spacer() else Expanded(child: nombre),
               IconButton(
                 tooltip: 'Quitar actividad',
                 icon: const Icon(Icons.delete_outline, color: Colors.red),
                 onPressed: () => cubit.quitarActividad(indice),
               ),
             ]),
+            if (angosto) nombre,
             const SizedBox(height: 8),
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              SizedBox(
-                width: 130,
-                child: TextFormField(
-                  initialValue: a.horasHombre > 0 ? _numero(a.horasHombre) : '',
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
-                  decoration: const InputDecoration(labelText: 'Horas hombre', border: OutlineInputBorder(), isDense: true),
-                  onChanged: (v) => cubit.cambiarHoras(indice, double.tryParse(v.trim().replaceAll(',', '.'))),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextFormField(
-                  initialValue: a.observacion,
-                  maxLines: 2,
-                  decoration: const InputDecoration(labelText: 'Observación', border: OutlineInputBorder(), isDense: true),
-                  onChanged: (v) => cubit.cambiarObservacion(indice, v),
-                ),
-              ),
-            ]),
+            if (angosto) ...[
+              horas,
+              const SizedBox(height: 8),
+              observacion,
+            ] else
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                SizedBox(width: 130, child: horas),
+                const SizedBox(width: 12),
+                Expanded(child: observacion),
+              ]),
             const SizedBox(height: 10),
             Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
               OutlinedButton.icon(
@@ -682,9 +688,11 @@ class _TarjetaActividad extends StatelessWidget {
                 ]),
             ]),
             const Divider(height: 24),
-            Row(children: [
-              Text('Repuestos (${a.repuestos.length})', style: const TextStyle(fontWeight: FontWeight.bold, color: _azul)),
-              const Spacer(),
+            Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Text('Repuestos (${a.repuestos.length})', style: const TextStyle(fontWeight: FontWeight.bold, color: _azul)),
+              ),
               TextButton.icon(
                 icon: const Icon(Icons.add_circle_outline, size: 18),
                 label: const Text('Agregar repuesto'),
@@ -704,50 +712,59 @@ class _TarjetaActividad extends StatelessWidget {
             for (var j = 0; j < a.repuestos.length; j++)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Row(children: [
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(a.repuestos[j].descripcion, style: const TextStyle(fontSize: 13)),
-                      if (_S.esSinCodigo(a.repuestos[j])) ...[
-                        Text('SIN CÓDIGO · ${a.repuestos[j].unidad}',
-                            style: TextStyle(fontSize: 11, color: Colors.orange.shade900, fontWeight: FontWeight.bold)),
-                        _BotonFicha(
-                          ficha: fichas[CreacionCodigosMantenimientoService.claveFicha(a.repuestos[j].descripcion)],
-                          onPressed: () => _editarFicha(context, j),
+                // En el celular la descripción va arriba y los controles debajo.
+                child: Flex(
+                    direction: angosto ? Axis.vertical : Axis.horizontal,
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: angosto ? CrossAxisAlignment.stretch : CrossAxisAlignment.center,
+                    children: [
+                      Flexible(
+                        flex: angosto ? 0 : 1,
+                        fit: FlexFit.tight,
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(a.repuestos[j].descripcion, style: const TextStyle(fontSize: 13)),
+                          if (_S.esSinCodigo(a.repuestos[j])) ...[
+                            Text('SIN CÓDIGO · ${a.repuestos[j].unidad}',
+                                style: TextStyle(fontSize: 11, color: Colors.orange.shade900, fontWeight: FontWeight.bold)),
+                            _BotonFicha(
+                              ficha: fichas[CreacionCodigosMantenimientoService.claveFicha(a.repuestos[j].descripcion)],
+                              onPressed: () => _editarFicha(context, j),
+                            ),
+                          ] else
+                            Text('${a.repuestos[j].codigo} · ${a.repuestos[j].unidad}',
+                                style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                        ]),
+                      ),
+                      Row(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.end, children: [
+                        IconButton(
+                          tooltip: 'Restar 1',
+                          icon: const Icon(Icons.remove_circle_outline, size: 20),
+                          onPressed: a.repuestos[j].cantidad > 1
+                              ? () => cubit.cambiarCantidad(indice, j, a.repuestos[j].cantidad - 1)
+                              : null,
                         ),
-                      ] else
-                        Text('${a.repuestos[j].codigo} · ${a.repuestos[j].unidad}',
-                            style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                        InkWell(
+                          onTap: () => _editarCantidad(context, j),
+                          child: Container(
+                            constraints: const BoxConstraints(minWidth: 48),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade400), borderRadius: BorderRadius.circular(4)),
+                            child: Text(_numero(a.repuestos[j].cantidad), textAlign: TextAlign.center,
+                                style: TextStyle(fontWeight: FontWeight.bold, color: a.repuestos[j].cantidad > 0 ? null : Colors.red)),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Sumar 1',
+                          icon: const Icon(Icons.add_circle_outline, size: 20),
+                          onPressed: () => cubit.cambiarCantidad(indice, j, a.repuestos[j].cantidad + 1),
+                        ),
+                        IconButton(
+                          tooltip: 'Quitar repuesto',
+                          icon: const Icon(Icons.close, size: 20, color: Colors.red),
+                          onPressed: () => cubit.quitarRepuesto(indice, j),
+                        ),
+                      ]),
                     ]),
-                  ),
-                  IconButton(
-                    tooltip: 'Restar 1',
-                    icon: const Icon(Icons.remove_circle_outline, size: 20),
-                    onPressed: a.repuestos[j].cantidad > 1
-                        ? () => cubit.cambiarCantidad(indice, j, a.repuestos[j].cantidad - 1)
-                        : null,
-                  ),
-                  InkWell(
-                    onTap: () => _editarCantidad(context, j),
-                    child: Container(
-                      constraints: const BoxConstraints(minWidth: 48),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade400), borderRadius: BorderRadius.circular(4)),
-                      child: Text(_numero(a.repuestos[j].cantidad), textAlign: TextAlign.center,
-                          style: TextStyle(fontWeight: FontWeight.bold, color: a.repuestos[j].cantidad > 0 ? null : Colors.red)),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Sumar 1',
-                    icon: const Icon(Icons.add_circle_outline, size: 20),
-                    onPressed: () => cubit.cambiarCantidad(indice, j, a.repuestos[j].cantidad + 1),
-                  ),
-                  IconButton(
-                    tooltip: 'Quitar repuesto',
-                    icon: const Icon(Icons.close, size: 20, color: Colors.red),
-                    onPressed: () => cubit.quitarRepuesto(indice, j),
-                  ),
-                ]),
               ),
           ],
         ),

@@ -6,6 +6,7 @@
 // sube fotos, PDF y Excel y guarda; "Modificar" vuelve a la evaluación.
 
 import 'package:flutter/material.dart';
+import '../widgets/tabla_desplazable_widget.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:printing/printing.dart';
@@ -70,11 +71,14 @@ class RevisionEvaluacionMantenimientoPage extends StatelessWidget {
                 backgroundColor: _azul,
                 foregroundColor: Colors.white,
                 automaticallyImplyLeading: !enviando,
-                bottom: const TabBar(
+                bottom: TabBar(
+                  // En el celular las pestañas se desplazan para no cortar el texto.
+                  isScrollable: MediaQuery.sizeOf(context).width < 600,
+                  tabAlignment: MediaQuery.sizeOf(context).width < 600 ? TabAlignment.start : null,
                   indicatorColor: Colors.white,
                   labelColor: Colors.white,
                   unselectedLabelColor: Colors.white70,
-                  tabs: [
+                  tabs: const [
                     Tab(icon: Icon(Icons.picture_as_pdf), text: 'ORDEN DE TRABAJO (PDF)'),
                     Tab(icon: Icon(Icons.table_chart), text: 'SOLICITUD MATERIALES (EXCEL)'),
                   ],
@@ -292,69 +296,72 @@ class _TablaMateriales extends StatelessWidget {
             if (repuestos.isEmpty)
               const Text('No hay materiales requeridos.', style: TextStyle(color: Colors.grey, fontSize: 12))
             else
-              Table(
-                columnWidths: const {
-                  0: FlexColumnWidth(2.5),
-                  1: FlexColumnWidth(5.0),
-                  2: FlexColumnWidth(2.0),
-                  3: FlexColumnWidth(2.0),
-                },
-                children: [
-                  TableRow(
-                    decoration: BoxDecoration(color: Colors.grey.shade100),
-                    children: const [
-                      Padding(padding: EdgeInsets.all(6), child: Text('Código', style: _encabezado)),
-                      Padding(padding: EdgeInsets.all(6), child: Text('Descripción / Nombre', style: _encabezado)),
-                      Padding(padding: EdgeInsets.all(6), child: Text('Cant.', style: _encabezado, textAlign: TextAlign.center)),
-                      Padding(padding: EdgeInsets.all(6), child: Text('Unidad', style: _encabezado, textAlign: TextAlign.center)),
-                    ],
-                  ),
-                  for (final r in repuestos)
+              // En el celular la tabla se desplaza de lado en vez de apretarse.
+              TablaDesplazableWidget(
+                child: Table(
+                  columnWidths: const {
+                    0: FlexColumnWidth(2.5),
+                    1: FlexColumnWidth(5.0),
+                    2: FlexColumnWidth(2.0),
+                    3: FlexColumnWidth(2.0),
+                  },
+                  children: [
                     TableRow(
-                      decoration: BoxDecoration(
-                        color: _S.esSinCodigo(r) ? Colors.orange.shade50 : null,
-                        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-                      ),
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(6),
-                          child: _S.esSinCodigo(r)
-                              ? Text('SIN CÓDIGO',
-                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange.shade900))
-                              : Row(children: [
-                                  Expanded(
-                                      child: Text(r.codigo, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
-                                  CopyIconButtonWidget(etiqueta: 'Código', valor: r.codigo),
-                                ]),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(6),
-                          child: Row(children: [
-                            Expanded(
-                              child: Tooltip(
-                                message: 'Tocar para copiar nombre',
-                                child: InkWell(
-                                  onTap: () => _copiar(context, r.descripcion, 'Copiado: ${r.descripcion}'),
-                                  child: Text(r.descripcion, style: const TextStyle(fontSize: 11)),
-                                ),
-                              ),
-                            ),
-                            CopyIconButtonWidget(etiqueta: 'Nombre de material', valor: r.descripcion),
-                          ]),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(6),
-                          child: Text(_cantidad(r.cantidad),
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
-                              textAlign: TextAlign.center),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(6),
-                          child: Text(r.unidad, style: const TextStyle(fontSize: 11), textAlign: TextAlign.center),
-                        ),
+                      decoration: BoxDecoration(color: Colors.grey.shade100),
+                      children: const [
+                        Padding(padding: EdgeInsets.all(6), child: Text('Código', style: _encabezado)),
+                        Padding(padding: EdgeInsets.all(6), child: Text('Descripción / Nombre', style: _encabezado)),
+                        Padding(padding: EdgeInsets.all(6), child: Text('Cant.', style: _encabezado, textAlign: TextAlign.center)),
+                        Padding(padding: EdgeInsets.all(6), child: Text('Unidad', style: _encabezado, textAlign: TextAlign.center)),
                       ],
                     ),
-                ],
+                    for (final r in repuestos)
+                      TableRow(
+                        decoration: BoxDecoration(
+                          color: _S.esSinCodigo(r) ? Colors.orange.shade50 : null,
+                          border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                        ),
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: _S.esSinCodigo(r)
+                                ? Text('SIN CÓDIGO',
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange.shade900))
+                                : Row(children: [
+                                    Expanded(
+                                        child: Text(r.codigo, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
+                                    CopyIconButtonWidget(etiqueta: 'Código', valor: r.codigo),
+                                  ]),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: Row(children: [
+                              Expanded(
+                                child: Tooltip(
+                                  message: 'Tocar para copiar nombre',
+                                  child: InkWell(
+                                    onTap: () => _copiar(context, r.descripcion, 'Copiado: ${r.descripcion}'),
+                                    child: Text(r.descripcion, style: const TextStyle(fontSize: 11)),
+                                  ),
+                                ),
+                              ),
+                              CopyIconButtonWidget(etiqueta: 'Nombre de material', valor: r.descripcion),
+                            ]),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: Text(_cantidad(r.cantidad),
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
+                                textAlign: TextAlign.center),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: Text(r.unidad, style: const TextStyle(fontSize: 11), textAlign: TextAlign.center),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
               ),
           ],
         ),

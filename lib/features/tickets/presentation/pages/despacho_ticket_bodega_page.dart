@@ -688,6 +688,9 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
             ],
             bottom: TabBar(
               controller: _tabController,
+              // En el celular las pestañas se desplazan para no cortar el texto.
+              isScrollable: MediaQuery.sizeOf(context).width < 600,
+              tabAlignment: MediaQuery.sizeOf(context).width < 600 ? TabAlignment.start : null,
               indicatorColor: Colors.white,
               labelColor: Colors.white,
               unselectedLabelColor: Colors.white70,
@@ -720,7 +723,9 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Equipo: ${currentTicket.equipo.name.toUpperCase()} • ${currentTicket.marca.toUpperCase()} (Serie: ${currentTicket.numeroSerie ?? "S/N"})',
+                            currentTicket.esMantenimientoInterno
+                                ? 'MANTENIMIENTO INTERNO'
+                                : 'Equipo: ${currentTicket.equipo.name.toUpperCase()} • ${currentTicket.marca.toUpperCase()} (Serie: ${currentTicket.numeroSerie ?? "S/N"})',
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
@@ -1243,61 +1248,75 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                               });
                             },
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE3F2FD),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        item.codigo,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Color(0xFF0D47A1),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
+                    // Código y estado arriba, descripción debajo: en el celular
+                    // la fila no alcanza para los tres.
                     Expanded(
-                      child: Text(
-                        item.descripcion,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: isCompleto
-                            ? const Color(0xFFE8F5E9)
-                            : (item.tieneDespachoParcial
-                                ? const Color(0xFFFFF3E0)
-                                : const Color(0xFFE8F5E9)),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        isCompleto
-                            ? 'COMPLETO'
-                            : (item.tieneDespachoParcial ? 'PARCIAL' : 'DISPONIBLE'),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: isCompleto
-                              ? const Color(0xFF2E7D32)
-                              : (item.tieneDespachoParcial
-                                  ? Colors.orange.shade900
-                                  : const Color(0xFF2E7D32)),
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE3F2FD),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  item.codigo,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                    color: Color(0xFF0D47A1),
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: isCompleto
+                                      ? const Color(0xFFE8F5E9)
+                                      : (item.tieneDespachoParcial
+                                          ? const Color(0xFFFFF3E0)
+                                          : const Color(0xFFE8F5E9)),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  isCompleto
+                                      ? 'COMPLETO'
+                                      : (item.tieneDespachoParcial ? 'PARCIAL' : 'DISPONIBLE'),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: isCompleto
+                                        ? const Color(0xFF2E7D32)
+                                        : (item.tieneDespachoParcial
+                                            ? Colors.orange.shade900
+                                            : const Color(0xFF2E7D32)),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            item.descripcion,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
                 const Divider(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 2,
                   children: [
                     Text(
                       'Solicitado: ${item.cantidadSolicitada} ${item.unidad}',
@@ -1330,12 +1349,15 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                 if (!isCompleto) ...[
                   const SizedBox(height: 8),
                   Container(
+                    width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF0F4F8),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Row(
+                    child: Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         const Text(
                           'Recolectar en este picking:',
@@ -1345,47 +1367,48 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                             color: Color(0xFF005A9C),
                           ),
                         ),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.remove_circle_outline, size: 20),
-                          color: Colors.blueGrey,
-                          onPressed: isSelected && aDespachar > 0
-                              ? () {
-                                  setState(() {
-                                    final nv = (aDespachar - 1).clamp(0.0, item.cantidadFaltante);
-                                    _cantidadesADespachar[item.codigo] = nv;
-                                  });
-                                }
-                              : null,
-                        ),
-                        Text(
-                          '$aDespachar ${item.unidad}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
+                        Row(mainAxisSize: MainAxisSize.min, children: [
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline, size: 20),
+                            color: Colors.blueGrey,
+                            onPressed: isSelected && aDespachar > 0
+                                ? () {
+                                    setState(() {
+                                      final nv = (aDespachar - 1).clamp(0.0, item.cantidadFaltante);
+                                      _cantidadesADespachar[item.codigo] = nv;
+                                    });
+                                  }
+                                : null,
                           ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.add_circle_outline, size: 20),
-                          color: const Color(0xFF005A9C),
-                          onPressed: (isSelected &&
-                                  aDespachar <
-                                      (item.validadoPorCompras
-                                          ? item.cantidadFaltante
-                                          : (item.stockDisponibleAlEvaluar - item.cantidadDespachada)
-                                              .clamp(0.0, item.cantidadFaltante)))
-                              ? () {
-                                  final double maxDesp = item.validadoPorCompras
-                                      ? item.cantidadFaltante
-                                      : (item.stockDisponibleAlEvaluar - item.cantidadDespachada)
-                                          .clamp(0.0, item.cantidadFaltante);
-                                  setState(() {
-                                    final nv = (aDespachar + 1).clamp(0.0, maxDesp);
-                                    _cantidadesADespachar[item.codigo] = nv;
-                                  });
-                                }
-                              : null,
-                        ),
+                          Text(
+                            '$aDespachar ${item.unidad}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.add_circle_outline, size: 20),
+                            color: const Color(0xFF005A9C),
+                            onPressed: (isSelected &&
+                                    aDespachar <
+                                        (item.validadoPorCompras
+                                            ? item.cantidadFaltante
+                                            : (item.stockDisponibleAlEvaluar - item.cantidadDespachada)
+                                                .clamp(0.0, item.cantidadFaltante)))
+                                ? () {
+                                    final double maxDesp = item.validadoPorCompras
+                                        ? item.cantidadFaltante
+                                        : (item.stockDisponibleAlEvaluar - item.cantidadDespachada)
+                                            .clamp(0.0, item.cantidadFaltante);
+                                    setState(() {
+                                      final nv = (aDespachar + 1).clamp(0.0, maxDesp);
+                                      _cantidadesADespachar[item.codigo] = nv;
+                                    });
+                                  }
+                                : null,
+                          ),
+                        ]),
                       ],
                     ),
                   ),

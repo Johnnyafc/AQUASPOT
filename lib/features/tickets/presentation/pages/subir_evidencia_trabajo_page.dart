@@ -15,9 +15,11 @@ import 'package:aquaspot_postventa/features/fallas/data/datasources/metrica_fall
 import 'package:aquaspot_postventa/features/fallas/data/models/metrica_falla_model.dart';
 import 'package:aquaspot_postventa/features/fallas/domain/entities/metrica_falla_entity.dart';
 import '../widgets/resumen_mantenimiento_widget.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/copy_icon_button_widget.dart';
 import '../widgets/tarjeta_no_requiere_compras_widget.dart';
@@ -815,6 +817,49 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
     }
   }
 
+  /// 📷 Toma una foto o graba un video con la cámara y lo agrega a la misma
+  /// lista que lo elegido desde archivos (el envío no cambia).
+  Future<void> _tomarConCamara({required bool video}) async {
+    try {
+      final picker = ImagePicker();
+      final XFile? x = video
+          ? await picker.pickVideo(source: ImageSource.camera)
+          : await picker.pickImage(source: ImageSource.camera, imageQuality: 75);
+      if (x == null) return;
+      final bytes = await x.readAsBytes();
+      final nombre = x.name.isNotEmpty
+          ? x.name
+          : '${video ? 'video' : 'foto'}_${DateTime.now().millisecondsSinceEpoch}.${video ? 'mp4' : 'jpg'}';
+      // Fuera de web la subida usa la ruta del archivo; en web, los bytes.
+      final archivo = PlatformFile(name: nombre, size: bytes.length, bytes: bytes, path: kIsWeb ? null : x.path);
+      if (!mounted) return;
+      setState(() => (video ? _videosSeleccionados : _fotosSeleccionadas).add(archivo));
+      _guardarBorrador();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('🛑 No se pudo usar la cámara: $e. Use "Desde archivos".'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  /// Botones de una sección de evidencia: cámara y almacenamiento.
+  Widget _botonesEvidencia({required bool video}) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: Wrap(spacing: 8, runSpacing: 8, children: [
+          ElevatedButton.icon(
+            onPressed: () => _tomarConCamara(video: video),
+            icon: Icon(video ? Icons.videocam : Icons.photo_camera),
+            label: Text(video ? 'Grabar video' : 'Tomar foto'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => _seleccionarArchivos(video ? FileType.video : FileType.image),
+            icon: Icon(video ? Icons.video_library_outlined : Icons.photo_library_outlined),
+            label: const Text('Desde archivos'),
+          ),
+        ]),
+      );
+
   Future<void> _seleccionarArchivos(FileType tipo) async {
     final result = await FilePicker.pickFiles(
       type: tipo,
@@ -1069,15 +1114,14 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
                 color: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.blueGrey.shade200)),
                 clipBehavior: Clip.antiAlias,
-                child: ListTile(
-                  leading: const Icon(Icons.add_a_photo, color: Colors.blueGrey),
-                  title: const Text('Adjuntar Fotografías'),
-                  subtitle: Text('${_fotosSeleccionadas.length} fotos seleccionadas'),
-                  trailing: ElevatedButton(
-                    onPressed: () => _seleccionarArchivos(FileType.image),
-                    child: const Text('EXAMINAR'),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  ListTile(
+                    leading: const Icon(Icons.add_a_photo, color: Colors.blueGrey),
+                    title: const Text('Adjuntar Fotografías'),
+                    subtitle: Text('${_fotosSeleccionadas.length} fotos seleccionadas'),
                   ),
-                ),
+                  _botonesEvidencia(video: false),
+                ]),
               ),
               _buildGaleriaFotos(),
               const SizedBox(height: 12),
@@ -1087,15 +1131,14 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
                 color: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.blueGrey.shade200)),
                 clipBehavior: Clip.antiAlias,
-                child: ListTile(
-                  leading: const Icon(Icons.video_call, color: Colors.blueGrey),
-                  title: const Text('Adjuntar Videos'),
-                  subtitle: Text('${_videosSeleccionados.length} videos seleccionados'),
-                  trailing: ElevatedButton(
-                    onPressed: () => _seleccionarArchivos(FileType.video),
-                    child: const Text('EXAMINAR'),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  ListTile(
+                    leading: const Icon(Icons.video_call, color: Colors.blueGrey),
+                    title: const Text('Adjuntar Videos'),
+                    subtitle: Text('${_videosSeleccionados.length} videos seleccionados'),
                   ),
-                ),
+                  _botonesEvidencia(video: true),
+                ]),
               ),
               _buildGaleriaVideos(),
 
@@ -1171,7 +1214,11 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
             _buildInfoRow(context, 'Código de Proyecto:', widget.ticket.codigoProyecto!.toUpperCase()),
 
           _buildInfoRow(context, 'Estado Actual:', widget.ticket.estadoActual.nombreMayusculas),
-          _buildInfoRow(context, 'Tipo de requerimiento:', widget.ticket.tipoRequerimiento.name.toUpperCase()),
+          _buildInfoRow(
+            context,
+            'Tipo de requerimiento:',
+            widget.ticket.esMantenimientoInterno ? 'MANTENIMIENTO INTERNO' : widget.ticket.tipoRequerimiento.name.toUpperCase(),
+          ),
           const Divider(height: 24, color: Colors.black12),
 
           // 🛠️ Mantenimiento interno: datos con los que se creó (sin cliente).
@@ -1240,34 +1287,37 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
 
           // ==================================================================
           
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Falla Reportada e Inspección:',
-                  style: TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w600)
+          // En mantenimiento el detalle ya va en los datos de la creación.
+          if (!widget.ticket.esMantenimientoInterno) ...[
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Falla Reportada e Inspección:',
+                    style: TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w600)
+                  ),
                 ),
-              ),
-              CopyIconButtonWidget(
-                etiqueta: 'Falla Reportada e Inspección',
-                valor: widget.ticket.fallaReportada,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.grey.shade200),
+                CopyIconButtonWidget(
+                  etiqueta: 'Falla Reportada e Inspección',
+                  valor: widget.ticket.fallaReportada,
+                ),
+              ],
             ),
-            child: Text(
-              widget.ticket.fallaReportada, 
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87)
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Text(
+                widget.ticket.fallaReportada, 
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87)
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
