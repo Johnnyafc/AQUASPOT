@@ -113,6 +113,23 @@ service cloud.firestore {
     }
 
     // =====================================================================
+    // 🗓️ 6.2 PLAN PREVENTIVO (mantenimiento interno de máquinas propias)
+    // =====================================================================
+    match /plan_preventivo/{actividadId} {
+      // Cualquier operario autenticado lo consulta (los técnicos lo usan en
+      // la evaluación de mantenimiento → botón "Plan preventivo").
+      allow read: if request.auth != null;
+
+      // Solo Supervisores y Administradores crean, editan o desactivan.
+      allow create, update: if request.auth != null && (
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol in ['supervisor', 'admin', 'SUPERVISOR', 'ADMIN']
+      );
+
+      // Nunca se elimina: se desactiva (activo = false), así el código PREV-NN no se reutiliza.
+      allow delete: if false;
+    }
+
+    // =====================================================================
     // 📦 7. INVENTARIO Y STOCK DE BODEGA
     // =====================================================================
     match /inventario_bodega/{itemId} {
