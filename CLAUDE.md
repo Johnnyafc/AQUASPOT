@@ -62,6 +62,22 @@ arranque con la misma memoria, sin tener que repetir todo desde cero.
       `fallas`/`tecnicos` sin dominio, `TicketBloc` con escrituras Firestore
       y 21 accesos directos al repositorio, `XFile`/`PlatformFile` en domain.
 
+12. **Mantenimiento interno: datos de la creación (desde 2026-10-28).** Toda
+    pantalla de un requerimiento de mantenimiento interno muestra los datos
+    con los que se creó (tipo de mantenimiento, máquina, marca,
+    especificación, serie / placa, horómetro / km, fecha, detalle, quién lo
+    creó y sus fotos / videos); **nunca** datos de cliente, contacto ni
+    proyecto. Se arman en `ResumenMantenimientoService` y se dibujan con
+    `ResumenMantenimientoWidget` (o `lineaCorta` en las tarjetas).
+13. **"Usa flujo con generación de reportes automáticos"** (campo
+    `usaFlujoReportesAutomaticos`, `FlujoReportesAutomaticosService`): se
+    marca al guardar la Evaluación Técnica de todo mantenimiento interno y de
+    reparación / garantía de Caracol, Cosechadora y Contador (informe
+    automático, stock apartado, validación por repuesto, picking). Los
+    tickets evaluados antes sin la marca terminan con el flujo con el que
+    empezaron (los Caracol antiguos siempre lo usaron). Para habilitarlo en
+    otro equipo se cambia solo esa regla.
+
 ## Estado del repositorio (actualizado 2026-10-27)
 
 Último commit de código: `7e3a87e` (rama `aquaspot_optimizado`). Lo trabajado
