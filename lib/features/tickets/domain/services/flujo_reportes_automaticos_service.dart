@@ -38,6 +38,27 @@ class FlujoReportesAutomaticosService {
     return t.usaFlujoReportesAutomaticos || t.equipo == TipoEquipo.Caracol;
   }
 
+  /// Reparación / garantía de Cosechadora o Contador con este flujo: no
+  /// tienen propuesta comercial (evaluación, informe, solicitud y Comercial
+  /// trabajan con los repuestos Taller / Bodega).
+  static bool sinPropuestaComercial(TicketEntity t) =>
+      !t.esMantenimientoInterno &&
+      (t.equipo == TipoEquipo.Cosechadora || t.equipo == TipoEquipo.Contador) &&
+      paraEvaluacion(t);
+
+  /// Bodega (picking de lo que ya hay) y Taller pueden trabajar en paralelo
+  /// con Compras: en reparación desde que Costos asigna el proyecto; en
+  /// mantenimiento interno (no pasa por Costos) desde que se evalúa, salvo
+  /// si solo espera códigos de Costos (aún no hay nada que despachar).
+  static bool habilitadoEnParalelo(TicketEntity t) {
+    if (t.codigoProyecto != null && t.codigoProyecto!.trim().isNotEmpty) return true;
+    return t.esMantenimientoInterno &&
+        usa(t) &&
+        t.evaluacionTecnica != null &&
+        t.estadoActual != EstadoTicket.costos &&
+        t.estadoActual != EstadoTicket.anulado;
+  }
+
   /// Equipo del Plan Maestro (catálogo) de una reparación con este flujo.
   static String equipoPlanMaestro(TipoEquipo e) => e.name.toLowerCase();
 

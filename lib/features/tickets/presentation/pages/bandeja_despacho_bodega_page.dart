@@ -1,4 +1,5 @@
 import 'package:aquaspot_postventa/features/tickets/domain/services/resumen_mantenimiento_service.dart';
+import '../../domain/services/flujo_reportes_automaticos_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/enum/ticket_enums.dart';
@@ -146,7 +147,9 @@ class _BandejaDespachoBodegaPageState extends State<BandejaDespachoBodegaPage> {
             // 📦 Picking finalizado: el ticket ya está solo en Proceso de Trabajo.
             if (_Estado.efectivo(t) == _Estado.pickingFinalizado) return false;
 
-            final tieneProyecto = t.codigoProyecto != null && t.codigoProyecto!.trim().isNotEmpty;
+            // En paralelo con Compras: reparación con proyecto o mantenimiento
+            // interno ya evaluado (FlujoReportesAutomaticosService).
+            final tieneProyecto = FlujoReportesAutomaticosService.habilitadoEnParalelo(t);
             final enEstadoBodega = t.estadoActual == EstadoTicket.bodega;
             final visiblePorCompras = t.tieneAlMenosUnCheckCompras;
 

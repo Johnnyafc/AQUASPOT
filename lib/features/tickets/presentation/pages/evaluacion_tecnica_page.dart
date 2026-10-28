@@ -1189,9 +1189,9 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
                                       '${actSel.actividad.codigo} - ${actSel.actividad.nombre}',
                                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                                     ),
-                                    if (actSel.textoIncluyeDinamico.isNotEmpty)
+                                    if (actSel.textoIncluye(sinPropuestaComercial: FlujoReportesAutomaticosService.sinPropuestaComercial(widget.ticket)).isNotEmpty)
                                       Text(
-                                        actSel.textoIncluyeDinamico,
+                                        actSel.textoIncluye(sinPropuestaComercial: FlujoReportesAutomaticosService.sinPropuestaComercial(widget.ticket)),
                                         maxLines: 3,
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.blueGrey),
@@ -1457,7 +1457,9 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
     bool esSupervisorOAdmin,
     bool isProcesando,
   ) {
-    final totalItems = actSel.itemsInternos.length + actSel.itemsComerciales.length;
+    // Cosechadora / Contador: sin propuesta comercial (solo Taller / Bodega).
+    final sinPropuesta = FlujoReportesAutomaticosService.sinPropuestaComercial(widget.ticket);
+    final totalItems = actSel.itemsInternos.length + (sinPropuesta ? 0 : actSel.itemsComerciales.length);
 
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -1540,7 +1542,7 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
               );
             }),
           ],
-          if (actSel.itemsComerciales.isNotEmpty) ...[
+          if (!sinPropuesta && actSel.itemsComerciales.isNotEmpty) ...[
             const SizedBox(height: 8),
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 4),
@@ -1586,7 +1588,7 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
               );
             }),
           ],
-          if (actSel.itemsInternos.isEmpty && actSel.itemsComerciales.isEmpty)
+          if (actSel.itemsInternos.isEmpty && (sinPropuesta || actSel.itemsComerciales.isEmpty))
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
               child: Text('Esta actividad no requiere repuestos adicionales.', style: TextStyle(fontSize: 12, color: Colors.grey)),

@@ -8,6 +8,7 @@ import 'package:aquaspot_postventa/features/tickets/presentation/pages/materiale
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.dart';
 import '../../domain/services/resumen_mantenimiento_service.dart';
+import '../../domain/services/flujo_reportes_automaticos_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -105,7 +106,9 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
                 return false;
               }
 
-              final tieneProyecto = t.codigoProyecto != null && t.codigoProyecto!.trim().isNotEmpty;
+              // En paralelo con Compras: reparación con proyecto o mantenimiento
+              // interno ya evaluado (FlujoReportesAutomaticosService).
+              final tieneProyecto = FlujoReportesAutomaticosService.habilitadoEnParalelo(t);
               final enEstadoTrabajo = t.estadoActual == EstadoTicket.procesoTrabajo;
               final tieneDespachoTemprano = t.tieneAlMenosUnDespachoBodega;
               return enEstadoTrabajo || tieneDespachoTemprano || tieneProyecto;

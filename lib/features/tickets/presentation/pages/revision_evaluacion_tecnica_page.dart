@@ -1,5 +1,6 @@
 // lib/features/tickets/presentation/pages/revision_evaluacion_tecnica_page.dart
 import 'dart:typed_data';
+import '../../domain/services/flujo_reportes_automaticos_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_picker/file_picker.dart' as fp;
@@ -214,6 +215,9 @@ class _RevisionEvaluacionTecnicaPageState extends State<RevisionEvaluacionTecnic
     );
   }
 
+  /// Cosechadora / Contador: sin propuesta comercial (solo Taller / Bodega).
+  bool get _sinPropuesta => FlujoReportesAutomaticosService.sinPropuestaComercial(widget.ticket);
+
   Widget _buildDetalleExcelTab() {
     // Consolidar ítems comerciales e internos
     final Map<String, ItemCatalogoEntity> mapaComerciales = {};
@@ -288,7 +292,9 @@ class _RevisionEvaluacionTecnicaPageState extends State<RevisionEvaluacionTecnic
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      'Este archivo contiene dos hojas: "MATERIAL" (repuestos de taller consolidados y cotización comercial) y "ACTIVIDADES" (alcance de trabajo formal).',
+                      _sinPropuesta
+                          ? 'Este archivo contiene dos hojas: "MATERIAL" (repuestos de taller / bodega consolidados) y "ACTIVIDADES" (alcance de trabajo formal).'
+                          : 'Este archivo contiene dos hojas: "MATERIAL" (repuestos de taller consolidados y cotización comercial) y "ACTIVIDADES" (alcance de trabajo formal).',
                       style: TextStyle(fontSize: 13, color: Colors.blue.shade900),
                     ),
                   ),
@@ -315,9 +321,9 @@ class _RevisionEvaluacionTecnicaPageState extends State<RevisionEvaluacionTecnic
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (act.textoIncluyeDinamico.isNotEmpty) ...[
+                        if (act.textoIncluye(sinPropuestaComercial: _sinPropuesta).isNotEmpty) ...[
                           Text(
-                            act.textoIncluyeDinamico,
+                            act.textoIncluye(sinPropuestaComercial: _sinPropuesta),
                             style: TextStyle(fontStyle: FontStyle.italic, color: Colors.blueGrey.shade800, fontSize: 12),
                           ),
                           const SizedBox(height: 4),
@@ -330,150 +336,153 @@ class _RevisionEvaluacionTecnicaPageState extends State<RevisionEvaluacionTecnic
               )),
 
           // 💼 TABLA DE PROPUESTA COMERCIAL CONSOLIDADA
-          const SizedBox(height: 16),
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-              side: BorderSide(color: Colors.green.shade400),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(14.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.receipt_long, color: Colors.green.shade800),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Propuesta Comercial (${mapaComerciales.length} ítems):',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.green.shade900),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          if (mapaComerciales.isNotEmpty)
-                            TextButton.icon(
-                              icon: const Icon(Icons.copy_all, size: 14),
-                              label: const Text('Copiar Nombres', style: TextStyle(fontSize: 11)),
-                              onPressed: () {
-                                final buffer = StringBuffer();
-                                for (final r in mapaComerciales.values) {
-                                  buffer.writeln(r.descripcion);
-                                }
-                                Clipboard.setData(ClipboardData(text: buffer.toString().trim()));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Nombres de repuestos comerciales copiados.'),
-                                    backgroundColor: Colors.green,
-                                    duration: Duration(seconds: 2),
-                                  ),
-                                );
-                              },
-                            ),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.green.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.green.shade600),
-                            ),
-                            child: Text(
-                              '${totalHorasHombre.toStringAsFixed(1)} HH',
-                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green.shade900, fontSize: 12),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 16),
-                  if (mapaComerciales.isEmpty)
-                    const Text('No hay repuestos comerciales requeridos.', style: TextStyle(color: Colors.grey, fontSize: 12))
-                  else
-                    Table(
-                      columnWidths: const {
-                        0: FlexColumnWidth(2.5),
-                        1: FlexColumnWidth(5.0),
-                        2: FlexColumnWidth(2.0),
-                        3: FlexColumnWidth(2.0),
-                      },
+          // (Cosechadora / Contador no tienen propuesta comercial.)
+          if (!_sinPropuesta) ...[
+            const SizedBox(height: 16),
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(color: Colors.green.shade400),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(14.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        TableRow(
-                          decoration: BoxDecoration(color: Colors.grey.shade100),
-                          children: const [
-                            Padding(padding: EdgeInsets.all(6), child: Text('Código', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                            Padding(padding: EdgeInsets.all(6), child: Text('Descripción / Nombre', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                            Padding(padding: EdgeInsets.all(6), child: Text('Cant.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
-                            Padding(padding: EdgeInsets.all(6), child: Text('Unidad', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
+                        Row(
+                          children: [
+                            Icon(Icons.receipt_long, color: Colors.green.shade800),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Propuesta Comercial (${mapaComerciales.length} ítems):',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.green.shade900),
+                            ),
                           ],
                         ),
-                        ...mapaComerciales.values.map((it) {
-                          final cantStr = (it.cantidad % 1 == 0) ? it.cantidad.toInt().toString() : it.cantidad.toString();
-                          return TableRow(
-                            decoration: BoxDecoration(
-                              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-                            ),
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(6),
-                                child: Row(
-                                  children: [
-                                    Expanded(child: Text(it.codigo, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
-                                    CopyIconButtonWidget(etiqueta: 'Código', valor: it.codigo),
-                                  ],
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(6),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Tooltip(
-                                        message: 'Tocar para copiar nombre',
-                                        child: InkWell(
-                                          onTap: () {
-                                            Clipboard.setData(ClipboardData(text: it.descripcion));
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(
-                                                content: Text('Copiado: ${it.descripcion}'),
-                                                duration: const Duration(milliseconds: 1200),
-                                                behavior: SnackBarBehavior.floating,
-                                              ),
-                                            );
-                                          },
-                                          child: Text(it.descripcion, style: const TextStyle(fontSize: 11)),
-                                        ),
-                                      ),
+                        Row(
+                          children: [
+                            if (mapaComerciales.isNotEmpty)
+                              TextButton.icon(
+                                icon: const Icon(Icons.copy_all, size: 14),
+                                label: const Text('Copiar Nombres', style: TextStyle(fontSize: 11)),
+                                onPressed: () {
+                                  final buffer = StringBuffer();
+                                  for (final r in mapaComerciales.values) {
+                                    buffer.writeln(r.descripcion);
+                                  }
+                                  Clipboard.setData(ClipboardData(text: buffer.toString().trim()));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Nombres de repuestos comerciales copiados.'),
+                                      backgroundColor: Colors.green,
+                                      duration: Duration(seconds: 2),
                                     ),
-                                    CopyIconButtonWidget(etiqueta: 'Nombre de repuesto', valor: it.descripcion),
-                                  ],
-                                ),
+                                  );
+                                },
                               ),
-                              Padding(
-                                padding: const EdgeInsets.all(6),
-                                child: Text(
-                                  cantStr,
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF005A9C)),
-                                  textAlign: TextAlign.center,
-                                ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.green.shade600),
                               ),
-                              Padding(padding: const EdgeInsets.all(6), child: Text(it.unidad, style: const TextStyle(fontSize: 11), textAlign: TextAlign.center)),
-                            ],
-                          );
-                        }),
+                              child: Text(
+                                '${totalHorasHombre.toStringAsFixed(1)} HH',
+                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green.shade900, fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
-                ],
+                    const Divider(height: 16),
+                    if (mapaComerciales.isEmpty)
+                      const Text('No hay repuestos comerciales requeridos.', style: TextStyle(color: Colors.grey, fontSize: 12))
+                    else
+                      Table(
+                        columnWidths: const {
+                          0: FlexColumnWidth(2.5),
+                          1: FlexColumnWidth(5.0),
+                          2: FlexColumnWidth(2.0),
+                          3: FlexColumnWidth(2.0),
+                        },
+                        children: [
+                          TableRow(
+                            decoration: BoxDecoration(color: Colors.grey.shade100),
+                            children: const [
+                              Padding(padding: EdgeInsets.all(6), child: Text('Código', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                              Padding(padding: EdgeInsets.all(6), child: Text('Descripción / Nombre', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                              Padding(padding: EdgeInsets.all(6), child: Text('Cant.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
+                              Padding(padding: EdgeInsets.all(6), child: Text('Unidad', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
+                            ],
+                          ),
+                          ...mapaComerciales.values.map((it) {
+                            final cantStr = (it.cantidad % 1 == 0) ? it.cantidad.toInt().toString() : it.cantidad.toString();
+                            return TableRow(
+                              decoration: BoxDecoration(
+                                border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                              ),
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(6),
+                                  child: Row(
+                                    children: [
+                                      Expanded(child: Text(it.codigo, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
+                                      CopyIconButtonWidget(etiqueta: 'Código', valor: it.codigo),
+                                    ],
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.all(6),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Tooltip(
+                                          message: 'Tocar para copiar nombre',
+                                          child: InkWell(
+                                            onTap: () {
+                                              Clipboard.setData(ClipboardData(text: it.descripcion));
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(
+                                                  content: Text('Copiado: ${it.descripcion}'),
+                                                  duration: const Duration(milliseconds: 1200),
+                                                  behavior: SnackBarBehavior.floating,
+                                                ),
+                                              );
+                                            },
+                                            child: Text(it.descripcion, style: const TextStyle(fontSize: 11)),
+                                          ),
+                                        ),
+                                      ),
+                                      CopyIconButtonWidget(etiqueta: 'Nombre de repuesto', valor: it.descripcion),
+                                    ],
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.all(6),
+                                  child: Text(
+                                    cantStr,
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF005A9C)),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                                Padding(padding: const EdgeInsets.all(6), child: Text(it.unidad, style: const TextStyle(fontSize: 11), textAlign: TextAlign.center)),
+                              ],
+                            );
+                          }),
+                        ],
+                      ),
+                  ],
+                ),
               ),
             ),
-          ),
+          ],
 
           // 🔧 TABLA DE REPUESTOS TALLER / BODEGA
           const SizedBox(height: 12),

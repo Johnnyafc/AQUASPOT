@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import '../../domain/services/flujo_reportes_automaticos_service.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/entities/actividad_evaluacion_seleccionada.dart';
 
@@ -190,7 +191,9 @@ class GeneradorPdfEvaluacion {
           ...actividadesSeleccionadas.asMap().entries.map((entry) {
             final idx = entry.key;
             final actSel = entry.value;
-            final textoIncluye = actSel.textoIncluyeDinamico;
+            // Cosechadora / Contador: sin propuesta comercial → repuestos Taller / Bodega.
+            final textoIncluye = actSel.textoIncluye(
+                sinPropuestaComercial: FlujoReportesAutomaticosService.sinPropuestaComercial(ticket));
             return pw.Padding(
               padding: const pw.EdgeInsets.only(bottom: 10),
               child: pw.Column(

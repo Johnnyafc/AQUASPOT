@@ -1,6 +1,7 @@
 // lib/features/tickets/presentation/services/generador_excel_evaluacion.dart
 import 'dart:typed_data';
 import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xlsio;
+import '../../domain/services/flujo_reportes_automaticos_service.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/entities/actividad_evaluacion_seleccionada.dart';
 import '../../../../features/catalogo/domain/entities/item_catalogo_entity.dart';
@@ -11,6 +12,8 @@ class GeneradorExcelEvaluacion {
     required List<ActividadEvaluacionSeleccionada> actividadesSeleccionadas,
   }) {
     final xlsio.Workbook workbook = xlsio.Workbook(2);
+    // Cosechadora / Contador: sin propuesta comercial (solo Taller / Bodega).
+    final sinPropuesta = FlujoReportesAutomaticosService.sinPropuestaComercial(ticket);
 
     // =========================================================================
     // 📄 HOJA 1: MATERIAL
@@ -63,13 +66,15 @@ class GeneradorExcelEvaluacion {
     sheetMaterial.getRangeByName('G8:H8').cellStyle.bold = true;
 
     // Encabezados de Tabla Comercial (Cols J-M)
-    sheetMaterial.getRangeByName('J8').setText('PROPUESTA COMERCIAL');
-    sheetMaterial.getRangeByName('J8:M8').cellStyle.bold = true;
-    sheetMaterial.getRangeByName('J7').setText('CODIGO');
-    sheetMaterial.getRangeByName('K7').setText('DESCRIPCION');
-    sheetMaterial.getRangeByName('L7').setText('UNIDAD');
-    sheetMaterial.getRangeByName('M7').setText('CANTIDAD');
-    sheetMaterial.getRangeByName('J7:M7').cellStyle.bold = true;
+    if (!sinPropuesta) {
+      sheetMaterial.getRangeByName('J8').setText('PROPUESTA COMERCIAL');
+      sheetMaterial.getRangeByName('J8:M8').cellStyle.bold = true;
+      sheetMaterial.getRangeByName('J7').setText('CODIGO');
+      sheetMaterial.getRangeByName('K7').setText('DESCRIPCION');
+      sheetMaterial.getRangeByName('L7').setText('UNIDAD');
+      sheetMaterial.getRangeByName('M7').setText('CANTIDAD');
+      sheetMaterial.getRangeByName('J7:M7').cellStyle.bold = true;
+    }
 
     // 🔄 1. CONSOLIDACIÓN DE REPUESTOS INTERNOS (Sumar cantidades para códigos repetidos)
     final Map<String, ItemCatalogoEntity> mapaInternos = {};
@@ -121,7 +126,7 @@ class GeneradorExcelEvaluacion {
 
     // Llenar tabla Comercial
     int rowComercial = 9;
-    for (final it in mapaComerciales.values) {
+    for (final it in sinPropuesta ? const <ItemCatalogoEntity>[] : mapaComerciales.values) {
       sheetMaterial.getRangeByName('J$rowComercial').setText(it.codigo);
       sheetMaterial.getRangeByName('K$rowComercial').setText(it.descripcion);
       sheetMaterial.getRangeByName('L$rowComercial').setText(it.unidad);
@@ -130,11 +135,13 @@ class GeneradorExcelEvaluacion {
     }
 
     // Fila final de Mano de Obra en la propuesta comercial
-    sheetMaterial.getRangeByName('K$rowComercial').setText('MANO DE OBRA');
-    sheetMaterial.getRangeByName('K$rowComercial').cellStyle.bold = true;
-    sheetMaterial.getRangeByName('L$rowComercial').setText('HH');
-    sheetMaterial.getRangeByName('M$rowComercial').setNumber(totalHorasHombre);
-    sheetMaterial.getRangeByName('M$rowComercial').cellStyle.bold = true;
+    if (!sinPropuesta) {
+      sheetMaterial.getRangeByName('K$rowComercial').setText('MANO DE OBRA');
+      sheetMaterial.getRangeByName('K$rowComercial').cellStyle.bold = true;
+      sheetMaterial.getRangeByName('L$rowComercial').setText('HH');
+      sheetMaterial.getRangeByName('M$rowComercial').setNumber(totalHorasHombre);
+      sheetMaterial.getRangeByName('M$rowComercial').cellStyle.bold = true;
+    }
 
     // Firmas al pie
     final int rowFirmas = (rowInternos > rowComercial ? rowInternos : rowComercial) + 3;
@@ -170,7 +177,7 @@ class GeneradorExcelEvaluacion {
       sheetActividades.getRangeByName('A$rowAct:B$rowAct').cellStyle.bold = true;
       rowAct++;
 
-      final textoIncluye = actSel.textoIncluyeDinamico;
+      final textoIncluye = actSel.textoIncluye(sinPropuestaComercial: sinPropuesta);
       if (textoIncluye.isNotEmpty) {
         sheetActividades.getRangeByName('B$rowAct').setText(textoIncluye);
         sheetActividades.getRangeByName('B$rowAct').cellStyle.italic = true;

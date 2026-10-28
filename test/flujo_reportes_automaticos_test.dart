@@ -72,6 +72,32 @@ void main() {
     expect(F.equipoPlanMaestro(TipoEquipo.Caracol), 'caracol');
   });
 
+  test('Sin propuesta comercial: solo reparación / garantía de Cosechadora y Contador con el flujo', () {
+    expect(F.sinPropuestaComercial(reparacion(TipoEquipo.Cosechadora)), isTrue);
+    expect(F.sinPropuestaComercial(reparacion(TipoEquipo.Contador, tipo: TipoRequerimiento.reclamoGarantia)), isTrue);
+    expect(F.sinPropuestaComercial(reparacion(TipoEquipo.Caracol)), isFalse);
+    expect(F.sinPropuestaComercial(reparacion(TipoEquipo.Otros)), isFalse);
+    expect(F.sinPropuestaComercial(mantenimiento()), isFalse);
+    expect(F.sinPropuestaComercial(reparacion(TipoEquipo.Cosechadora).copyWith(evaluacionTecnica: evaluada)), isFalse,
+        reason: 'una cosechadora en curso sin la marca sigue con su propuesta comercial');
+  });
+
+  test('En paralelo con Compras: reparación con proyecto; mantenimiento desde que se evalúa', () {
+    expect(F.habilitadoEnParalelo(reparacion(TipoEquipo.Caracol)), isFalse);
+    expect(F.habilitadoEnParalelo(reparacion(TipoEquipo.Caracol).copyWith(codigoProyecto: 'P-100')), isTrue);
+    expect(F.habilitadoEnParalelo(mantenimiento()), isFalse, reason: 'aún no evaluado');
+    final evaluadoEnCompras = mantenimiento().copyWith(
+      evaluacionTecnica: evaluada,
+      usaFlujoReportesAutomaticos: true,
+      estadoActual: EstadoTicket.compras,
+    );
+    expect(F.habilitadoEnParalelo(evaluadoEnCompras), isTrue);
+    expect(F.habilitadoEnParalelo(evaluadoEnCompras.copyWith(estadoActual: EstadoTicket.costos)), isFalse,
+        reason: 'solo espera códigos de Costos');
+    expect(F.habilitadoEnParalelo(evaluadoEnCompras.copyWith(usaFlujoReportesAutomaticos: false)), isFalse,
+        reason: 'mantenimiento en curso sin la marca');
+  });
+
   test('Venta de repuesto: su propia regla (validación por repuesto, sin liberar reservas)', () {
     final venta = reparacion(TipoEquipo.Caracol, tipo: TipoRequerimiento.ventaRepuesto)
         .copyWith(usaFlujoReportesAutomaticos: true);

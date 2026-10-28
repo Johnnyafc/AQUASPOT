@@ -1665,7 +1665,9 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Propuesta Comercial Requerida',
+                    FlujoReportesAutomaticosService.sinPropuestaComercial(widget.ticket)
+                        ? 'Cotización con materiales de Taller / Bodega'
+                        : 'Propuesta Comercial Requerida',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green.shade900),
                   ),
                 ),
@@ -1893,259 +1895,263 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
             // ==========================================
             // 2. TABLA DE REPUESTOS COMERCIALES (EDITABLE)
             // ==========================================
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Repuestos e Insumos Comerciales (${_repuestosComerciales.length} ítems):',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
-                  ),
-                ),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.add_circle, size: 16),
-                      label: const Text('Añadir Repuesto', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green.shade700,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      ),
-                      onPressed: _mostrarDialogoAgregarRepuesto,
+            // Cosechadora / Contador: sin propuesta comercial; se cotiza con
+            // los materiales de Taller / Bodega (sección 3).
+            if (!FlujoReportesAutomaticosService.sinPropuestaComercial(widget.ticket)) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Repuestos e Insumos Comerciales (${_repuestosComerciales.length} ítems):',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
                     ),
-                    if (_repuestosComerciales.isNotEmpty) ...[
-                      TextButton.icon(
-                        icon: const Icon(Icons.copy_all, size: 15),
-                        label: const Text('Copiar Nombres', style: TextStyle(fontSize: 12)),
-                        onPressed: () {
-                          final buffer = StringBuffer();
-                          for (final r in _repuestosComerciales) {
-                            buffer.writeln(r.descripcion);
-                          }
-                          Clipboard.setData(ClipboardData(text: buffer.toString().trim()));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Nombres de repuestos copiados al portapapeles.'),
-                              backgroundColor: Colors.green,
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        },
+                  ),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.add_circle, size: 16),
+                        label: const Text('Añadir Repuesto', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green.shade700,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        ),
+                        onPressed: _mostrarDialogoAgregarRepuesto,
                       ),
-                      TextButton.icon(
-                        icon: const Icon(Icons.table_chart_outlined, size: 15),
-                        label: const Text('Copiar Tabla', style: TextStyle(fontSize: 12)),
-                        onPressed: () {
-                          final buffer = StringBuffer();
-                          buffer.writeln('CÓDIGO\tDESCRIPCIÓN\tCANTIDAD\tUNIDAD');
-                          for (final r in _repuestosComerciales) {
-                            buffer.writeln('${r.codigo}\t${r.descripcion}\t${r.cantidad}\t${r.unidad}');
-                          }
-                          Clipboard.setData(ClipboardData(text: buffer.toString()));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Tabla de repuestos comerciales copiada al portapapeles.'),
-                              backgroundColor: Colors.green,
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        },
+                      if (_repuestosComerciales.isNotEmpty) ...[
+                        TextButton.icon(
+                          icon: const Icon(Icons.copy_all, size: 15),
+                          label: const Text('Copiar Nombres', style: TextStyle(fontSize: 12)),
+                          onPressed: () {
+                            final buffer = StringBuffer();
+                            for (final r in _repuestosComerciales) {
+                              buffer.writeln(r.descripcion);
+                            }
+                            Clipboard.setData(ClipboardData(text: buffer.toString().trim()));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Nombres de repuestos copiados al portapapeles.'),
+                                backgroundColor: Colors.green,
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                        ),
+                        TextButton.icon(
+                          icon: const Icon(Icons.table_chart_outlined, size: 15),
+                          label: const Text('Copiar Tabla', style: TextStyle(fontSize: 12)),
+                          onPressed: () {
+                            final buffer = StringBuffer();
+                            buffer.writeln('CÓDIGO\tDESCRIPCIÓN\tCANTIDAD\tUNIDAD');
+                            for (final r in _repuestosComerciales) {
+                              buffer.writeln('${r.codigo}\t${r.descripcion}\t${r.cantidad}\t${r.unidad}');
+                            }
+                            Clipboard.setData(ClipboardData(text: buffer.toString()));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Tabla de repuestos comerciales copiada al portapapeles.'),
+                                backgroundColor: Colors.green,
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+
+              if (_repuestosComerciales.isEmpty) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(Icons.inventory_2_outlined, size: 32, color: Colors.grey.shade500),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'No hay repuestos en la propuesta comercial.',
+                        style: TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Presione "Añadir Repuesto" para agregar partes o suministros necesarios.',
+                        style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
+                        textAlign: TextAlign.center,
                       ),
                     ],
-                  ],
+                  ),
+                ),
+              ] else ...[
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Table(
+                    columnWidths: const {
+                      0: FlexColumnWidth(2.2), // Código
+                      1: FlexColumnWidth(4.5), // Descripción
+                      2: FlexColumnWidth(3.0), // Cantidad con [-] [cant] [+]
+                      3: FlexColumnWidth(1.5), // Unidad
+                      4: FlexColumnWidth(1.0), // Eliminar
+                    },
+                    children: [
+                      TableRow(
+                        decoration: BoxDecoration(color: Colors.grey.shade200),
+                        children: const [
+                          Padding(padding: EdgeInsets.all(8), child: Text('Código', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                          Padding(padding: EdgeInsets.all(8), child: Text('Descripción / Nombre', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                          Padding(padding: EdgeInsets.all(8), child: Text('Cant.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
+                          Padding(padding: EdgeInsets.all(8), child: Text('Unidad', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
+                          Padding(padding: EdgeInsets.all(8), child: Text('', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                        ],
+                      ),
+                      ..._repuestosComerciales.asMap().entries.map((entry) {
+                        final idx = entry.key;
+                        final rep = entry.value;
+                        final cantStr = (rep.cantidad % 1 == 0) ? rep.cantidad.toInt().toString() : rep.cantidad.toString();
+
+                        return TableRow(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                          ),
+                          children: [
+                            // CÓDIGO
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      rep.codigo.isNotEmpty ? rep.codigo : 'S/C',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: rep.codigo.isNotEmpty ? Colors.black87 : Colors.grey.shade600,
+                                      ),
+                                    ),
+                                  ),
+                                  if (rep.codigo.isNotEmpty)
+                                    CopyIconButtonWidget(etiqueta: 'Código', valor: rep.codigo),
+                                ],
+                              ),
+                            ),
+                            // DESCRIPCIÓN
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Tooltip(
+                                      message: 'Tocar para copiar nombre',
+                                      child: InkWell(
+                                        onTap: () {
+                                          Clipboard.setData(ClipboardData(text: rep.descripcion));
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Copiado: ${rep.descripcion}'),
+                                              duration: const Duration(milliseconds: 1200),
+                                              behavior: SnackBarBehavior.floating,
+                                            ),
+                                          );
+                                        },
+                                        child: Text(rep.descripcion, style: const TextStyle(fontSize: 11)),
+                                      ),
+                                    ),
+                                  ),
+                                  CopyIconButtonWidget(etiqueta: 'Nombre de repuesto', valor: rep.descripcion),
+                                ],
+                              ),
+                            ),
+                            // CANTIDAD INTERACTIVA
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  InkWell(
+                                    onTap: () => _decrementarCantidad(idx),
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade200,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Icon(Icons.remove, size: 14, color: Colors.black87),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Tooltip(
+                                    message: 'Tocar para ingresar cantidad exacta',
+                                    child: InkWell(
+                                      onTap: () => _mostrarDialogoEditarCantidad(idx),
+                                      child: Container(
+                                        constraints: const BoxConstraints(minWidth: 32),
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue.shade50,
+                                          borderRadius: BorderRadius.circular(4),
+                                          border: Border.all(color: Colors.blue.shade300),
+                                        ),
+                                        child: Text(
+                                          cantStr,
+                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF005A9C)),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  InkWell(
+                                    onTap: () => _incrementarCantidad(idx),
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade200,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Icon(Icons.add, size: 14, color: Colors.black87),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // UNIDAD
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+                              child: Text(rep.unidad, style: const TextStyle(fontSize: 11), textAlign: TextAlign.center),
+                            ),
+                            // ELIMINAR
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: IconButton(
+                                icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                                tooltip: 'Eliminar ítem',
+                                onPressed: () => _confirmarEliminarRepuesto(idx),
+                              ),
+                            ),
+                          ],
+                        );
+                      }),
+                    ],
+                  ),
                 ),
               ],
-            ),
-            const SizedBox(height: 8),
-
-            if (_repuestosComerciales.isEmpty) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Column(
-                  children: [
-                    Icon(Icons.inventory_2_outlined, size: 32, color: Colors.grey.shade500),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'No hay repuestos en la propuesta comercial.',
-                      style: TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Presione "Añadir Repuesto" para agregar partes o suministros necesarios.',
-                      style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            ] else ...[
-              Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade300),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Table(
-                  columnWidths: const {
-                    0: FlexColumnWidth(2.2), // Código
-                    1: FlexColumnWidth(4.5), // Descripción
-                    2: FlexColumnWidth(3.0), // Cantidad con [-] [cant] [+]
-                    3: FlexColumnWidth(1.5), // Unidad
-                    4: FlexColumnWidth(1.0), // Eliminar
-                  },
-                  children: [
-                    TableRow(
-                      decoration: BoxDecoration(color: Colors.grey.shade200),
-                      children: const [
-                        Padding(padding: EdgeInsets.all(8), child: Text('Código', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                        Padding(padding: EdgeInsets.all(8), child: Text('Descripción / Nombre', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                        Padding(padding: EdgeInsets.all(8), child: Text('Cant.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
-                        Padding(padding: EdgeInsets.all(8), child: Text('Unidad', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center)),
-                        Padding(padding: EdgeInsets.all(8), child: Text('', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                      ],
-                    ),
-                    ..._repuestosComerciales.asMap().entries.map((entry) {
-                      final idx = entry.key;
-                      final rep = entry.value;
-                      final cantStr = (rep.cantidad % 1 == 0) ? rep.cantidad.toInt().toString() : rep.cantidad.toString();
-
-                      return TableRow(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-                        ),
-                        children: [
-                          // CÓDIGO
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    rep.codigo.isNotEmpty ? rep.codigo : 'S/C',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: rep.codigo.isNotEmpty ? Colors.black87 : Colors.grey.shade600,
-                                    ),
-                                  ),
-                                ),
-                                if (rep.codigo.isNotEmpty)
-                                  CopyIconButtonWidget(etiqueta: 'Código', valor: rep.codigo),
-                              ],
-                            ),
-                          ),
-                          // DESCRIPCIÓN
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Tooltip(
-                                    message: 'Tocar para copiar nombre',
-                                    child: InkWell(
-                                      onTap: () {
-                                        Clipboard.setData(ClipboardData(text: rep.descripcion));
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text('Copiado: ${rep.descripcion}'),
-                                            duration: const Duration(milliseconds: 1200),
-                                            behavior: SnackBarBehavior.floating,
-                                          ),
-                                        );
-                                      },
-                                      child: Text(rep.descripcion, style: const TextStyle(fontSize: 11)),
-                                    ),
-                                  ),
-                                ),
-                                CopyIconButtonWidget(etiqueta: 'Nombre de repuesto', valor: rep.descripcion),
-                              ],
-                            ),
-                          ),
-                          // CANTIDAD INTERACTIVA
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                InkWell(
-                                  onTap: () => _decrementarCantidad(idx),
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade200,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: const Icon(Icons.remove, size: 14, color: Colors.black87),
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                Tooltip(
-                                  message: 'Tocar para ingresar cantidad exacta',
-                                  child: InkWell(
-                                    onTap: () => _mostrarDialogoEditarCantidad(idx),
-                                    child: Container(
-                                      constraints: const BoxConstraints(minWidth: 32),
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: Colors.blue.shade50,
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(color: Colors.blue.shade300),
-                                      ),
-                                      child: Text(
-                                        cantStr,
-                                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF005A9C)),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                InkWell(
-                                  onTap: () => _incrementarCantidad(idx),
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade200,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: const Icon(Icons.add, size: 14, color: Colors.black87),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          // UNIDAD
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-                            child: Text(rep.unidad, style: const TextStyle(fontSize: 11), textAlign: TextAlign.center),
-                          ),
-                          // ELIMINAR
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: IconButton(
-                              icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
-                              tooltip: 'Eliminar ítem',
-                              onPressed: () => _confirmarEliminarRepuesto(idx),
-                            ),
-                          ),
-                        ],
-                      );
-                    }),
-                  ],
-                ),
-              ),
             ],
 
             // ==========================================

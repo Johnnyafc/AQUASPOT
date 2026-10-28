@@ -1027,7 +1027,9 @@ Future<void> _onProcesarEvaluacionDocumental(
           horasHombre: actSel.horasHombre,
           observacion: actSel.observacion,
           fotosUrls: fotosUrls,
-          incluye: actSel.textoIncluyeDinamico,
+          // Cosechadora / Contador (sin propuesta comercial): Taller / Bodega.
+          incluye: actSel.textoIncluye(
+              sinPropuestaComercial: FlujoReportesAutomaticosService.sinPropuestaComercial(event.ticket)),
         ),
       );
 
@@ -1070,7 +1072,11 @@ Future<void> _onProcesarEvaluacionDocumental(
 
     totalHorasHombre = sumaHH;
     repuestosTallerConsolidados = mapaTaller.values.toList();
-    repuestosComercialConsolidados = mapaComercial.values.toList();
+    // Cosechadora / Contador: sin propuesta comercial (Comercial cotiza con
+    // los repuestos Taller / Bodega).
+    repuestosComercialConsolidados = FlujoReportesAutomaticosService.sinPropuestaComercial(event.ticket)
+        ? <RepuestoRegistradoEntity>[]
+        : mapaComercial.values.toList();
   }
 
   // ==========================================

@@ -40,11 +40,23 @@ class ActividadEvaluacionSeleccionada {
     );
   }
 
-  String get textoIncluyeDinamico {
-    if (itemsComerciales.isEmpty) {
+  /// "Incluye: …" con los repuestos de la propuesta comercial (reparación).
+  String get textoIncluyeDinamico => _textoIncluye(itemsComerciales);
+
+  /// "Incluye: …" con los repuestos de Taller / Bodega: equipos sin
+  /// propuesta comercial (Cosechadora y Contador con el flujo de reportes
+  /// automáticos).
+  String get textoIncluyeTaller => _textoIncluye(itemsInternos);
+
+  /// Según el equipo: [sinPropuestaComercial] = Taller / Bodega.
+  String textoIncluye({required bool sinPropuestaComercial}) =>
+      sinPropuestaComercial ? textoIncluyeTaller : textoIncluyeDinamico;
+
+  String _textoIncluye(List<ItemCatalogoEntity> items) {
+    if (items.isEmpty) {
       return actividad.incluye;
     }
-    final itemsValidos = itemsComerciales.where((it) => it.cantidad > 0).toList();
+    final itemsValidos = items.where((it) => it.cantidad > 0).toList();
     if (itemsValidos.isEmpty) return '';
 
     final partes = itemsValidos.map((it) {
