@@ -231,6 +231,18 @@ export const enrutadorNotificacionesPush = onDocumentUpdated(
             "📦 Requerimiento en Bodega",
             `Ticket #${ticketId} listo para despacho.`
           );
+          return;
+        }
+        // 🛠️ Mantenimiento interno que pasa DIRECTO de la evaluación a Bodega
+        // (todo con stock o "No requiere compras"): nadie lo valida en
+        // Compras, así que no hay aviso por llegada parcial.
+        if (ticketAhora.tipoRequerimiento === "mantenimientoInterno" && ticketAntes.estadoActual === "recepcionFisica") {
+          await dispararAlarmaFiltroSegmento(
+            ["bodega"],
+            segmentoDestino,
+            "📦 Mantenimiento interno listo para picking",
+            `Ticket #${ticketId}: todos los repuestos están en bodega. Inicie el picking.`
+          );
         }
         return;
       }
