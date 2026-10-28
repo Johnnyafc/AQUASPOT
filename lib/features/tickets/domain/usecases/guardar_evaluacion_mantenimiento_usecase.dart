@@ -2,10 +2,10 @@
 //
 // Guarda la EVALUACIÓN TÉCNICA de un mantenimiento interno (actividades con
 // sus fotos ya subidas, informe PDF y Solicitud de materiales ya subidos) y
-// pasa el ticket a Compras (los repuestos sin código, con su ficha, esperan
-// en Costos). Valida antes de escribir
-// (EvaluacionMantenimientoService); en Caracol aparta el stock en la misma
-// transacción, igual que en reparación.
+// lo envía a su destino (EvaluacionMantenimientoService.conDestino: Proceso
+// de Trabajo, Despacho Bodega o Compras, según el stock ACTUAL; los
+// repuestos sin código, con su ficha, esperan en Costos). Valida antes de
+// escribir; aparta el stock en la misma transacción que decide el destino.
 
 import 'package:dartz/dartz.dart';
 import '../../../../core/enum/rol_usuario.dart';
@@ -53,13 +53,13 @@ class GuardarEvaluacionMantenimientoUseCase {
       return repository.actualizarTicket(evaluado);
     }
     // Solo se aparta lo que tiene código (los sin código aún no existen en bodega).
-    final reserva = await repository.guardarEvaluacionTecnicaConReservaStock(
+    return repository.guardarEvaluacionConReservaYDestino(
       ticket: evaluado,
       itemsAReservar: [
         for (final r in evaluado.evaluacionTecnica!.repuestosTaller)
           if (!EvaluacionMantenimientoService.esSinCodigo(r)) {'codigo': r.codigo, 'cantidad': r.cantidad},
       ],
+      ajustarConStock: (stock) => EvaluacionMantenimientoService.conDestino(evaluado, stock),
     );
-    return reserva.map((_) => evaluado);
   }
 }

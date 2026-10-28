@@ -98,6 +98,20 @@ class _RepoFalso implements ITicketRepository {
     return const Right(null);
   }
 
+  /// Stock neto que "lee" la transacción (código → cantidad).
+  Map<String, double> stock = const {};
+
+  @override
+  Future<Either<Failure, TicketEntity>> guardarEvaluacionConReservaYDestino({
+    required TicketEntity ticket,
+    required List<Map<String, dynamic>> itemsAReservar,
+    required TicketEntity Function(Map<String, double> stockNeto) ajustarConStock,
+  }) async {
+    reservados = itemsAReservar;
+    actualizado = ajustarConStock(stock);
+    return Right(actualizado!);
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -272,7 +286,6 @@ void main() {
       expect(S.firma('Tyrone Villavicencio'), 'Ing. Tyrone Villavicencio');
       expect(S.firma('ING. Tyrone'), 'Ing. Tyrone');
       expect(S.firma(''), 'Ing. Técnico de Servicio');
-      expect(S.encabezadoSolicitud.proyecto, 'AQUASPOT');
       expect(S.encabezadoSolicitud.centroCosto, 'MANTENIMIENTO INTERNO');
     });
 
@@ -333,7 +346,7 @@ void main() {
       expect(repo.reservados!.map((m) => m['codigo']), ['R-1', 'SELLO-9'], reason: 'lo sin código no se aparta');
     });
 
-    test('Cosechadora: guarda sin reserva', () async {
+    test('Cosechadora: también aparta el stock (flujo de reportes automáticos)', () async {
       final repo = _RepoFalso();
       await GuardarEvaluacionMantenimientoUseCase(repo)(
         ticketDe(TipoActivoMantenimiento.cosechadora),
@@ -344,8 +357,9 @@ void main() {
         rol: RolUsuario.tecnico,
         ahora: ahora,
       );
-      expect(repo.reservados, isNull);
+      expect(repo.reservados!.map((m) => m['codigo']), ['R-1', 'SELLO-9']);
       expect(repo.actualizado!.estadoActual, EstadoTicket.compras);
+      expect(repo.actualizado!.usaFlujoReportesAutomaticos, isTrue);
     });
   });
 }

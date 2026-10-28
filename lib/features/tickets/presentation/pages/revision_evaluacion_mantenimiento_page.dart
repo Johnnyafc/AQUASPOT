@@ -166,7 +166,7 @@ class RevisionEvaluacionMantenimientoPage extends StatelessWidget {
                   const Divider(height: 20),
                   Text('Equipo: ${(m?.tipoActivo.etiqueta ?? ticket?.equipo.name ?? '').toUpperCase()}'),
                   Text(m?.placa != null ? 'Placa: ${m!.placa}' : 'Serie: ${ticket?.numeroSerie ?? 'S/N'}'),
-                  Text('Proyecto: ${enc.proyecto} · Centro de costo: ${enc.centroCosto}'),
+                  Text('Centro de costo: ${enc.centroCosto}'),
                   Text('Actividades a realizar: ${s.actividades.length}'),
                   Text('Mano de Obra Total: ${_numero(totalHoras)} HH',
                       style: const TextStyle(fontWeight: FontWeight.bold, color: _azul)),

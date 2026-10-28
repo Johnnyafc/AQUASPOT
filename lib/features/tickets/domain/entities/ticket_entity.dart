@@ -138,6 +138,12 @@ final String marca; // 🚨 El que te habías olvidado
   // tipo de mantenimiento, tipo de máquina, placa, km y fecha de la falla.
   final MantenimientoInternoEntity? mantenimientoInterno;
 
+  // 🤖 "Usa flujo con generación de reportes automáticos": se marca al
+  // guardar la Evaluación Técnica (FlujoReportesAutomaticosService). Separa
+  // los tickets nuevos de los antiguos, que terminan con el flujo con el que
+  // empezaron.
+  final bool usaFlujoReportesAutomaticos;
+
 const TicketEntity({
     required this.id,
     required this.estadoActual,
@@ -210,6 +216,7 @@ const TicketEntity({
     this.pickingFinalizadoEn,
     this.historialCambiosMateriales = const [],
     this.mantenimientoInterno,
+    this.usaFlujoReportesAutomaticos = false,
   });
 
   // ⚙️ CLONADOR INDUSTRIAL CORREGIDO (Mutación Segura)
@@ -285,6 +292,7 @@ const TicketEntity({
     DateTime? pickingFinalizadoEn,
     List<CambioMaterialEntity>? historialCambiosMateriales,
     MantenimientoInternoEntity? mantenimientoInterno,
+    bool? usaFlujoReportesAutomaticos,
   }) {
     return TicketEntity(
       id: id ?? this.id,
@@ -358,6 +366,7 @@ const TicketEntity({
       pickingFinalizadoEn: pickingFinalizadoEn ?? this.pickingFinalizadoEn,
       historialCambiosMateriales: historialCambiosMateriales ?? this.historialCambiosMateriales,
       mantenimientoInterno: mantenimientoInterno ?? this.mantenimientoInterno,
+      usaFlujoReportesAutomaticos: usaFlujoReportesAutomaticos ?? this.usaFlujoReportesAutomaticos,
     );
   }
 
@@ -434,6 +443,7 @@ const TicketEntity({
         pickingFinalizadoEn,
         historialCambiosMateriales,
         mantenimientoInterno,
+        usaFlujoReportesAutomaticos,
       ];
 
   /// Reclamo de garantía según el tipo de requerimiento O según la auditoría:

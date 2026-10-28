@@ -14,7 +14,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../../injection_container.dart' as di;
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_state.dart';
@@ -25,16 +24,15 @@ import '../../../plan_preventivo/domain/services/plan_preventivo_service.dart';
 import '../../domain/entities/actividad_mantenimiento.dart';
 import '../../domain/entities/archivo_adjunto.dart';
 import '../../domain/entities/ficha_creacion_repuesto_entity.dart';
-import '../../domain/entities/mantenimiento_interno_entity.dart';
 import '../../domain/entities/repuesto_registrado_entity.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/services/creacion_codigos_mantenimiento_service.dart';
 import '../../domain/services/evaluacion_mantenimiento_service.dart';
-import '../../domain/services/formulario_mantenimiento_service.dart';
 import '../bloc/evaluacion_mantenimiento_cubit.dart';
 import '../services/generador_excel_mantenimiento.dart';
 import '../services/generador_pdf_mantenimiento.dart';
 import '../widgets/ficha_creacion_repuesto_dialog.dart';
+import '../widgets/resumen_mantenimiento_widget.dart';
 import 'revision_evaluacion_mantenimiento_page.dart';
 
 typedef _S = EvaluacionMantenimientoService;
@@ -167,86 +165,15 @@ class _VistaEvaluacionMantenimientoState extends State<_VistaEvaluacionMantenimi
 }
 
 // ============================================================ Ficha
+/// Datos con los que se creó el requerimiento, con sus fotos (regla del
+/// CLAUDE.md para mantenimiento interno).
 class _FichaMantenimiento extends StatelessWidget {
   final TicketEntity ticket;
 
   const _FichaMantenimiento({required this.ticket});
 
-  String _numero(double v) => v % 1 == 0 ? v.toInt().toString() : v.toString();
-
-  Future<void> _abrir(String url) async {
-    await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-  }
-
   @override
-  Widget build(BuildContext context) {
-    final m = ticket.mantenimientoInterno;
-    final tipo = m?.tipoActivo;
-    final creador = ticket.historialEventos.isEmpty ? null : ticket.historialEventos.first.usuarioNombre;
-    final filas = <(String, String)>[
-      if (m != null) ('Tipo de mantenimiento:', m.tipoMantenimiento.etiqueta),
-      if (tipo != null) ('Máquina:', tipo.etiqueta),
-      (FormularioMantenimientoService.etiquetaSerieOPlaca(tipo), m?.placa ?? ticket.numeroSerie ?? '—'),
-      if (ticket.horometro != null) ('Horómetro:', '${_numero(ticket.horometro!)} h'),
-      if (m?.kilometraje != null) ('Kilometraje:', '${_numero(m!.kilometraje!)} km'),
-      if (m?.fechaHoraFalla != null)
-        (FormularioMantenimientoService.etiquetaFechaDe(tipo, m!.tipoMantenimiento),
-            FormularioMantenimientoService.textoFecha(tipo, m.fechaHoraFalla!)),
-      if (creador != null) ('Creado por:', creador),
-    ];
-    return Card(
-      elevation: 1.5,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Datos del requerimiento', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const Divider(height: 24),
-            for (final (etiqueta, valor) in filas)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(width: 190, child: Text(etiqueta, style: const TextStyle(fontSize: 13, color: Colors.grey))),
-                    Expanded(child: Text(valor, style: const TextStyle(fontWeight: FontWeight.w600))),
-                  ],
-                ),
-              ),
-            const Divider(height: 24),
-            Text(
-              m == null ? 'Detalle' : FormularioMantenimientoService.etiquetaDetalle(m.tipoMantenimiento),
-              style: const TextStyle(fontSize: 13, color: Colors.grey),
-            ),
-            const SizedBox(height: 4),
-            Text(ticket.fallaReportada, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-            const SizedBox(height: 12),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              if (m?.urlFotoLectura != null)
-                ActionChip(
-                  avatar: const Icon(Icons.speed, size: 18),
-                  label: Text(FormularioMantenimientoService.etiquetaFotoLectura(tipo)),
-                  onPressed: () => _abrir(m!.urlFotoLectura!),
-                ),
-              for (var i = 0; i < ticket.fotosUrls.length; i++)
-                ActionChip(
-                  avatar: const Icon(Icons.photo_outlined, size: 18),
-                  label: Text('Foto ${i + 1}'),
-                  onPressed: () => _abrir(ticket.fotosUrls[i]),
-                ),
-              for (var i = 0; i < (m?.videosUrls.length ?? 0); i++)
-                ActionChip(
-                  avatar: const Icon(Icons.play_circle_outline, size: 18),
-                  label: Text('Video ${i + 1}'),
-                  onPressed: () => _abrir(m!.videosUrls[i]),
-                ),
-            ]),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => ResumenMantenimientoWidget(ticket: ticket, titulo: 'Datos del requerimiento');
 }
 
 // ============================================================ Actividades
@@ -685,8 +612,17 @@ class _TarjetaActividad extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(children: [
+              Text('${indice + 1}. ${a.codigo}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(width: 10),
+              // El nombre se puede editar (el código no cambia).
               Expanded(
-                child: Text('${indice + 1}. ${a.codigo} — ${a.nombre}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                child: TextFormField(
+                  initialValue: a.nombre,
+                  textCapitalization: TextCapitalization.sentences,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  decoration: const InputDecoration(labelText: 'Nombre de la actividad', isDense: true),
+                  onChanged: (v) => cubit.cambiarNombre(indice, v),
+                ),
               ),
               IconButton(
                 tooltip: 'Quitar actividad',

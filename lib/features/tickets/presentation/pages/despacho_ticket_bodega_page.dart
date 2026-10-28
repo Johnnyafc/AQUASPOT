@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import '../../domain/services/resumen_mantenimiento_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
@@ -727,7 +728,9 @@ class _DespachoTicketBodegaPageState extends State<DespachoTicketBodegaPage>
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Proyecto: ${currentTicket.codigoProyecto ?? (currentTicket.campamento.isNotEmpty ? currentTicket.campamento : "SIN PROYECTO")}',
+                            currentTicket.esMantenimientoInterno
+                                ? ResumenMantenimientoService.lineaCorta(currentTicket)
+                                : 'Proyecto: ${currentTicket.codigoProyecto ?? (currentTicket.campamento.isNotEmpty ? currentTicket.campamento : "SIN PROYECTO")}',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey.shade600,

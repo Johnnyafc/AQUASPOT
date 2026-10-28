@@ -2,6 +2,7 @@
 
 import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/GestionComprasPage.dart';
+import '../../domain/services/resumen_mantenimiento_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/ticket_bloc.dart';
@@ -98,18 +99,24 @@ class BandejaComprasPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 6),
-                      Text(
-                        'Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}'
-                        '${ticket.clienteId.trim().isNotEmpty ? ' | Cliente: ${ticket.clienteId}' : ''}'
-                        ' | Contacto: ${ticket.nombreContacto}',
-                      ),
-                      const SizedBox(height: 4),
-                      Text('Proyecto: ${ticket.codigoProyecto ?? 'PENDIENTE DE CREACIÓN'}',
-                        style: TextStyle(
-                          color: ticket.codigoProyecto != null ? kTicketTextoPrincipal : kTicketAlerta,
-                          fontWeight: ticket.codigoProyecto != null ? FontWeight.normal : FontWeight.bold
-                        )
-                      ),
+                      // 🛠️ Mantenimiento interno: datos con los que se creó (sin
+                      // cliente ni proyecto).
+                      if (ticket.esMantenimientoInterno)
+                        Text(ResumenMantenimientoService.lineaCorta(ticket))
+                      else ...[
+                        Text(
+                          'Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}'
+                          '${ticket.clienteId.trim().isNotEmpty ? ' | Cliente: ${ticket.clienteId}' : ''}'
+                          ' | Contacto: ${ticket.nombreContacto}',
+                        ),
+                        const SizedBox(height: 4),
+                        Text('Proyecto: ${ticket.codigoProyecto ?? 'PENDIENTE DE CREACIÓN'}',
+                          style: TextStyle(
+                            color: ticket.codigoProyecto != null ? kTicketTextoPrincipal : kTicketAlerta,
+                            fontWeight: ticket.codigoProyecto != null ? FontWeight.normal : FontWeight.bold
+                          )
+                        ),
+                      ],
                       const SizedBox(height: 8),
 
                       // 🚦 UNA sola insignia (antes: caja + emoji, redundante con el

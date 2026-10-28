@@ -18,6 +18,7 @@ import '../../domain/entities/repuesto_registrado_entity.dart';
 import '../../domain/entities/cambio_material_entity.dart';
 import '../../domain/entities/linea_repuesto_venta_entity.dart';
 import '../../domain/services/edicion_venta_comercial_service.dart';
+import '../../domain/services/flujo_reportes_automaticos_service.dart';
 import '../../../inventario/domain/entities/item_inventario_entity.dart';
 import '../../../inventario/presentation/bloc/inventario_bloc.dart';
 import '../../../inventario/presentation/bloc/inventario_state.dart';
@@ -60,7 +61,8 @@ class _GenerarCotizacionPageState extends State<GenerarCotizacionPage> {
   bool _ventaModificada = false;
   bool _guardandoVenta = false;
 
-  bool get _esCaracol => widget.ticket.equipo == TipoEquipo.Caracol;
+  // Flujo de reportes automáticos (antes solo Caracol).
+  bool get _esCaracol => FlujoReportesAutomaticosService.usa(widget.ticket);
 
   /// 💲 Tarifa por hora hombre para el costo de mano de obra (USD).
   static const int _tarifaHoraHombre = 25;

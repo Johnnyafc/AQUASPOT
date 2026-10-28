@@ -16,12 +16,14 @@ import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.da
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
 import '../bloc/ticket_bloc.dart';
 import '../bloc/ticket_event.dart';
-import '../../../../core/enum/ticket_enums.dart';
 import '../../../../core/enum/rol_usuario.dart';
 import '../../../catalogo/domain/entities/item_catalogo_entity.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/entities/actividad_evaluacion_seleccionada.dart';
 import '../../domain/services/borrador_evaluacion_codec.dart';
+import '../../domain/services/flujo_reportes_automaticos_service.dart';
+import '../../../catalogo/domain/services/codigo_actividad_service.dart';
+import '../../../catalogo/presentation/widgets/editar_actividad_dialog.dart';
 import '../widgets/copy_icon_button_widget.dart';
 import '../widgets/tarjeta_no_requiere_compras_widget.dart';
 
@@ -57,9 +59,9 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
   final TextEditingController _motivoNoComprasController = TextEditingController();
 
   // 🧠 Sensores Lógicos de Estado
-  bool get _esCaracol =>
-      widget.ticket.equipo == TipoEquipo.Caracol ||
-      widget.ticket.equipo.name.toLowerCase().contains('caracol');
+  // Evaluación con Plan Maestro e informe automático (antes solo Caracol;
+  // ver FlujoReportesAutomaticosService).
+  bool get _esCaracol => FlujoReportesAutomaticosService.paraEvaluacion(widget.ticket);
 
   bool get _esGarantiaServicio => widget.ticket.tipoGarantia == 'servicio';
   bool get _esGarantiaMaquina => widget.ticket.tipoGarantia == 'maquinaNueva';
@@ -67,6 +69,12 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
 
   // ⚙️ Memoria volátil para CARACOL (Automatizado)
   final List<ActividadEvaluacionSeleccionada> _actividadesCaracol = [];
+  // Actividad recién creada con "Agregar actividad al Plan Maestro": se
+  // agrega sola a la evaluación cuando el catálogo se recarga.
+  String? _codigoPorAgregar;
+
+  /// Equipo del Plan Maestro de este ticket (caracol, cosechadora, contador).
+  String get _equipoPlan => FlujoReportesAutomaticosService.equipoPlanMaestro(widget.ticket.equipo);
   final ImagePicker _imagePicker = ImagePicker();
   bool _generandoDocumentos = false;
 
@@ -108,7 +116,7 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
     _limpiarBorradoresAntiguos();
 
     if (_esCaracol) {
-      context.read<CatalogoBloc>().add(const CargarCatalogoPorEquipoEvent('caracol'));
+      context.read<CatalogoBloc>().add(CargarCatalogoPorEquipoEvent(_equipoPlan));
     }
   }
 
@@ -592,9 +600,9 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
                         decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(2)),
                       ),
                       const SizedBox(height: 12),
-                      const Text(
-                        'Seleccionar Actividad (Plan Maestro Caracol)',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF005A9C)),
+                      Text(
+                        'Seleccionar Actividad (Plan Maestro ${widget.ticket.equipo.name})',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF005A9C)),
                       ),
                       const SizedBox(height: 12),
                       TextField(
@@ -1016,11 +1024,50 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
   // ==========================================
   // WIDGET: SECCIÓN DINÁMICA CARACOL
   // ==========================================
+  /// Ventana emergente para crear una actividad (con sus repuestos) en el
+  /// Plan Maestro del equipo sin salir de la evaluación; al guardarse se
+  /// agrega sola a esta evaluación.
+  Future<void> _agregarActividadAlPlanMaestro(List<ActividadCatalogoEntity> catalogo) {
+    final bloc = context.read<CatalogoBloc>();
+    return EditarActividadDialog.mostrar(
+      context,
+      equipo: _equipoPlan,
+      codigoSugerido: CodigoActividadService.siguiente(catalogo),
+      codigosOcupados: CodigoActividadService.ocupados(catalogo),
+      onGuardar: (nueva) {
+        _codigoPorAgregar = nueva.codigo.trim().toUpperCase();
+        bloc.add(GuardarActividadEvent(nueva));
+      },
+    );
+  }
+
   Widget _buildSeccionCaracolAutomatizado(bool isProcesando) {
-    return BlocBuilder<CatalogoBloc, CatalogoState>(
+    return BlocConsumer<CatalogoBloc, CatalogoState>(
+      listener: (context, state) {
+        final codigo = _codigoPorAgregar;
+        if (codigo == null) return;
+        if (state is CatalogoError) {
+          _codigoPorAgregar = null;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('No se pudo guardar la actividad: ${state.mensaje}'), backgroundColor: Colors.red),
+          );
+          // Sin catálogo no se pueden elegir actividades ni sugerir códigos.
+          context.read<CatalogoBloc>().add(CargarCatalogoPorEquipoEvent(_equipoPlan));
+        } else if (state is CatalogoLoaded && state.equipo == _equipoPlan) {
+          _codigoPorAgregar = null;
+          final act = state.actividades.where((a) => a.codigo.trim().toUpperCase() == codigo).firstOrNull;
+          if (act == null || _actividadesCaracol.any((a) => a.actividad.codigo == act.codigo)) return;
+          setState(() => _actividadesCaracol.add(
+                ActividadEvaluacionSeleccionada(actividad: act, horasHombre: act.horasHombre ?? 0.0, observacion: ''),
+              ));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('✅ ${act.codigo} agregada al Plan Maestro y a esta evaluación.'), backgroundColor: Colors.green),
+          );
+        }
+      },
       builder: (context, state) {
         List<ActividadCatalogoEntity> catalogo = [];
-        if (state is CatalogoLoaded && state.equipo == 'caracol') {
+        if (state is CatalogoLoaded && state.equipo == _equipoPlan) {
           catalogo = state.actividades;
         }
 
@@ -1037,16 +1084,16 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "Plan Maestro de Reparación (Caracol)",
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF005A9C)),
+                        "Plan Maestro de Reparación (${widget.ticket.equipo.name})",
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF005A9C)),
                       ),
-                      SizedBox(height: 4),
-                      Text(
+                      const SizedBox(height: 4),
+                      const Text(
                         "Seleccione las actividades a realizar. Los repuestos y el informe se generarán automáticamente.",
                         style: TextStyle(fontSize: 12, color: Colors.grey),
                       ),
@@ -1064,6 +1111,21 @@ class _EvaluacionTecnicaPageState extends State<EvaluacionTecnicaPage> {
                 ),
               ],
             ),
+            // ➕ Actividad que no está en el Plan Maestro: se crea aquí mismo
+            // (ventana emergente) y queda guardada en el plan del equipo.
+            if (esSupervisorOAdmin)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  // Solo con el catálogo del equipo cargado: así el código
+                  // sugerido nunca pisa una actividad existente.
+                  onPressed: isProcesando || _generandoDocumentos || !(state is CatalogoLoaded && state.equipo == _equipoPlan)
+                      ? null
+                      : () => _agregarActividadAlPlanMaestro(catalogo),
+                  icon: const Icon(Icons.playlist_add),
+                  label: const Text('¿No está? Agregar actividad al Plan Maestro'),
+                ),
+              ),
             const SizedBox(height: 16),
 
             if (_actividadesCaracol.isEmpty)

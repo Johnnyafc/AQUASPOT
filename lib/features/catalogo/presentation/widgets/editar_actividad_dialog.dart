@@ -7,12 +7,18 @@ class EditarActividadDialog extends StatefulWidget {
   final ActividadCatalogoEntity? actividad;
   final String equipo;
   final Function(ActividadCatalogoEntity) onGuardar;
+  // Solo para una actividad nueva: código sugerido y códigos que ya existen
+  // (no se permite repetirlos, para no pisar otra actividad).
+  final String? codigoSugerido;
+  final Set<String> codigosOcupados;
 
   const EditarActividadDialog({
     super.key,
     this.actividad,
     required this.equipo,
     required this.onGuardar,
+    this.codigoSugerido,
+    this.codigosOcupados = const {},
   });
 
   static Future<void> mostrar(
@@ -20,6 +26,8 @@ class EditarActividadDialog extends StatefulWidget {
     ActividadCatalogoEntity? actividad,
     required String equipo,
     required Function(ActividadCatalogoEntity) onGuardar,
+    String? codigoSugerido,
+    Set<String> codigosOcupados = const {},
   }) {
     return showDialog(
       context: context,
@@ -28,6 +36,8 @@ class EditarActividadDialog extends StatefulWidget {
         actividad: actividad,
         equipo: equipo,
         onGuardar: onGuardar,
+        codigoSugerido: codigoSugerido,
+        codigosOcupados: codigosOcupados,
       ),
     );
   }
@@ -53,7 +63,7 @@ class _EditarActividadDialogState extends State<EditarActividadDialog> {
   void initState() {
     super.initState();
     final a = widget.actividad;
-    _codigoController = TextEditingController(text: a?.codigo ?? '');
+    _codigoController = TextEditingController(text: a?.codigo ?? widget.codigoSugerido ?? '');
     _nombreController = TextEditingController(text: a?.nombre ?? '');
     _hhController = TextEditingController(text: a?.horasHombre != null ? a!.horasHombre.toString() : '');
     _incluyeController = TextEditingController(text: a?.incluye ?? '');
@@ -197,7 +207,13 @@ class _EditarActividadDialogState extends State<EditarActividadDialog> {
                       child: TextFormField(
                         controller: _codigoController,
                         decoration: const InputDecoration(labelText: 'Código (ej. MO001)*', border: OutlineInputBorder()),
-                        validator: (v) => v == null || v.trim().isEmpty ? 'Requerido' : null,
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'Requerido';
+                          if (widget.actividad == null && widget.codigosOcupados.contains(v.trim().toUpperCase())) {
+                            return 'Ese código ya existe';
+                          }
+                          return null;
+                        },
                       ),
                     ),
                     const SizedBox(width: 12),

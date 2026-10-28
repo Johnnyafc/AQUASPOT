@@ -12,6 +12,7 @@ import 'dart:typed_data';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/enum/rol_usuario.dart';
+import '../../../../core/enum/ticket_enums.dart';
 import '../../../catalogo/domain/entities/actividad_catalogo_entity.dart';
 import '../../../catalogo/domain/usecases/catalogo_usecases.dart';
 import '../../../inventario/domain/entities/item_inventario_entity.dart';
@@ -149,6 +150,8 @@ class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
   void agregarActividadNueva(String nombre, double? horas) =>
       _actividades([...state.actividades, _S.actividadNueva(state.actividades, nombre: nombre, horasHombre: horas)]);
   void quitarActividad(int i) => _actividades([...state.actividades]..removeAt(i));
+  /// El nombre se puede editar; el código no cambia.
+  void cambiarNombre(int i, String nombre) => _cambiar(i, (a) => a.copyWith(nombre: nombre));
   void cambiarHoras(int i, double? horas) => _cambiar(i, (a) => a.copyWith(horasHombre: horas ?? 0));
   void cambiarObservacion(int i, String texto) => _cambiar(i, (a) => a.copyWith(observacion: texto));
   void agregarFotos(int i, List<ArchivoAdjunto> fotos) => _cambiar(i, (a) => a.copyWith(fotos: [...a.fotos, ...fotos]));
@@ -258,6 +261,8 @@ class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
 
   static String _destino(TicketEntity t) {
     final n = CreacionCodigosMantenimientoService.indicesPendientes(t).length;
+    if (t.estadoActual == EstadoTicket.procesoTrabajo) return 'Sin repuestos: pasa directo a Proceso de Trabajo.';
+    if (t.estadoActual == EstadoTicket.bodega) return 'Pasa directo a Despacho Bodega (picking).';
     if (n == 0) return 'Pasa a Compras.';
     if (CreacionCodigosMantenimientoService.esperaSoloCodigos(t)) return 'Pasa a Costos para crear $n código(s).';
     return 'Pasa a Compras; $n repuesto(s) sin código esperan en Costos.';

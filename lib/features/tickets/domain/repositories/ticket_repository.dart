@@ -50,6 +50,16 @@ abstract class ITicketRepository {
     required List<Map<String, dynamic>> itemsAReservar,
   });
 
+  // 🛠️ Mantenimiento interno: igual (aparta stock en la misma transacción)
+  // y además [ajustarConStock] decide el ticket a guardar con el stock neto
+  // ACTUAL (código en MAYÚSCULAS → disponible − apartado, antes de
+  // apartar). Devuelve el ticket guardado.
+  Future<Either<Failure, TicketEntity>> guardarEvaluacionConReservaYDestino({
+    required TicketEntity ticket,
+    required List<Map<String, dynamic>> itemsAReservar,
+    required TicketEntity Function(Map<String, double> stockNeto) ajustarConStock,
+  });
+
   Future<Either<Failure, void>> actualizarCamposConGuardaEstadoYAjusteReserva({
     required String ticketId,
     required Map<String, dynamic> campos,

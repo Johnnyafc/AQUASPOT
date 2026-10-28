@@ -52,6 +52,8 @@ import '../../domain/services/estado_despacho_service.dart';
 import '../../domain/services/retiro_picking_service.dart';
 import '../../domain/services/ruteo_venta_repuesto_service.dart';
 import '../../domain/services/flujo_venta_repuesto_service.dart';
+import '../../domain/services/flujo_reportes_automaticos_service.dart';
+import '../../domain/services/cierre_trabajo_service.dart';
 import '../models/archivos_linea_venta.dart';
 import '../../domain/entities/linea_repuesto_venta_entity.dart';
 import '../../data/models/orden_recepcion_repuestos_model.dart';
@@ -229,13 +231,14 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
     }
 
     final eventoAuditoria = EventoAuditoriaEntity(
-      accion: 'TALLER: EVIDENCIA REGISTRADA. TÉCNICOS: ${event.nombreTecnico.toUpperCase()}.$resumenFallas EQUIPO LISTO.',
+      accion: 'TALLER: EVIDENCIA REGISTRADA. TÉCNICOS: ${event.nombreTecnico.toUpperCase()}.$resumenFallas EQUIPO LISTO.'
+          '${CierreTrabajoService.notaAuditoria(event.ticket)}',
       usuarioNombre: event.nombreUsuario, 
       usuarioRol: event.rolUsuario,
       timestamp: DateTime.now(),
       proceso: ProcesoAuditoria.taller,
       hito: HitoProceso.fin,
-      habilita: const [ProcesoAuditoria.revisionPagos],
+      habilita: CierreTrabajoService.procesosTrasEvidencia(event.ticket),
     );
 
   final ahoraEvidencia = DateTime.now();
@@ -247,7 +250,8 @@ class TicketBloc extends Bloc<TicketEvent, TicketState> {
   // 4. MUTACIÓN DEL TICKET
   final ticketActualizado = event.ticket.copyWith(
     evidenciaTrabajo: evidencia,
-    estadoActual: EstadoTicket.validacionFacturacion, // 🚀 TRASPASO AL SIGUIENTE ESTADO LOGICO
+    // 🚀 TRASPASO: Validación de Facturación (mantenimiento interno: Finalizado).
+    estadoActual: CierreTrabajoService.estadoTrasEvidencia(event.ticket),
     tiemposOperativos: tiemposFinalizados,
     historialEventos: [...event.ticket.historialEventos, eventoAuditoria],
     // Diagnóstico hecho en vivo: queda sellado con la ronda vigente para
@@ -1086,7 +1090,12 @@ Future<void> _onProcesarEvaluacionDocumental(
     repuestosComercial: repuestosComercialConsolidados,
   );
 
+  // 🤖 Flujo con generación de reportes automáticos (antes solo Caracol).
+  final bool flujoReportesAutomaticos = FlujoReportesAutomaticosService.paraEvaluacion(event.ticket);
   String accionAuditoria = 'EVALUACIÓN TÉCNICA Y DOCUMENTAL REGISTRADA';
+  if (flujoReportesAutomaticos) {
+    accionAuditoria += ' — ${FlujoReportesAutomaticosService.etiqueta.toUpperCase()}';
+  }
   if (event.noRequiereCompras) {
     accionAuditoria += ' — DECLARADO: NO REQUIERE COMPRAS';
     if (event.motivoNoRequiereCompras != null && event.motivoNoRequiereCompras!.trim().isNotEmpty) {
@@ -1140,16 +1149,17 @@ Future<void> _onProcesarEvaluacionDocumental(
     motivoNoRequiereCompras: event.noRequiereCompras ? event.motivoNoRequiereCompras : null,
     supervisorNoRequiereCompras: event.noRequiereCompras ? event.nombreUsuario : null,
     fechaNoRequiereCompras: event.noRequiereCompras ? DateTime.now() : null,
+    usaFlujoReportesAutomaticos: flujoReportesAutomaticos ? true : null,
   );
 
   // ==========================================
   // 4. PERSISTENCIA EN FIRESTORE
   // ==========================================
-  // NUEVO: para equipo Caracol, la evaluacion tecnica ademas aparta
-  // (reserva) en inventario_bodega los repuestos de taller -- misma
-  // transaccion, con candado de idempotencia contra doble clic/reintento.
-  // Para el resto de equipos, queda exactamente igual que siempre.
-  final bool esCaracolEvaluacion = ticketActualizado.equipo == TipoEquipo.Caracol;
+  // Con el flujo de reportes automáticos (antes solo Caracol) la evaluacion
+  // tecnica ademas aparta (reserva) en inventario_bodega los repuestos de
+  // taller -- misma transaccion, con candado de idempotencia contra doble
+  // clic/reintento. Para el resto, queda exactamente igual que siempre.
+  final bool esCaracolEvaluacion = flujoReportesAutomaticos;
 
   if (esCaracolEvaluacion) {
     final itemsAReservar = repuestosTallerConsolidados
@@ -1474,10 +1484,10 @@ Future<void> _onActualizarEvaluacion(ActualizarEvaluacionEvent event, Emitter<Ti
       message: 'Transmitiendo actualización de evaluación al servidor...'
     ));
 
-    final bool esCaracol = event.ticket.equipo == TipoEquipo.Caracol;
+    final bool esCaracol = FlujoReportesAutomaticosService.usa(event.ticket);
 
     if (!esCaracol) {
-      // CAMINO ORIGINAL: sin cambios, para cualquier equipo que no sea Caracol.
+      // CAMINO ORIGINAL: sin cambios, para los tickets sin flujo de reportes automáticos.
       final result = await actualizarTicket(event.ticket);
       // 🧾 Registro aparte de cambios de materiales (no va en el ticket completo).
       final conCambios = result.isRight() ? await _agregarCambiosMateriales(event.ticket.id, event.cambiosMateriales) : null;
@@ -1702,7 +1712,8 @@ Future<void> _onProcesarCotizacion(
   habilita: const [ProcesoAuditoria.aprobacionCliente],
 );
 
-      final bool esCaracol = event.ticket.equipo == TipoEquipo.Caracol;
+      // Flujo de reportes automáticos (antes solo Caracol).
+      final bool esCaracol = FlujoReportesAutomaticosService.usa(event.ticket);
 
       List<ItemDespachoBodegaEntity> itemsBodega = event.ticket.itemsDespachoBodega;
       if (esCaracol) {
@@ -2424,7 +2435,7 @@ Future<void> _onAnularTicket(AnularTicketEvent event, Emitter<TicketState> emit)
   // NUEVO: en tickets Caracol, anular ademas libera en la misma
   // transaccion lo que seguia pendiente de stockReservado. Para el resto
   // de equipos (que hoy no reservan nada), queda exactamente igual.
-  if (ticketActualizado.equipo == TipoEquipo.Caracol) {
+  if (FlujoReportesAutomaticosService.usa(ticketActualizado)) {
     final resultCaracol = await ticketRepository.anularTicketConLiberacionReserva(
       ticket: ticketActualizado,
     );

@@ -11,12 +11,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../injection_container.dart' as di;
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_state.dart';
-import '../../domain/entities/mantenimiento_interno_entity.dart';
 import '../../domain/entities/repuesto_por_codificar_entity.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/services/creacion_codigos_mantenimiento_service.dart';
 import '../bloc/creacion_codigos_mantenimiento_cubit.dart';
 import '../widgets/copy_icon_button_widget.dart';
+import '../widgets/resumen_mantenimiento_widget.dart';
 
 typedef _C = CreacionCodigosMantenimientoService;
 
@@ -90,7 +90,6 @@ class _VistaState extends State<_Vista> {
   @override
   Widget build(BuildContext context) {
     final t = widget.ticket;
-    final m = t.mantenimientoInterno;
     return BlocConsumer<CreacionCodigosMantenimientoCubit, CreacionCodigosMantenimientoState>(
       listener: (context, s) {
         if (s.envio == EnvioCodigosMantenimiento.guardado) {
@@ -121,9 +120,6 @@ class _VistaState extends State<_Vista> {
                         const Text('Mantenimiento interno — repuestos sin código',
                             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         const SizedBox(height: 6),
-                        Text('Máquina: ${m?.tipoActivo.etiqueta ?? t.equipo.name} · '
-                            '${m?.placa != null ? 'Placa: ${m!.placa}' : 'Serie: ${t.numeroSerie ?? 'S/N'}'}'),
-                        const SizedBox(height: 6),
                         Text(
                           'Cree cada código en el ERP con los datos de la ficha y regístrelo aquí con la descripción con la '
                           'que lo creó. Al guardar, los repuestos pasan a Compras / Bodega y se agregan al inventario con stock 0.',
@@ -134,6 +130,7 @@ class _VistaState extends State<_Vista> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                ResumenMantenimientoWidget(ticket: t),
                 if (_indices.isEmpty)
                   const Text('No hay repuestos pendientes de código.', style: TextStyle(color: Colors.grey)),
                 for (final i in _indices) _tarjeta(i, _lista[i]),

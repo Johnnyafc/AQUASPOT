@@ -13,6 +13,7 @@ import '../../../../core/enum/ticket_enums.dart';
 import '../entities/item_despacho_bodega_entity.dart';
 import '../entities/linea_repuesto_venta_entity.dart';
 import '../entities/ticket_entity.dart';
+import 'flujo_reportes_automaticos_service.dart';
 
 class FlujoVentaRepuestoService {
   static bool esVenta(TicketEntity t) => t.tipoRequerimiento == TipoRequerimiento.ventaRepuesto;
@@ -46,8 +47,9 @@ class FlujoVentaRepuestoService {
   }
 
   // ------------------------------------------------- Validación Bodega
-  /// Validación por repuesto con "Transferir a Bodega" (sin "directo a taller").
-  static bool validacionPorRepuesto(TicketEntity t) => t.equipo == TipoEquipo.Caracol || esVenta(t);
+  /// Validación por repuesto con "Transferir a Bodega" (sin "directo a
+  /// taller"): la venta y los tickets con flujo de reportes automáticos.
+  static bool validacionPorRepuesto(TicketEntity t) => esVenta(t) || FlujoReportesAutomaticosService.usa(t);
 
   // ------------------------------------------------------------ Picking
   /// Estado tras "Finalizar picking": la venta pasa a Entrega.
@@ -75,7 +77,8 @@ class FlujoVentaRepuestoService {
   static bool puedeFinalizarEntrega(TicketEntity t) =>
       t.estadoActual == EstadoTicket.entrega && faltantesParaFinalizar(t).isEmpty;
 
-  /// El picking libera la reserva de Caracol solo en reparaciones: las
-  /// ventas nunca reservan stock (no deben tocar reservas de otros tickets).
-  static bool liberaReservaEnPicking(TicketEntity t) => t.equipo == TipoEquipo.Caracol && !esVenta(t);
+  /// El picking libera la reserva solo en los tickets con flujo de reportes
+  /// automáticos (los que apartan stock al evaluar): las ventas nunca
+  /// reservan stock (no deben tocar reservas de otros tickets).
+  static bool liberaReservaEnPicking(TicketEntity t) => FlujoReportesAutomaticosService.usa(t);
 }

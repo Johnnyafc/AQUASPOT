@@ -14,7 +14,8 @@
 //     Vehículo: placa, kilometraje + foto del kilometraje (obligatorios)
 //     Aire acondicionado / Herramientas: fecha (solo fecha; de la falla o
 //       la programada) y serie OPCIONAL escrita a mano (en MAYÚSCULAS)
-//   y en todos: detalle de la falla (o del trabajo, si es preventivo) y al
+//   y en todos: marca y especificación del equipo (obligatorias, en
+//   MAYÚSCULAS), detalle de la falla (o del trabajo, si es preventivo) y al
 //   menos una evidencia, foto o video (máximo 3 videos de 60 s).
 // - La serie y la placa salen de un catálogo fijo (catalogo); para agregar
 //   una máquina se agrega aquí. Aire acondicionado y Herramientas no tienen
@@ -38,6 +39,8 @@ class DatosMantenimientoInterno {
   final double? horometro;
   final double? kilometraje;
   final DateTime? fechaHora;
+  final String marca;
+  final String especificacion;
   final String detalle;
   final int cantidadFotos;
   final int cantidadVideos;
@@ -50,6 +53,8 @@ class DatosMantenimientoInterno {
     this.horometro,
     this.kilometraje,
     this.fechaHora,
+    this.marca = '',
+    this.especificacion = '',
     this.detalle = '',
     this.cantidadFotos = 0,
     this.cantidadVideos = 0,
@@ -63,6 +68,8 @@ class DatosMantenimientoInterno {
     double? horometro,
     double? kilometraje,
     DateTime? fechaHora,
+    String? marca,
+    String? especificacion,
     String? detalle,
     int? cantidadFotos,
     int? cantidadVideos,
@@ -79,6 +86,8 @@ class DatosMantenimientoInterno {
       horometro: limpiarHorometro ? null : (horometro ?? this.horometro),
       kilometraje: limpiarKilometraje ? null : (kilometraje ?? this.kilometraje),
       fechaHora: limpiarFechaHora ? null : (fechaHora ?? this.fechaHora),
+      marca: marca ?? this.marca,
+      especificacion: especificacion ?? this.especificacion,
       detalle: detalle ?? this.detalle,
       cantidadFotos: cantidadFotos ?? this.cantidadFotos,
       cantidadVideos: cantidadVideos ?? this.cantidadVideos,
@@ -231,6 +240,8 @@ class FormularioMantenimientoService {
         errores.add('La fecha de la falla no puede ser futura.');
       }
     }
+    if (d.marca.trim().isEmpty) errores.add('Ingrese la marca.');
+    if (d.especificacion.trim().isEmpty) errores.add('Ingrese la especificación del equipo.');
     if (d.detalle.trim().length < minimoCaracteresDetalle) {
       errores.add('${etiquetaDetalle(d.tipoMantenimiento)}: escriba al menos $minimoCaracteresDetalle caracteres.');
     }
@@ -267,6 +278,7 @@ class FormularioMantenimientoService {
       telefonoContacto: '',
       equipo: equipoDe(tipo),
       equipoDetalle: tipo.etiqueta,
+      marca: d.marca.trim().toUpperCase(),
       accesoriosRecibidos: null,
       fallaReportada: d.detalle.trim(),
       numeroSerie: esVehiculo(tipo) || valor.isEmpty ? null : valor,
@@ -291,6 +303,7 @@ class FormularioMantenimientoService {
         tipoActivo: tipo,
         placa: esVehiculo(tipo) ? valor : null,
         kilometraje: pideKilometraje(tipo) ? d.kilometraje : null,
+        especificacion: d.especificacion.trim().toUpperCase(),
         fechaHoraFalla: pideFechaHora(tipo)
             ? f
             : (pideFecha(tipo) && f != null ? DateTime(f.year, f.month, f.day) : null),

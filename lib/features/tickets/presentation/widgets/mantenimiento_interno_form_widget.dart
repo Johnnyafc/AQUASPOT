@@ -259,6 +259,23 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
 
               // 3. Campos según la máquina.
               if (tipo != null) ...[
+                _titulo('Marca'),
+                TextField(
+                  key: const ValueKey('marca_mantenimiento'),
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Ej.: JOHN DEERE, TOYOTA, LG'),
+                  onChanged: cubit.cambiarMarca,
+                ),
+                _titulo('Especificación del equipo'),
+                TextField(
+                  key: const ValueKey('especificacion_mantenimiento'),
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    hintText: 'Modelo, capacidad, año… Ej.: MOTOR YANMAR 3TNV88, 2019',
+                  ),
+                  onChanged: cubit.cambiarEspecificacion,
+                ),
                 _titulo(_F.serieManual(tipo) ? 'Serie (opcional)' : _F.etiquetaSerieOPlaca(tipo)),
                 if (_F.serieManual(tipo))
                   TextField(

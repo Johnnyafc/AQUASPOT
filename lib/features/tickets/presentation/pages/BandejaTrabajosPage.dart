@@ -7,6 +7,7 @@ import 'package:aquaspot_postventa/features/tickets/presentation/pages/subir_evi
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/materiales_despachados_taller_page.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.dart';
+import '../../domain/services/resumen_mantenimiento_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -193,7 +194,9 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF003057)),
                               ),
                               Text(
-                                'Proyecto: ${ticket.codigoProyecto ?? "S/N"} • ${ticket.equipo.name.toUpperCase()}',
+                                ticket.esMantenimientoInterno
+                                    ? ResumenMantenimientoService.lineaCorta(ticket)
+                                    : 'Proyecto: ${ticket.codigoProyecto ?? "S/N"} • ${ticket.equipo.name.toUpperCase()}',
                                 style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                               ),
                             ],
@@ -426,39 +429,45 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
             const SizedBox(height: 12),
 
             // --- CUERPO: DATOS TÉCNICOS ---
-            Row(
-              children: [
-                Expanded(
-                  child: Text('Proyecto: ${ticket.codigoProyecto ?? "Sin Asignar"}', style: TextStyle(color: Colors.grey.shade800)),
-                ),
-                CopyIconButtonWidget(etiqueta: 'Proyecto', valor: ticket.codigoProyecto ?? 'Sin Asignar'),
-              ],
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: Text('Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}', style: TextStyle(color: Colors.grey.shade800)),
-                ),
-                CopyIconButtonWidget(etiqueta: 'Equipo', valor: '${ticket.equipo.name.toUpperCase()} - ${ticket.marca.toUpperCase()}'),
-              ],
-            ),
-            if (ticket.clienteId.trim().isNotEmpty)
+            // 🛠️ Mantenimiento interno: datos con los que se creó (sin
+            // proyecto, cliente ni contacto).
+            if (ticket.esMantenimientoInterno)
+              Text(ResumenMantenimientoService.lineaCorta(ticket), style: TextStyle(color: Colors.grey.shade800))
+            else ...[
               Row(
                 children: [
                   Expanded(
-                    child: Text('Cliente: ${ticket.clienteId}', style: TextStyle(color: Colors.grey.shade800)),
+                    child: Text('Proyecto: ${ticket.codigoProyecto ?? "Sin Asignar"}', style: TextStyle(color: Colors.grey.shade800)),
                   ),
-                  CopyIconButtonWidget(etiqueta: 'Cliente', valor: ticket.clienteId),
+                  CopyIconButtonWidget(etiqueta: 'Proyecto', valor: ticket.codigoProyecto ?? 'Sin Asignar'),
                 ],
               ),
-            Row(
-              children: [
-                Expanded(
-                  child: Text('Contacto: ${ticket.nombreContacto}', style: TextStyle(color: Colors.grey.shade800)),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text('Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}', style: TextStyle(color: Colors.grey.shade800)),
+                  ),
+                  CopyIconButtonWidget(etiqueta: 'Equipo', valor: '${ticket.equipo.name.toUpperCase()} - ${ticket.marca.toUpperCase()}'),
+                ],
+              ),
+              if (ticket.clienteId.trim().isNotEmpty)
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text('Cliente: ${ticket.clienteId}', style: TextStyle(color: Colors.grey.shade800)),
+                    ),
+                    CopyIconButtonWidget(etiqueta: 'Cliente', valor: ticket.clienteId),
+                  ],
                 ),
-                CopyIconButtonWidget(etiqueta: 'Contacto', valor: ticket.nombreContacto),
-              ],
-            ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text('Contacto: ${ticket.nombreContacto}', style: TextStyle(color: Colors.grey.shade800)),
+                  ),
+                  CopyIconButtonWidget(etiqueta: 'Contacto', valor: ticket.nombreContacto),
+                ],
+              ),
+            ],
             const SizedBox(height: 6),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,

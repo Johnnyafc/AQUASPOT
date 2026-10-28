@@ -89,6 +89,7 @@ class TicketModel extends TicketEntity {
     super.pickingFinalizadoEn,
     super.historialCambiosMateriales = const [],
     super.mantenimientoInterno,
+    super.usaFlujoReportesAutomaticos,
   });
 
   static DateTime? _fechaOpcional(dynamic v) {
@@ -238,6 +239,7 @@ class TicketModel extends TicketEntity {
       pickingFinalizadoPor: json['pickingFinalizadoPor'] as String?,
       pickingFinalizadoEn: _fechaOpcional(json['pickingFinalizadoEn']),
       mantenimientoInterno: MantenimientoInternoModel.fromJson(json['mantenimientoInterno']),
+      usaFlujoReportesAutomaticos: json['usaFlujoReportesAutomaticos'] == true,
       historialCambiosMateriales: (json['historialCambiosMateriales'] as List?)
               ?.map(CambioMaterialEntity.fromJson)
               .whereType<CambioMaterialEntity>()
@@ -334,6 +336,7 @@ class TicketModel extends TicketEntity {
       pickingFinalizadoEn: entity.pickingFinalizadoEn,
       historialCambiosMateriales: entity.historialCambiosMateriales,
       mantenimientoInterno: entity.mantenimientoInterno,
+      usaFlujoReportesAutomaticos: entity.usaFlujoReportesAutomaticos,
     );
 
   }
@@ -439,6 +442,9 @@ class TicketModel extends TicketEntity {
       'urlsAudiosAsistencia': urlsAudiosAsistencia,
       'urlsCotizacionCompras': urlsCotizacionCompras,
       if (mantenimientoInterno != null) 'mantenimientoInterno': MantenimientoInternoModel.toJson(mantenimientoInterno!),
+      // Solo se escribe cuando es true: una copia vieja del ticket (de antes
+      // de la evaluación) nunca borra la marca.
+      if (usaFlujoReportesAutomaticos) 'usaFlujoReportesAutomaticos': true,
       // ⚠️ 'inconsistenciasRevisadas' NO se escribe aquí a propósito: solo
       // se agrega con arrayUnion, así una copia desactualizada del ticket
       // nunca borra una marca de "Revisado".

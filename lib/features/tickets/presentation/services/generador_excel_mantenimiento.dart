@@ -43,7 +43,6 @@ class GeneradorExcelMantenimiento {
     dato('D2', 'FECHA:', 'E2', '${f.day.toString().padLeft(2, '0')}/${f.month.toString().padLeft(2, '0')}/${f.year}');
     dato('A3', m?.placa != null ? 'PLACA:' : 'SERIE:', 'B3', m?.placa ?? ticket.numeroSerie ?? 'S/N');
     dato('D3', 'EQUIPO:', 'E3', (m?.tipoActivo.etiqueta ?? ticket.equipo.name).toUpperCase());
-    dato('A4', 'PROYECTO:', 'B4', enc.proyecto);
     dato('D4', 'CARGO:', 'E4', enc.cargo);
     dato('A5', 'CENTRO DE COSTO:', 'B5', enc.centroCosto);
     dato('D5', 'CONSUMO/TRANSFERENCIA:', 'E5', 'CONSUMO');

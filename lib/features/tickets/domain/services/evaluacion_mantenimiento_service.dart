@@ -36,6 +36,7 @@ import '../entities/mantenimiento_interno_entity.dart';
 import '../entities/repuesto_registrado_entity.dart';
 import '../entities/ticket_entity.dart';
 import 'creacion_codigos_mantenimiento_service.dart';
+import 'flujo_reportes_automaticos_service.dart';
 import 'formulario_mantenimiento_service.dart';
 
 class EvaluacionMantenimientoService {
@@ -48,7 +49,6 @@ class EvaluacionMantenimientoService {
 
   /// Encabezado de la Solicitud de materiales de un mantenimiento interno.
   static const encabezadoSolicitud = (
-    proyecto: 'AQUASPOT',
     centroCosto: 'MANTENIMIENTO INTERNO',
     cargo: 'CONSUMO MANTENIMIENTO INTERNO',
   );
@@ -324,6 +324,9 @@ class EvaluacionMantenimientoService {
     if (actividades.isEmpty) return const ['Agregue al menos una actividad.'];
     final errores = <String>[];
     for (final a in actividades) {
+      if (a.nombre.trim().length < minimoCaracteresNombre) {
+        errores.add('${a.codigo}: escriba el nombre de la actividad (mínimo $minimoCaracteresNombre caracteres).');
+      }
       if (a.horasHombre <= 0) errores.add('${a.nombre}: ingrese las horas hombre.');
       if (a.observacion.trim().isEmpty) errores.add('${a.nombre}: escriba la observación.');
       if (a.repuestos.any((r) => r.cantidad <= 0)) {
@@ -335,8 +338,9 @@ class EvaluacionMantenimientoService {
   }
 
   // ------------------------------------------------------------ Guardado
-  /// En Caracol se aparta el stock al evaluar (el picking lo libera).
-  static bool reservaStock(TicketEntity t) => t.equipo == TipoEquipo.Caracol;
+  /// Con el flujo de reportes automáticos (todo mantenimiento evaluado
+  /// desde ahora) se aparta el stock al evaluar; el picking lo libera.
+  static bool reservaStock(TicketEntity t) => FlujoReportesAutomaticosService.usa(t);
 
   /// Ticket evaluado: actividades (con sus fotos ya subidas), los repuestos
   /// CON código para bodega y paso a Compras sin Comercial ni Costos. Los
@@ -359,7 +363,8 @@ class EvaluacionMantenimientoService {
     final porCodificar = CreacionCodigosMantenimientoService.porCodificar(actividades, fichas);
     final soloSinCodigo = porCodificar.isNotEmpty && conCodigo.isEmpty;
     final motivo = motivoNoCompras?.trim() ?? '';
-    final accion = StringBuffer('EVALUACIÓN TÉCNICA DE MANTENIMIENTO INTERNO REGISTRADA');
+    final accion = StringBuffer('EVALUACIÓN TÉCNICA DE MANTENIMIENTO INTERNO REGISTRADA — '
+        '${FlujoReportesAutomaticosService.etiqueta.toUpperCase()}');
     if (!necesitaCompras) {
       accion.write(' — DECLARADO: NO REQUIERE COMPRAS');
       if (motivo.isNotEmpty) accion.write(' ($motivo)');
@@ -388,6 +393,7 @@ class EvaluacionMantenimientoService {
         repuestosTaller: repuestos,
       ),
       mantenimientoInterno: m?.copyWith(repuestosPorCodificar: porCodificar),
+      usaFlujoReportesAutomaticos: true,
       itemsDespachoBodega: [
         for (final r in conCodigo)
           ItemDespachoBodegaEntity(
@@ -417,6 +423,57 @@ class EvaluacionMantenimientoService {
             if (!soloSinCodigo) ProcesoAuditoria.compras,
             if (porCodificar.isNotEmpty) ProcesoAuditoria.costos,
           ],
+        ),
+      ],
+    );
+  }
+
+  // ------------------------------------------------------------ Destino
+  /// Destino del ticket evaluado según el stock ACTUAL ([stockNeto]:
+  /// código en MAYÚSCULAS → disponible menos lo ya apartado, leído en la
+  /// misma transacción que aparta el stock):
+  /// - con repuestos esperando código en Costos: como quedó (Costos /
+  ///   Compras);
+  /// - sin repuestos: directo a Proceso de Trabajo;
+  /// - "No requiere compras" o todo con stock suficiente: directo a
+  ///   Despacho Bodega (picking), sin pasar por Compras;
+  /// - si falta algo: Compras.
+  static TicketEntity conDestino(TicketEntity evaluado, Map<String, double> stockNeto) {
+    if (CreacionCodigosMantenimientoService.indicesPendientes(evaluado).isNotEmpty) return evaluado;
+    final items = [
+      for (final i in evaluado.itemsDespachoBodega)
+        i.copyWith(stockDisponibleAlEvaluar: stockNeto[i.codigo.trim().toUpperCase()] ?? 0),
+    ];
+    final EstadoTicket estado;
+    final String nota;
+    final List<ProcesoAuditoria> habilita;
+    if (items.isEmpty) {
+      estado = EstadoTicket.procesoTrabajo;
+      nota = ' — SIN REPUESTOS: PASA DIRECTO A PROCESO DE TRABAJO';
+      habilita = const [ProcesoAuditoria.taller];
+    } else if (evaluado.noRequiereCompras || items.every((i) => i.tieneStockSuficiente)) {
+      estado = EstadoTicket.bodega;
+      nota = evaluado.noRequiereCompras
+          ? ' — PASA DIRECTO A DESPACHO BODEGA (SIN COMPRAS)'
+          : ' — TODO CON STOCK: PASA DIRECTO A DESPACHO BODEGA';
+      habilita = const [ProcesoAuditoria.bodega];
+    } else {
+      return evaluado.copyWith(itemsDespachoBodega: items);
+    }
+    final ultimo = evaluado.historialEventos.last;
+    return evaluado.copyWith(
+      itemsDespachoBodega: items,
+      estadoActual: estado,
+      historialEventos: [
+        ...evaluado.historialEventos.sublist(0, evaluado.historialEventos.length - 1),
+        EventoAuditoriaEntity(
+          accion: '${ultimo.accion}$nota',
+          usuarioNombre: ultimo.usuarioNombre,
+          usuarioRol: ultimo.usuarioRol,
+          timestamp: ultimo.timestamp,
+          proceso: ultimo.proceso,
+          hito: ultimo.hito,
+          habilita: habilita,
         ),
       ],
     );

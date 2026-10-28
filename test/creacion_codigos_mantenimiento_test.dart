@@ -185,7 +185,7 @@ void main() {
       );
     });
 
-    test('Caracol: aparta el stock de los códigos creados (el picking lo libera); cosechadora no', () {
+    test('Aparta el stock de los códigos creados (el picking lo libera); sin la marca del flujo, no', () {
       final caracol = EvaluacionMantenimientoService.construirTicketEvaluado(
         ticketCosechadora().copyWith(equipo: TipoEquipo.Caracol),
         [actividad([sello])],
@@ -198,7 +198,10 @@ void main() {
       final c = C.aplicarCodigos(caracol, [codigo], usuarioNombre: 'C', usuarioRol: 'COSTOS', ahora: ahora);
       expect(c.reservas, {'SEL-040': 2.0});
       expect(C.aplicarCodigos(evaluado([sello]), [codigo], usuarioNombre: 'C', usuarioRol: 'COSTOS', ahora: ahora).reservas,
-          isEmpty);
+          {'SEL-040': 2.0}, reason: 'todo mantenimiento evaluado desde ahora aparta stock');
+      final enCurso = evaluado([sello]).copyWith(usaFlujoReportesAutomaticos: false, equipo: TipoEquipo.Cosechadora);
+      expect(C.aplicarCodigos(enCurso, [codigo], usuarioNombre: 'C', usuarioRol: 'COSTOS', ahora: ahora).reservas, isEmpty,
+          reason: 'un mantenimiento en curso sin la marca no aparta');
     });
 
     test('Ya en Proceso de Trabajo o más allá: no se agregan repuestos', () {

@@ -14,6 +14,7 @@ import 'package:aquaspot_postventa/features/tecnicos/domain/entities/tecnico_ent
 import 'package:aquaspot_postventa/features/fallas/data/datasources/metrica_falla_remote_datasource.dart';
 import 'package:aquaspot_postventa/features/fallas/data/models/metrica_falla_model.dart';
 import 'package:aquaspot_postventa/features/fallas/domain/entities/metrica_falla_entity.dart';
+import '../widgets/resumen_mantenimiento_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_picker/file_picker.dart';
@@ -1173,18 +1174,24 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
           _buildInfoRow(context, 'Tipo de requerimiento:', widget.ticket.tipoRequerimiento.name.toUpperCase()),
           const Divider(height: 24, color: Colors.black12),
 
-          _buildInfoRow(context, 'Equipo:', widget.ticket.equipo.name.toUpperCase()),
-          _buildInfoRow(context, 'Lugar de recepción:', widget.ticket.lugarAtencion.name.toUpperCase()),
-          _buildInfoRow(context, 'Marca:', widget.ticket.marca.toUpperCase()),
-          const Divider(height: 24, color: Colors.black12),
+          // 🛠️ Mantenimiento interno: datos con los que se creó (sin cliente).
+          if (widget.ticket.esMantenimientoInterno) ...[
+            ResumenMantenimientoWidget(ticket: widget.ticket),
+            const Divider(height: 24, color: Colors.black12),
+          ] else ...[
+            _buildInfoRow(context, 'Equipo:', widget.ticket.equipo.name.toUpperCase()),
+            _buildInfoRow(context, 'Lugar de recepción:', widget.ticket.lugarAtencion.name.toUpperCase()),
+            _buildInfoRow(context, 'Marca:', widget.ticket.marca.toUpperCase()),
+            const Divider(height: 24, color: Colors.black12),
 
-          _buildInfoRow(context, 'Cliente:', widget.ticket.clienteId.toUpperCase()),
-          _buildInfoRow(context, 'Campamento:', widget.ticket.campamento.toUpperCase()),
-          _buildInfoRow(context, 'Contacto:', '${widget.ticket.nombreContacto} (${widget.ticket.telefonoContacto})'),
-          const Divider(height: 24, color: Colors.black12),
+            _buildInfoRow(context, 'Cliente:', widget.ticket.clienteId.toUpperCase()),
+            _buildInfoRow(context, 'Campamento:', widget.ticket.campamento.toUpperCase()),
+            _buildInfoRow(context, 'Contacto:', '${widget.ticket.nombreContacto} (${widget.ticket.telefonoContacto})'),
+            const Divider(height: 24, color: Colors.black12),
 
-          _buildInfoRow(context, 'Número de Serie:', widget.ticket.numeroSerie ?? 'No especificado'),
-          const Divider(height: 24, color: Colors.black12),
+            _buildInfoRow(context, 'Número de Serie:', widget.ticket.numeroSerie ?? 'No especificado'),
+            const Divider(height: 24, color: Colors.black12),
+          ],
 
           // ==================================================================
           // 📦 BLOQUE DE DOCUMENTACIÓN COMERCIAL (Orden de Venta / Compras)

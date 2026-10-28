@@ -73,9 +73,14 @@ abstract class TicketRemoteDataSource {
   // idempotencia: si el ticket YA tenia una evaluacionTecnica guardada en
   // el servidor, no se vuelve a reservar (evita doble reserva por doble
   // clic o reintento de red), solo se actualiza el resto del documento.
-  Future<void> guardarEvaluacionTecnicaConReservaStock({
+  /// [ajustarConStock] (opcional): recibe el stock neto ACTUAL (código en
+  /// MAYÚSCULAS → disponible − apartado, leído en la transacción antes de
+  /// apartar) y devuelve el ticket a guardar (ej. su destino). Devuelve el
+  /// ticket guardado.
+  Future<TicketModel> guardarEvaluacionTecnicaConReservaStock({
     required TicketModel ticket,
     required List<Map<String, dynamic>> itemsAReservar,
+    TicketModel Function(Map<String, double> stockNeto)? ajustarConStock,
   });
 
   // NUEVO: mismo candado de etapa que actualizarCamposConGuardaEstado,

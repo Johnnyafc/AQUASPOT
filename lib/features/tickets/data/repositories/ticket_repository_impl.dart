@@ -387,6 +387,27 @@ Future<Either<Failure, String>> subirOrdenCompra(XFile file, String ticketId) as
   }
 
   @override
+  Future<Either<Failure, TicketEntity>> guardarEvaluacionConReservaYDestino({
+    required TicketEntity ticket,
+    required List<Map<String, dynamic>> itemsAReservar,
+    required TicketEntity Function(Map<String, double> stockNeto) ajustarConStock,
+  }) async {
+    if (!await networkInfo.isConnected) {
+      return const Left(NetworkFailure('Operacion abortada: No hay senal de red.'));
+    }
+    try {
+      final guardado = await firebaseDataSource.guardarEvaluacionTecnicaConReservaStock(
+        ticket: _entityToModel(ticket),
+        itemsAReservar: itemsAReservar,
+        ajustarConStock: (stock) => _entityToModel(ajustarConStock(stock)),
+      );
+      return Right(guardado);
+    } catch (e) {
+      return Left(ServerFailure('No se pudo guardar la evaluacion tecnica con reserva de stock: $e'));
+    }
+  }
+
+  @override
   Future<Either<Failure, TicketEntity>> actualizarVentaRepuestoEnTransaccion({
     required String ticketId,
     required CambioVentaRepuesto Function(TicketEntity actual) aplicar,

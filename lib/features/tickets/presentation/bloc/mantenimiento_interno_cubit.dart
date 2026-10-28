@@ -64,7 +64,7 @@ class MantenimientoInternoState extends Equatable {
 
   @override
   List<Object?> get props => [datos.tipoMantenimiento, datos.tipoActivo, datos.serieOPlaca, datos.horometro,
-        datos.kilometraje, datos.fechaHora, datos.detalle, fotos, videos, fotoLectura, envio, mensaje, errores,
+        datos.kilometraje, datos.fechaHora, datos.marca, datos.especificacion, datos.detalle, fotos, videos, fotoLectura, envio, mensaje, errores,
         ticketCreadoId];
 }
 
@@ -97,6 +97,8 @@ class MantenimientoInternoCubit extends Cubit<MantenimientoInternoState> {
       _datos(v == null ? state.datos.copyWith(limpiarKilometraje: true) : state.datos.copyWith(kilometraje: v));
   void cambiarFechaHora(DateTime f) => _datos(state.datos.copyWith(fechaHora: f));
   void cambiarDetalle(String texto) => _datos(state.datos.copyWith(detalle: texto));
+  void cambiarMarca(String texto) => _datos(state.datos.copyWith(marca: texto));
+  void cambiarEspecificacion(String texto) => _datos(state.datos.copyWith(especificacion: texto));
 
   void agregarFotos(List<XFile> nuevas) {
     final fotos = [...state.fotos, ...nuevas];

@@ -161,15 +161,16 @@ class GeneradorExcelDespachoBodega {
     final descEquipo = '${ticket.equipo.name.toUpperCase()}$detalleStr';
     sheet.getRangeByName('E3').setText(descEquipo);
 
-    // R3: PROYECTO Y CARGO
-    sheet.getRangeByName('A4').setText('PROYECTO:');
-    sheet.getRangeByName('A4').cellStyle.bold = true;
-    sheet.getRangeByName('B4:C4').merge();
-    final proyecto = encMantenimiento?.proyecto ??
-        (ticket.codigoProyecto != null && ticket.codigoProyecto!.isNotEmpty
-            ? ticket.codigoProyecto!
-            : (ticket.campamento.isNotEmpty ? ticket.campamento : 'SIN PROYECTO'));
-    sheet.getRangeByName('B4').setText(proyecto);
+    // R3: PROYECTO Y CARGO (mantenimiento interno: sin proyecto)
+    if (encMantenimiento == null) {
+      sheet.getRangeByName('A4').setText('PROYECTO:');
+      sheet.getRangeByName('A4').cellStyle.bold = true;
+      sheet.getRangeByName('B4:C4').merge();
+      final proyecto = ticket.codigoProyecto != null && ticket.codigoProyecto!.isNotEmpty
+          ? ticket.codigoProyecto!
+          : (ticket.campamento.isNotEmpty ? ticket.campamento : 'SIN PROYECTO');
+      sheet.getRangeByName('B4').setText(proyecto);
+    }
 
     sheet.getRangeByName('D4').setText('CARGO:');
     sheet.getRangeByName('D4').cellStyle.bold = true;

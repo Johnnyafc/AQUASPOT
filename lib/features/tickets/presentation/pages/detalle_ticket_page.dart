@@ -1,5 +1,6 @@
 // lib/features/tickets/presentation/pages/detalle_ticket_page.dart
 
+import '../../domain/services/flujo_reportes_automaticos_service.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart'; // ⚙️ LIBRERÍA DE VIDEO
 import '../../../../core/enum/ticket_enums.dart';
@@ -54,7 +55,7 @@ class DetalleTicketPage extends StatelessWidget {
             // que este ticket tiene apartados (reservados) en bodega,
             // pendientes de despachar. Se calcula con datos que el ticket
             // ya trae (itemsDespachoBodega), no requiere leer nada mas.
-            if (ticket.equipo == TipoEquipo.Caracol && _repuestosReservados.isNotEmpty) ...[
+            if (FlujoReportesAutomaticosService.usa(ticket) && _repuestosReservados.isNotEmpty) ...[
               const SizedBox(height: 24),
               const Text("Repuestos Apartados en Bodega", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
               const SizedBox(height: 12),

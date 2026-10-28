@@ -17,6 +17,7 @@ class MantenimientoInternoModel {
         if (e.fechaHoraFalla != null) 'fechaHoraFalla': Timestamp.fromDate(e.fechaHoraFalla!),
         if (e.urlFotoLectura != null) 'urlFotoLectura': e.urlFotoLectura,
         if (e.videosUrls.isNotEmpty) 'videosUrls': e.videosUrls,
+        if (e.especificacion.isNotEmpty) 'especificacion': e.especificacion,
         if (e.repuestosPorCodificar.isNotEmpty)
           'repuestosPorCodificar': [for (final r in e.repuestosPorCodificar) _porCodificarAJson(r)],
       };
@@ -66,6 +67,7 @@ class MantenimientoInternoModel {
           : (fecha is String ? DateTime.tryParse(fecha) : null),
       urlFotoLectura: json['urlFotoLectura']?.toString(),
       videosUrls: [for (final u in (json['videosUrls'] as List?) ?? const []) u.toString()],
+      especificacion: json['especificacion']?.toString() ?? '',
       repuestosPorCodificar: [
         for (final r in (json['repuestosPorCodificar'] as List?) ?? const []) ?_porCodificarDesdeJson(r),
       ],

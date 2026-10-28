@@ -10,6 +10,7 @@ import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_eve
 import '../../domain/entities/item_despacho_bodega_entity.dart';
 import '../../../inventario/domain/entities/item_inventario_entity.dart';
 import 'package:flutter/material.dart';
+import '../widgets/resumen_mantenimiento_widget.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -256,6 +257,7 @@ class _GestionComprasPageState extends State<GestionComprasPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               TarjetaNoRequiereComprasWidget(ticket: widget.ticket),
+              if (widget.ticket.esMantenimientoInterno) ResumenMantenimientoWidget(ticket: widget.ticket),
               // ==========================================
               // 🔍 PANEL DE TELEMETRÍA (Solo Lectura)
               // ==========================================
@@ -298,6 +300,9 @@ class _GestionComprasPageState extends State<GestionComprasPage> {
                         const SizedBox(height: 12),
                       ],
 
+                      // 🛠️ Mantenimiento interno: sin proyecto ni OV (sus datos van
+                      // en el resumen de arriba).
+                      if (!widget.ticket.esMantenimientoInterno) ...[
                       _buildReadoutRow('Equipo y Marca:', '${widget.ticket.equipo.name.toUpperCase()} • Marca: ${widget.ticket.marca.toUpperCase()}'),
                       const SizedBox(height: 8),
                       _buildReadoutRow('Código de Proyecto (Costos):', codigoProyecto, isHighlighted: true),
@@ -318,6 +323,7 @@ class _GestionComprasPageState extends State<GestionComprasPage> {
                         )
                       else
                         const Text('⚠️ No se detectó documento de Orden de Venta comercial adjunto.', style: TextStyle(color: Colors.red, fontSize: 12)),
+                      ],
 
                       // ==========================================
                       // 🔌 BLOQUE COMPLEMENTARIO: SI ES GARANTÍA APROBADA, AÑADIMOS SU RESPALDO TÉCNICO

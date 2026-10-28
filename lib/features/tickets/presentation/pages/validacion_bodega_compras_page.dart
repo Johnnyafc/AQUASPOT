@@ -1,8 +1,8 @@
+import '../widgets/resumen_mantenimiento_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../../core/enum/ticket_enums.dart';
 import '../../domain/entities/ticket_entity.dart';
 import '../../domain/entities/item_despacho_bodega_entity.dart';
 import '../../domain/services/flujo_venta_repuesto_service.dart';
@@ -127,9 +127,8 @@ class _ValidacionBodegaComprasPageState
   Widget build(BuildContext context) {
     // 🛒 Venta de Repuesto (cualquier equipo): validación por repuesto y
     // "Transferir a Bodega" (despacho/picking); sin "directo a taller".
-    final bool esCaracol = widget.ticket.equipo == TipoEquipo.Caracol ||
-        widget.ticket.equipo.name.toLowerCase().contains('caracol') ||
-        FlujoVentaRepuestoService.validacionPorRepuesto(widget.ticket);
+    // Flujo de reportes automáticos (antes solo Caracol) y venta.
+    final bool esCaracol = FlujoVentaRepuestoService.validacionPorRepuesto(widget.ticket);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
@@ -223,15 +222,20 @@ class _ValidacionBodegaComprasPageState
                     ],
                   ),
                   const Divider(height: 20),
-                  if (ticket.clienteId.trim().isNotEmpty) ...[
-                    _buildDatoRow('Cliente / Camaronera:', ticket.clienteId),
+                  // 🛠️ Mantenimiento interno: datos con los que se creó.
+                  if (ticket.esMantenimientoInterno)
+                    ResumenMantenimientoWidget(ticket: ticket, titulo: 'Mantenimiento interno')
+                  else ...[
+                    if (ticket.clienteId.trim().isNotEmpty) ...[
+                      _buildDatoRow('Cliente / Camaronera:', ticket.clienteId),
+                      const SizedBox(height: 6),
+                    ],
+                    _buildDatoRow('Contacto:', ticket.nombreContacto),
                     const SizedBox(height: 6),
+                    _buildDatoRow('Sede:', ticket.sede.name),
+                    const SizedBox(height: 6),
+                    _buildDatoRow('Proyecto:', ticket.codigoProyecto ?? 'Sin Asignar'),
                   ],
-                  _buildDatoRow('Contacto:', ticket.nombreContacto),
-                  const SizedBox(height: 6),
-                  _buildDatoRow('Sede:', ticket.sede.name),
-                  const SizedBox(height: 6),
-                  _buildDatoRow('Proyecto:', ticket.codigoProyecto ?? 'Sin Asignar'),
                 ],
               ),
             ),

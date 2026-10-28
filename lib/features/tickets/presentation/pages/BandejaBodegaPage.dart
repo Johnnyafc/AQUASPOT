@@ -2,6 +2,7 @@ import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_bloc.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/validacion_bodega_compras_page.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/services/resumen_mantenimiento_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/ticket_entity.dart';
@@ -56,11 +57,9 @@ class BandejaBodegaPage extends StatelessWidget {
             final ocGestionada = t.gestionCompras != null || t.isComprasCompletado;
             if (!ocGestionada) return false;
 
-            // 🛒 Venta de Repuesto: igual que Caracol (validación por repuesto
-            // hasta transferir a Bodega).
-            final esCaracol = t.equipo == TipoEquipo.Caracol ||
-                t.equipo.name.toLowerCase().contains('caracol') ||
-                FlujoVentaRepuestoService.validacionPorRepuesto(t);
+            // 🛒 Venta de Repuesto y flujo de reportes automáticos (antes solo
+            // Caracol): validación por repuesto hasta transferir a Bodega.
+            final esCaracol = FlujoVentaRepuestoService.validacionPorRepuesto(t);
 
             if (esCaracol) {
               // En Caracol permanece en Validación Bodega hasta que Compras complete la validación o se transfiera a Bodega
@@ -99,8 +98,8 @@ class BandejaBodegaPage extends StatelessWidget {
               itemCount: ticketsValidacion.length,
               itemBuilder: (context, index) {
                 final ticket = ticketsValidacion[index];
-                final esCaracol = ticket.equipo == TipoEquipo.Caracol ||
-                    ticket.equipo.name.toLowerCase().contains('caracol');
+                // Validación por repuesto (flujo de reportes automáticos / venta).
+                final esCaracol = FlujoVentaRepuestoService.validacionPorRepuesto(ticket);
                 final validados = ticket.itemsDespachoBodega.where((i) => i.validadoPorCompras).length;
                 final total = ticket.itemsDespachoBodega.isNotEmpty
                     ? ticket.itemsDespachoBodega.length
@@ -125,9 +124,14 @@ class BandejaBodegaPage extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SizedBox(height: 4),
-                        Text('Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}'),
-                        if (ticket.clienteId.trim().isNotEmpty) Text('Cliente: ${ticket.clienteId}'),
-                        Text('Contacto: ${ticket.nombreContacto}'),
+                        // 🛠️ Mantenimiento interno: datos con los que se creó (sin cliente).
+                        if (ticket.esMantenimientoInterno)
+                          Text(ResumenMantenimientoService.lineaCorta(ticket))
+                        else ...[
+                          Text('Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}'),
+                          if (ticket.clienteId.trim().isNotEmpty) Text('Cliente: ${ticket.clienteId}'),
+                          Text('Contacto: ${ticket.nombreContacto}'),
+                        ],
                         const SizedBox(height: 6),
                         if (esCaracol)
                           Container(

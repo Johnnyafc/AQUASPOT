@@ -548,13 +548,16 @@ Stream<String?> escucharEstadoExcel(String ticketId) {
   // reservar (protege contra doble clic / reintento de red en el boton
   // "Confirmar y Subir").
   @override
-  Future<void> guardarEvaluacionTecnicaConReservaStock({
+  Future<TicketModel> guardarEvaluacionTecnicaConReservaStock({
     required TicketModel ticket,
     required List<Map<String, dynamic>> itemsAReservar,
+    TicketModel Function(Map<String, double> stockNeto)? ajustarConStock,
   }) async {
+    var aGuardar = ticket;
     try {
       final ticketRef = firestore.collection('tickets').doc(ticket.id);
       await firestore.runTransaction((tx) async {
+        aGuardar = ticket;
         final ticketSnap = await tx.get(ticketRef);
         if (!ticketSnap.exists) {
           throw ServerException('El ticket ${ticket.id} no existe.');
@@ -572,6 +575,25 @@ Stream<String?> escucharEstadoExcel(String ticketId) {
             final ref = firestore.collection('inventario_bodega').doc(docId);
             inventarioSnaps[docId] = await tx.get(ref);
           }
+        }
+
+        // 1b. Stock neto ACTUAL (antes de apartar) para decidir el destino.
+        // Si ya tenía evaluación (reintento tras un error de red, o dos
+        // personas a la vez) no se vuelve a decidir: el destino ya quedó.
+        if (ajustarConStock != null && yaTeniaEvaluacion) {
+          throw ServerException('Este requerimiento ya tiene su evaluación guardada. Cierre y recargue la bandeja.');
+        }
+        if (ajustarConStock != null) {
+          final stockNeto = <String, double>{};
+          for (final item in itemsAReservar) {
+            final codigo = (item['codigo'] as String?)?.trim() ?? '';
+            final snap = inventarioSnaps[_idInventarioDesdeCodigo(codigo)];
+            if (codigo.isEmpty || snap == null || !snap.exists) continue;
+            final disponible = (snap.data()?['stockDisponible'] as num?)?.toDouble() ?? 0.0;
+            final reservado = (snap.data()?['stockReservado'] as num?)?.toDouble() ?? 0.0;
+            stockNeto[codigo.toUpperCase()] = disponible - reservado;
+          }
+          aGuardar = ajustarConStock(stockNeto);
         }
 
         // 2. Reserva (solo la primera vez que este ticket guarda su
@@ -597,8 +619,8 @@ Stream<String?> escucharEstadoExcel(String ticketId) {
 
         // 3. Escritura del ticket -- mismo criterio que actualizarTicket
         // (proteger codigoProyecto si viene vacio/nulo en esta copia).
-        final Map<String, dynamic> json = ticket.toJson();
-        if (ticket.codigoProyecto == null || ticket.codigoProyecto!.trim().isEmpty) {
+        final Map<String, dynamic> json = aGuardar.toJson();
+        if (aGuardar.codigoProyecto == null || aGuardar.codigoProyecto!.trim().isEmpty) {
           json.remove('codigoProyecto');
         }
         tx.update(ticketRef, json);
@@ -608,6 +630,7 @@ Stream<String?> escucharEstadoExcel(String ticketId) {
       if (e is ServerException) rethrow;
       throw ServerException(e.toString());
     }
+    return aGuardar;
   }
 
   // NUEVO: guardado de campos con candado de estado (igual que

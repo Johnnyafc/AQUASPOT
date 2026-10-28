@@ -30,6 +30,7 @@ class ActividadMantenimiento extends Equatable {
   });
 
   ActividadMantenimiento copyWith({
+    String? nombre,
     double? horasHombre,
     String? observacion,
     List<RepuestoRegistradoEntity>? repuestos,
@@ -38,7 +39,7 @@ class ActividadMantenimiento extends Equatable {
   }) {
     return ActividadMantenimiento(
       codigo: codigo,
-      nombre: nombre,
+      nombre: nombre ?? this.nombre,
       horasHombre: horasHombre ?? this.horasHombre,
       observacion: observacion ?? this.observacion,
       repuestos: repuestos ?? this.repuestos,

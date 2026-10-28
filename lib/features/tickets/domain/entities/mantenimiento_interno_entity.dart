@@ -41,6 +41,7 @@ class MantenimientoInternoEntity extends Equatable {
   final String? urlFotoLectura; // foto del horómetro (cosechadora) o del kilometraje (vehículo)
   final List<String> videosUrls; // videos de evidencia
   final List<RepuestoPorCodificarEntity> repuestosPorCodificar; // sin código: Costos los crea
+  final String especificacion; // especificación del equipo (la marca va en ticket.marca)
 
   const MantenimientoInternoEntity({
     required this.tipoMantenimiento,
@@ -51,6 +52,7 @@ class MantenimientoInternoEntity extends Equatable {
     this.urlFotoLectura,
     this.videosUrls = const [],
     this.repuestosPorCodificar = const [],
+    this.especificacion = '',
   });
 
   MantenimientoInternoEntity copyWith({
@@ -67,10 +69,11 @@ class MantenimientoInternoEntity extends Equatable {
       urlFotoLectura: urlFotoLectura ?? this.urlFotoLectura,
       videosUrls: videosUrls ?? this.videosUrls,
       repuestosPorCodificar: repuestosPorCodificar ?? this.repuestosPorCodificar,
+      especificacion: especificacion,
     );
   }
 
   @override
   List<Object?> get props =>
-      [tipoMantenimiento, tipoActivo, placa, kilometraje, fechaHoraFalla, urlFotoLectura, videosUrls, repuestosPorCodificar];
+      [tipoMantenimiento, tipoActivo, placa, kilometraje, fechaHoraFalla, urlFotoLectura, videosUrls, repuestosPorCodificar, especificacion];
 }

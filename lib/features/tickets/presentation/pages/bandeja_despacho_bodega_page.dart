@@ -1,3 +1,4 @@
+import 'package:aquaspot_postventa/features/tickets/domain/services/resumen_mantenimiento_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/enum/ticket_enums.dart';
@@ -311,7 +312,9 @@ class _BandejaDespachoBodegaPageState extends State<BandejaDespachoBodegaPage> {
               ),
               const SizedBox(height: 10),
               Text(
-                'Cliente / Campamento: ${ticket.campamento.isNotEmpty ? ticket.campamento : ticket.clienteId}',
+                ticket.esMantenimientoInterno
+                    ? ResumenMantenimientoService.lineaCorta(ticket)
+                    : 'Cliente / Campamento: ${ticket.campamento.isNotEmpty ? ticket.campamento : ticket.clienteId}',
                 style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
               ),
               if (ticket.numeroSerie != null && ticket.numeroSerie!.isNotEmpty)

@@ -28,6 +28,8 @@ final ahora = DateTime(2026, 10, 26, 12);
 
 DatosMantenimientoInterno cosechadoraValida({TipoMantenimiento tipo = TipoMantenimiento.correctivo}) =>
     DatosMantenimientoInterno(
+      marca: 'JOHN DEERE',
+      especificacion: 'S700',
       tipoMantenimiento: tipo,
       tipoActivo: TipoActivoMantenimiento.cosechadora,
       serieOPlaca: 'AQ2',
@@ -107,12 +109,26 @@ void main() {
           ['Seleccione el tipo de máquina.']);
     });
 
+    test('Marca y especificación del equipo: obligatorias y se guardan en MAYÚSCULAS', () {
+      final sin = cosechadoraValida().copyWith(marca: ' ', especificacion: '');
+      expect(F.validar(sin, rol: RolUsuario.requerimiento, ahora: ahora),
+          containsAll(['Ingrese la marca.', 'Ingrese la especificación del equipo.']));
+      final t = F.construirTicket(cosechadoraValida().copyWith(marca: ' john deere ', especificacion: 's700 2020'),
+          usuarioNombre: 'Ana', rol: RolUsuario.requerimiento, ahora: ahora);
+      expect(t.marca, 'JOHN DEERE');
+      expect(t.mantenimientoInterno!.especificacion, 'S700 2020');
+      final json = TicketModel.fromEntity(t.copyWith(id: 'REQ-3')).toJson()..['id'] = 'REQ-3';
+      expect(TicketModel.fromJson(json).mantenimientoInterno!.especificacion, 'S700 2020');
+    });
+
     test('Cosechadora válida no tiene errores', () {
       expect(F.validar(cosechadoraValida(), rol: RolUsuario.requerimiento, ahora: ahora), isEmpty);
     });
 
     test('Faltantes: horómetro y su foto, detalle corto, sin evidencias, serie fuera del catálogo', () {
       final d = DatosMantenimientoInterno(
+        marca: 'JOHN DEERE',
+        especificacion: 'S700',
         tipoActivo: TipoActivoMantenimiento.cosechadora,
         serieOPlaca: 'XX9',
         detalle: 'falla',
@@ -128,6 +144,8 @@ void main() {
 
     test('Fecha de la falla: nunca futura en correctivo; en preventivo sí (programada)', () {
       final futura = DatosMantenimientoInterno(
+        marca: 'JOHN DEERE',
+        especificacion: 'S700',
         tipoActivo: TipoActivoMantenimiento.caracol,
         serieOPlaca: 'AQ2',
         fechaHora: ahora.add(const Duration(days: 1)),
@@ -143,6 +161,8 @@ void main() {
 
     test('Kilometraje negativo no se acepta', () {
       final d = DatosMantenimientoInterno(
+        marca: 'JOHN DEERE',
+        especificacion: 'S700',
         tipoActivo: TipoActivoMantenimiento.vehiculo,
         serieOPlaca: 'GTA1234',
         kilometraje: -5,
@@ -155,6 +175,8 @@ void main() {
 
     test('Vehículo: kilometraje y su foto son obligatorios', () {
       const d = DatosMantenimientoInterno(
+        marca: 'JOHN DEERE',
+        especificacion: 'S700',
         tipoActivo: TipoActivoMantenimiento.vehiculo,
         serieOPlaca: 'GTA1234',
         detalle: 'Frenos desgastados',
@@ -199,6 +221,8 @@ void main() {
 
     test('Vehículo: la placa va en mantenimientoInterno, no en la serie', () {
       final d = DatosMantenimientoInterno(
+        marca: 'JOHN DEERE',
+        especificacion: 'S700',
         tipoActivo: TipoActivoMantenimiento.vehiculo,
         serieOPlaca: 'GTA1234',
         kilometraje: 45200,
@@ -217,6 +241,8 @@ void main() {
   group('Aire acondicionado y Herramientas', () {
     DatosMantenimientoInterno aire({String? serie, DateTime? fecha, TipoMantenimiento tipo = TipoMantenimiento.correctivo}) =>
         DatosMantenimientoInterno(
+          marca: 'JOHN DEERE',
+          especificacion: 'S700',
           tipoMantenimiento: tipo,
           tipoActivo: TipoActivoMantenimiento.aireAcondicionado,
           serieOPlaca: serie,
@@ -278,6 +304,8 @@ void main() {
 
     test('Al pasar de "fecha y hora" a "solo fecha" se borra la fecha; entre iguales se conserva', () {
       final contador = DatosMantenimientoInterno(
+        marca: 'JOHN DEERE',
+        especificacion: 'S700',
         tipoActivo: TipoActivoMantenimiento.contador,
         serieOPlaca: 'Contador AQUASPOT',
         fechaHora: DateTime(2026, 10, 20, 9, 30),
@@ -301,6 +329,8 @@ void main() {
 
   test('Se guarda y se lee igual en Firestore', () {
     final d = DatosMantenimientoInterno(
+      marca: 'JOHN DEERE',
+      especificacion: 'S700',
       tipoMantenimiento: TipoMantenimiento.preventivo,
       tipoActivo: TipoActivoMantenimiento.contador,
       serieOPlaca: 'Contador AQUASPOT',
