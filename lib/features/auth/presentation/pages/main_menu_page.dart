@@ -25,13 +25,14 @@ import 'package:aquaspot_postventa/features/fallas/presentation/pages/gestion_me
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/bandeja_fallas_pendientes_page.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/modificar_ticket_page.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/inconsistencias_trazabilidad_page.dart';
-import 'package:aquaspot_postventa/core/utils/constants.dart' show esAdministradorMaestro;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
 import '../../domain/entities/usuario_entity.dart';
+import '../../domain/services/menu_principal_service.dart';
+import '../../../plan_preventivo/presentation/pages/plan_preventivo_page.dart';
 import '../../../tickets/presentation/pages/creacion_ticket_page.dart';
 import '../../../tickets/presentation/pages/historial_tickets_page.dart';
 import '../../../tickets/presentation/pages/bandeja_evaluaciones_page.dart';
@@ -187,278 +188,362 @@ class _MainMenuPageState extends State<MainMenuPage> {
 }
 
 // =====================================================================
-// SUB-RUTINA 1: PANEL DE INICIO (El Dashboard principal)
+// SUB-RUTINA 1: PANEL DE INICIO (menú con buscador)
+// Qué ve cada rol, las secciones y la búsqueda están en MenuPrincipalService;
+// aquí solo el ícono, el color y la pantalla de cada opción.
 // =====================================================================
-class _InicioView extends StatelessWidget {
+typedef _M = MenuPrincipalService;
+
+const _azulMenu = Color(0xFF005A9C);
+const _azulOscuro = Color(0xFF003057);
+
+/// Ícono, color y pantalla de cada opción del menú.
+({IconData icono, Color color, Widget Function() pagina}) _vistaDe(OpcionMenu o) => switch (o) {
+      OpcionMenu.crearTicket => (icono: Icons.add_box, color: Colors.blue, pagina: () => const CreacionTicketPage()),
+      OpcionMenu.tickets => (icono: Icons.inventory_outlined, color: Colors.teal, pagina: () => const BandejaRecepcionPage()),
+      OpcionMenu.biblioteca =>
+        (icono: Icons.perm_media_outlined, color: Colors.indigo, pagina: () => const BibliotecaDocumentosPage()),
+      OpcionMenu.recepcionGuabo =>
+        (icono: Icons.car_rental, color: Colors.lightBlue, pagina: () => const BandejaRecepcionGuaboPage()),
+      OpcionMenu.evaluaciones => (icono: Icons.handyman, color: Colors.orange, pagina: () => const BandejaEvaluacionesPage()),
+      OpcionMenu.procesoTrabajo =>
+        (icono: Icons.engineering, color: Colors.deepOrange, pagina: () => const BandejaTrabajosPage()),
+      OpcionMenu.recepcionBodega => (
+          icono: Icons.assignment_turned_in_outlined,
+          color: const Color(0xFF00796B),
+          pagina: () => const BandejaRecepcionBodegaPage()
+        ),
+      OpcionMenu.garantias =>
+        (icono: Icons.verified_user_outlined, color: Colors.green, pagina: () => const BandejaRevisionesGarantiasPage()),
+      OpcionMenu.fallasTicketsAntiguos => (
+          icono: Icons.playlist_add_check_circle_outlined,
+          color: Colors.deepOrange,
+          pagina: () => const BandejaFallasPendientesPage()
+        ),
+      OpcionMenu.clientes => (icono: Icons.people_alt, color: _azulMenu, pagina: () => const GestionClientesPage()),
+      OpcionMenu.crearProforma => (icono: Icons.business_center, color: Colors.green, pagina: () => const BandejaComercialPage()),
+      OpcionMenu.proformasEnviadas =>
+        (icono: Icons.send_outlined, color: Colors.blue, pagina: () => const BandejaProformasEnviadasPage()),
+      OpcionMenu.validacionEntregas =>
+        (icono: Icons.fact_check, color: Colors.indigo, pagina: () => const BandejaValidacionFacturacionPage()),
+      OpcionMenu.entregaFacturacion =>
+        (icono: Icons.receipt_long, color: Colors.purple, pagina: () => const BandejaEntregasPage()),
+      OpcionMenu.crearProyecto =>
+        (icono: Icons.account_balance_wallet, color: Colors.orange.shade800, pagina: () => const BandejaCostosPage()),
+      OpcionMenu.compras => (icono: Icons.shopping_cart_outlined, color: Colors.orange.shade800, pagina: () => const BandejaComprasPage()),
+      OpcionMenu.validacionBodegaCompras =>
+        (icono: Icons.factory, color: Colors.blue.shade800, pagina: () => const BandejaBodegaPage()),
+      OpcionMenu.despachoBodega =>
+        (icono: Icons.local_shipping_outlined, color: _azulMenu, pagina: () => const BandejaDespachoBodegaPage()),
+      OpcionMenu.inventario => (
+          icono: Icons.inventory_2_outlined,
+          color: const Color(0xFF2E7D32),
+          pagina: () => const GestionStockBodegaPage()
+        ),
+      OpcionMenu.catalogoActividades =>
+        (icono: Icons.menu_book, color: _azulMenu, pagina: () => const GestionCatalogoActividadesPage()),
+      OpcionMenu.revisionCodigosPlanMaestro => (
+          icono: Icons.fact_check_outlined,
+          color: const Color(0xFF00796B),
+          pagina: () => const RevisionCodigosPlanMaestroPage()
+        ),
+      OpcionMenu.planPreventivo =>
+        (icono: Icons.event_repeat, color: const Color(0xFF2E7D32), pagina: () => const PlanPreventivoPage()),
+      OpcionMenu.tecnicos => (icono: Icons.badge_outlined, color: _azulOscuro, pagina: () => const GestionTecnicosPage()),
+      OpcionMenu.metricasFallas =>
+        (icono: Icons.troubleshoot_outlined, color: Colors.blueGrey.shade700, pagina: () => const GestionMetricasFallasPage()),
+      OpcionMenu.operarios =>
+        (icono: Icons.admin_panel_settings, color: Colors.blueGrey, pagina: () => const RegistroUsuarioPage()),
+      OpcionMenu.modificarTicket => (icono: Icons.edit_note, color: Colors.deepOrange, pagina: () => const ModificarTicketPage()),
+      OpcionMenu.inconsistencias =>
+        (icono: Icons.rule, color: Colors.amber.shade800, pagina: () => const InconsistenciasTrazabilidadPage()),
+    };
+
+class _InicioView extends StatefulWidget {
   final UsuarioEntity operador;
 
   const _InicioView({required this.operador});
 
   @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text("Hola, ${operador.rol.name.toUpperCase()}", 
-               style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 20),
-          ..._getModules(context, operador),
-        ],
-      ),
-    );
+  State<_InicioView> createState() => _InicioViewState();
+}
+
+class _InicioViewState extends State<_InicioView> {
+  final _busqueda = TextEditingController();
+  SeccionMenu? _seccion; // null = todas
+
+  static const _dias = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+  static const _meses = [
+    'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+  ];
+
+  @override
+  void dispose() {
+    _busqueda.dispose();
+    super.dispose();
   }
 
-  List<Widget> _getModules(BuildContext context, UsuarioEntity operador) {
-    List<Widget> modules = [];
-    final bool isAdmin = operador.rol == RolUsuario.admin;
+  String _fechaHoy() {
+    final f = DateTime.now();
+    return '${_dias[f.weekday - 1]} ${f.day} de ${_meses[f.month - 1]}';
+  }
 
-    // 📚 BIBLIOTECA DE DOCUMENTOS — no disponible para rol técnico
-    if (operador.rol != RolUsuario.tecnico) {
-      modules.add(_buildCardOption(
-        title: 'Biblioteca de Documentos',
-        icon: Icons.perm_media_outlined,
-        color: Colors.indigo,
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BibliotecaDocumentosPage())),
+  void _abrir(OpcionMenu o) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _vistaDe(o).pagina()));
+
+  @override
+  Widget build(BuildContext context) {
+    final op = widget.operador;
+    final todas = _M.visibles(rol: op.rol, email: op.email);
+    final texto = _busqueda.text;
+    final encontradas = _M.buscar(todas, texto);
+    final grupos = _M.agrupar(encontradas).where((g) => _seccion == null || g.$1 == _seccion).toList();
+    final seccionesDisponibles = _M.agrupar(todas).map((g) => g.$1).toList();
+    final nombre = op.nombre.trim().isNotEmpty ? op.nombre.trim().split(RegExp(r'\s+')).first : op.rol.name;
+
+    return LayoutBuilder(builder: (context, c) {
+      final columnas = c.maxWidth < 600 ? 2 : (c.maxWidth < 1000 ? 3 : 4);
+      return CustomScrollView(slivers: [
+        // Encabezado con saludo y buscador.
+        SliverToBoxAdapter(
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(colors: [_azulMenu, _azulOscuro], begin: Alignment.topLeft, end: Alignment.bottomRight),
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                // Mismo ancho útil que la cuadrícula (1100 - 2 × 16).
+                constraints: const BoxConstraints(maxWidth: 1068),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(_fechaHoy(), style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  const SizedBox(height: 4),
+                  Row(children: [
+                    Flexible(
+                      child: Text('Hola, $nombre',
+                          style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                      decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(20)),
+                      child: Text(op.rol.name.toUpperCase(),
+                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                    ),
+                  ]),
+                  const SizedBox(height: 16),
+                  Material(
+                    elevation: 4,
+                    shadowColor: Colors.black26,
+                    borderRadius: BorderRadius.circular(16),
+                    child: TextField(
+                      controller: _busqueda,
+                      onChanged: (_) => setState(() {}),
+                      textInputAction: TextInputAction.search,
+                      onSubmitted: (_) {
+                        if (encontradas.length == 1) _abrir(encontradas.single);
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Buscar: compras, preventivo, stock…',
+                        prefixIcon: const Icon(Icons.search, color: _azulMenu),
+                        suffixIcon: texto.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: 'Limpiar',
+                                icon: const Icon(Icons.close),
+                                onPressed: () => setState(_busqueda.clear),
+                              ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                      ),
+                    ),
+                  ),
+                ]),
+              ),
+            ),
+          ),
+        ),
+        // Chips de sección.
+        if (seccionesDisponibles.length > 1)
+          SliverToBoxAdapter(
+            child: _Centrado(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+                  child: Row(children: [
+                    _chip('Todas', _seccion == null, () => setState(() => _seccion = null)),
+                    for (final s in seccionesDisponibles)
+                      _chip(s.etiqueta, _seccion == s, () => setState(() => _seccion = _seccion == s ? null : s)),
+                  ]),
+                ),
+            ),
+          ),
+        if (grupos.isEmpty)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(Icons.search_off, size: 56, color: Colors.grey.shade400),
+                const SizedBox(height: 8),
+                Text(
+                  texto.trim().isEmpty ? 'No hay opciones para tu rol.' : 'Sin resultados para "${texto.trim()}".',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 15),
+                  textAlign: TextAlign.center,
+                ),
+              ]),
+            ),
+          )
+        else
+          for (final (seccion, opciones) in grupos) ...[
+            SliverToBoxAdapter(
+              child: _Centrado(
+                child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+                    child: Text(seccion.etiqueta.toUpperCase(),
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1, color: Colors.grey.shade600)),
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: _Centrado(
+                child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: LayoutBuilder(builder: (context, c2) {
+                      const espacio = 12.0;
+                      final ancho = (c2.maxWidth - espacio * (columnas - 1)) / columnas;
+                      return Wrap(spacing: espacio, runSpacing: espacio, children: [
+                        for (final o in opciones)
+                          SizedBox(
+                            width: ancho,
+                            child: _TarjetaMenu(opcion: o, busqueda: texto, onTap: () => _abrir(o)),
+                          ),
+                      ]);
+                    }),
+                ),
+              ),
+            ),
+          ],
+        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      ]);
+    });
+  }
+
+  Widget _chip(String texto, bool elegido, VoidCallback onTap) => Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: ChoiceChip(
+          label: Text(texto),
+          selected: elegido,
+          onSelected: (_) => onTap(),
+          selectedColor: _azulMenu,
+          labelStyle: TextStyle(color: elegido ? Colors.white : Colors.black87, fontWeight: FontWeight.w600),
+          showCheckmark: false,
+        ),
+      );
+}
+
+/// Ancho máximo de 1100 centrado en pantallas grandes, con el contenido
+/// alineado a la izquierda.
+class _Centrado extends StatelessWidget {
+  final Widget child;
+
+  const _Centrado({required this.child});
+
+  @override
+  Widget build(BuildContext context) => Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1100),
+          child: SizedBox(width: double.infinity, child: child),
+        ),
+      );
+}
+
+/// Tarjeta de una opción: ícono en un círculo de color, título (con lo
+/// buscado resaltado) y descripción corta; se eleva al pasar el mouse.
+class _TarjetaMenu extends StatefulWidget {
+  final OpcionMenu opcion;
+  final String busqueda;
+  final VoidCallback onTap;
+
+  const _TarjetaMenu({required this.opcion, required this.busqueda, required this.onTap});
+
+  @override
+  State<_TarjetaMenu> createState() => _TarjetaMenuState();
+}
+
+class _TarjetaMenuState extends State<_TarjetaMenu> {
+  bool _encima = false;
+
+  List<TextSpan> _titulo(String titulo, Color color) {
+    final tramos = _M.resaltar(titulo, widget.busqueda);
+    const base = TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87);
+    if (tramos.isEmpty) return [TextSpan(text: titulo, style: base)];
+    final spans = <TextSpan>[];
+    var i = 0;
+    for (final (ini, fin) in tramos) {
+      if (ini > i) spans.add(TextSpan(text: titulo.substring(i, ini), style: base));
+      spans.add(TextSpan(
+        text: titulo.substring(ini, fin),
+        style: base.copyWith(color: color, backgroundColor: color.withValues(alpha: 0.12)),
       ));
+      i = fin;
     }
+    if (i < titulo.length) spans.add(TextSpan(text: titulo.substring(i), style: base));
+    return spans;
+  }
 
-    // 🔒 Solo la cuenta administradora maestra: cambio de estado de un ticket
-    // con motivo obligatorio (queda en la auditoría como "ADMIN: ...").
-    if (esAdministradorMaestro(operador.email)) {
-      modules.add(_buildCardOption(
-        title: 'Modificar Ticket',
-        icon: Icons.edit_note,
-        color: Colors.deepOrange,
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ModificarTicketPage())),
-      ));
-      modules.add(_buildCardOption(
-        title: 'Inconsistencias de Trazabilidad',
-        icon: Icons.rule,
-        color: Colors.amber.shade800,
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const InconsistenciasTrazabilidadPage())),
-      ));
-    }
-
-    // 🔒 ACCESO EXCLUSIVO PARA SUPER ADMINISTRADORES
-    if (isAdmin) {
-      modules.add(_buildCardOption(
-        title: 'Gestión de Operarios',
-        icon: Icons.admin_panel_settings,
-        color: Colors.blueGrey, // Color sobrio para módulos administrativos
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RegistroUsuarioPage())),
-      ));
-    }
-
-    // 🚀 MÓDULOS DE REQUERIMIENTO Y RECEPCIÓN
-    // Comercial también crea requerimientos (ej. ventas de repuesto que le llegan directo).
-    if (isAdmin ||
-        operador.rol == RolUsuario.requerimiento ||
-        operador.rol == RolUsuario.supervisor ||
-        operador.rol == RolUsuario.comercial) {
-      modules.add(_buildCardOption(
-        title: 'Crear Ticket',
-        icon: Icons.add_box,
-        color: Colors.blue,
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CreacionTicketPage())),
-      ));
-    }
-
-    if (isAdmin || operador.rol == RolUsuario.supervisor || operador.rol == RolUsuario.recepcion ) {
-      modules.add(_buildCardOption(
-        title: 'Tickets',
-        icon: Icons.inventory_outlined, 
-        color: Colors.teal, 
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaRecepcionPage())),
-      ));
-    }
-
-    // 🔧 MÓDULOS TÉCNICOS (Reservados para Supervisión y Administración)
-    if (isAdmin || operador.rol == RolUsuario.supervisor) {
-      modules.add(_buildCardOption(
-        title: 'Recepción del Guabo',
-        icon: Icons.car_rental,
-        color: Colors.lightBlue,
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaRecepcionGuaboPage())),
-      ));
-
-      modules.add(_buildCardOption(
-        title: 'Evaluaciones Técnicas',
-        icon: Icons.handyman,
-        color: Colors.orange,
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaEvaluacionesPage())),
-      ));
-
-      modules.add(_buildCardOption(
-        title: 'Proceso de trabajo',
-        icon: Icons.toll,
-        color: Colors.orange.shade800,
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaTrabajosPage())),
-      ));
-    }
-
-    // 📦 MÓDULO DE RECEPCIÓN EN BODEGA
-    if (isAdmin ||
-        operador.rol == RolUsuario.tecnico ||
-        operador.rol == RolUsuario.supervisor) {
-      modules.add(_buildCardOption(
-        title: 'Recepción Bodega',
-        icon: Icons.assignment_turned_in_outlined,
-        color: const Color(0xFF00796B),
-        onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const BandejaRecepcionBodegaPage())),
-      ));
-    }
-
-    // 📋 MÓDULOS DE SUPERVISIÓN
-    if (isAdmin || operador.rol == RolUsuario.supervisor) {
-      modules.add(_buildCardOption(
-        title: 'Revisión de garantias',
-        icon: Icons.perm_contact_cal_outlined,
-        color: Colors.green,
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaRevisionesGarantiasPage())),
-      ));
-
-      modules.add(_buildCardOption(
-        title: 'Catálogo de Actividades y Repuestos',
-        icon: Icons.menu_book,
-        color: const Color(0xFF005A9C),
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GestionCatalogoActividadesPage())),
-      ));
-
-      // 🔎 Códigos del plan maestro vs inventario (el supervisor de un
-      // equipo solo ve y corrige el suyo).
-      modules.add(_buildCardOption(
-        title: 'Revisión de Códigos del Plan Maestro',
-        icon: Icons.fact_check_outlined,
-        color: const Color(0xFF00796B),
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RevisionCodigosPlanMaestroPage())),
-      ));
-
-      modules.add(_buildCardOption(
-        title: 'Catálogo de Técnicos',
-        icon: Icons.badge_outlined,
-        color: const Color(0xFF003057),
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GestionTecnicosPage())),
-      ));
-
-      modules.add(_buildCardOption(
-        title: 'Métricas de Fallas',
-        icon: Icons.troubleshoot_outlined,
-        color: Colors.blueGrey.shade700,
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GestionMetricasFallasPage())),
-      ));
-
-      modules.add(_buildCardOption(
-        title: 'Agregar Fallas a Tickets Antiguos',
-        icon: Icons.playlist_add_check_circle_outlined,
-        color: Colors.deepOrange,
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaFallasPendientesPage())),
-      ));
-    }
-
-    // 💼 MÓDULOS COMERCIALES
-    if (isAdmin || operador.rol == RolUsuario.comercial) {
-      modules.add(_buildCardOption(
-        title: 'Gestión y Edición de Clientes',
-        icon: Icons.people_alt,
-        color: const Color(0xFF005A9C), 
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GestionClientesPage())),
-      ));
-
-      modules.add(_buildCardOption(
-        title: 'Crear proforma',
-        icon: Icons.business_center,
-        color: Colors.green, 
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaComercialPage())),
-      ));
-      
-      modules.add(_buildCardOption(
-        title: 'Proformas enviadas',
-        icon: Icons.access_alarm,
-        color: Colors.blue, 
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaProformasEnviadasPage())),
-      ));
-
-      modules.add(_buildCardOption(
-        title: 'Validación entregas comercial',
-        icon: Icons.access_alarm,
-        color: Colors.blue, 
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaValidacionFacturacionPage())),
-      ));
-
-    modules.add(_buildCardOption(
-        title: 'Entrega y facturación',
-        icon: Icons.access_alarm,
-        color: Colors.blue, 
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaEntregasPage())),
-      ));
-    }
-
-    // 💰 MÓDULOS DE COSTOS
-    if (isAdmin || operador.rol == RolUsuario.costos) {
-      modules.add(_buildCardOption(
-        title: 'Crear proyecto',
-        icon: Icons.account_balance_wallet, 
-        color: Colors.orange[800]!, 
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaCostosPage())),
-      ));
-    }
-
-    // 🛒 MÓDULOS DE COMPRAS Y BODEGA
-    if (isAdmin || operador.rol == RolUsuario.compras) {
-      modules.add(_buildCardOption(
-        title: 'Compras',
-        icon: Icons.account_balance_wallet, 
-        color: Colors.orange[800]!, 
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaComprasPage())),
-      ));
-
-      modules.add(_buildCardOption(
-        title: 'Validación Bodega (Compras)',
-        icon: Icons.factory, 
-        color: Colors.blue[800]!, 
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaBodegaPage())),
-      ));
-
-      modules.add(_buildCardOption(
-        title: 'Inventario y Stock Bodega',
-        icon: Icons.inventory_2_outlined,
-        color: const Color(0xFF2E7D32),
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GestionStockBodegaPage())),
-      ));
-    }
-
-    // 📦 MÓDULOS DE BODEGA / DESPACHO
-    if (isAdmin || operador.rol == RolUsuario.bodega) {
-      modules.add(_buildCardOption(
-        title: 'Despacho Bodega',
-        icon: Icons.local_shipping_outlined,
-        color: const Color(0xFF005A9C),
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BandejaDespachoBodegaPage())),
-      ));
-
-      modules.add(_buildCardOption(
-        title: 'Inventario y Stock Bodega',
-        icon: Icons.inventory_2_outlined,
-        color: const Color(0xFF2E7D32),
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GestionStockBodegaPage())),
-      ));
-    }
-
-    return modules;
-  } 
-
-  Widget _buildCardOption({required String title, required IconData icon, required Color color, required VoidCallback onTap}) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ListTile(
-        leading: Icon(icon, color: color, size: 30),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-        onTap: onTap,
+  @override
+  Widget build(BuildContext context) {
+    final d = _M.datos[widget.opcion]!;
+    final v = _vistaDe(widget.opcion);
+    return MouseRegion(
+      onEnter: (_) => setState(() => _encima = true),
+      onExit: (_) => setState(() => _encima = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        transform: Matrix4.translationValues(0, _encima ? -3 : 0, 0),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: _encima ? v.color.withValues(alpha: 0.5) : Colors.grey.shade200),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: _encima ? 0.10 : 0.04),
+              blurRadius: _encima ? 16 : 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: widget.onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(color: v.color.withValues(alpha: 0.12), shape: BoxShape.circle),
+                  child: Icon(v.icono, color: v.color, size: 24),
+                ),
+                const SizedBox(height: 10),
+                Text.rich(TextSpan(children: _titulo(d.titulo, v.color)), maxLines: 2, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 4),
+                Text(d.descripcion,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600, height: 1.3)),
+              ]),
+            ),
+          ),
+        ),
       ),
     );
   }
