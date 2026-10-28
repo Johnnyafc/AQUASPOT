@@ -11,7 +11,7 @@ import 'package:aquaspot_postventa/features/tickets/presentation/pages/creacion_
 import 'package:aquaspot_postventa/features/tickets/domain/entities/ticket_entity.dart'; // ⚙️ Necesario para el extension getter fechaInicioEstadoActual
 import 'package:aquaspot_postventa/features/tickets/presentation/widgets/tiempo_en_curso_widget.dart';
 import 'package:aquaspot_postventa/core/theme/ticket_visual_theme.dart';
-import 'package:aquaspot_postventa/features/tickets/domain/services/resumen_mantenimiento_service.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/widgets/resumen_mantenimiento_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -83,12 +83,14 @@ class _BandejaCostosPageState extends State<BandejaCostosPage> {
                   children: [
                     // 🆕 Cliente (empresa/camaronera) y Contacto (persona) son
                     // datos distintos — se muestran ambos.
-                    Text(
-                      ticket.esMantenimientoInterno
-                          ? ResumenMantenimientoService.lineaCorta(ticket)
-                          : '${ticket.clienteId.trim().isNotEmpty ? 'Cliente: ${ticket.clienteId} | ' : ''}'
-                              'Contacto: ${ticket.nombreContacto} | Máquina: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}',
-                    ),
+                    // 🛠️ Mantenimiento interno: todos los datos de la creación (sin fotos).
+                    if (ticket.esMantenimientoInterno)
+                      DatosMantenimientoTarjetaWidget(ticket: ticket)
+                    else
+                      Text(
+                        '${ticket.clienteId.trim().isNotEmpty ? 'Cliente: ${ticket.clienteId} | ' : ''}'
+                        'Contacto: ${ticket.nombreContacto} | Máquina: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}',
+                      ),
                     // 🧾 Venta con repuestos fuera del sistema: crear códigos.
                     if (CreacionCodigosMantenimientoService.requiereCreacionCodigos(ticket)) ...[
                       const SizedBox(height: 4),

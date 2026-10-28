@@ -1,5 +1,5 @@
-import 'package:aquaspot_postventa/features/tickets/domain/services/resumen_mantenimiento_service.dart';
 import '../../domain/services/flujo_reportes_automaticos_service.dart';
+import '../widgets/resumen_mantenimiento_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/enum/ticket_enums.dart';
@@ -286,7 +286,9 @@ class _BandejaDespachoBodegaPageState extends State<BandejaDespachoBodegaPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -299,7 +301,6 @@ class _BandejaDespachoBodegaPageState extends State<BandejaDespachoBodegaPage> {
                       style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0D47A1)),
                     ),
                   ),
-                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
@@ -307,20 +308,24 @@ class _BandejaDespachoBodegaPageState extends State<BandejaDespachoBodegaPage> {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      '${ticket.equipo.name.toUpperCase()} • ${ticket.marca.toUpperCase()}',
+                      ticket.esMantenimientoInterno
+                          ? 'MANTENIMIENTO INTERNO'
+                          : '${ticket.equipo.name.toUpperCase()} • ${ticket.marca.toUpperCase()}',
                       style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 10),
-              Text(
-                ticket.esMantenimientoInterno
-                    ? ResumenMantenimientoService.lineaCorta(ticket)
-                    : 'Cliente / Campamento: ${ticket.campamento.isNotEmpty ? ticket.campamento : ticket.clienteId}',
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-              ),
-              if (ticket.numeroSerie != null && ticket.numeroSerie!.isNotEmpty)
+              // 🛠️ Mantenimiento interno: todos los datos de la creación (sin fotos).
+              if (ticket.esMantenimientoInterno)
+                DatosMantenimientoTarjetaWidget(ticket: ticket)
+              else
+                Text(
+                  'Cliente / Campamento: ${ticket.campamento.isNotEmpty ? ticket.campamento : ticket.clienteId}',
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                ),
+              if (!ticket.esMantenimientoInterno && ticket.numeroSerie != null && ticket.numeroSerie!.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
@@ -353,20 +358,23 @@ class _BandejaDespachoBodegaPageState extends State<BandejaDespachoBodegaPage> {
                 ),
               ),
               const SizedBox(height: 10),
-              Row(
+              Wrap(
+                spacing: 12,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  const Icon(Icons.check_circle_outline, size: 16, color: Color(0xFF2E7D32)),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Habilitados por compras: $validadosCompras de $total',
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF2E7D32), fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(width: 12),
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.check_circle_outline, size: 16, color: Color(0xFF2E7D32)),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Habilitados por compras: $validadosCompras de $total',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF2E7D32), fontWeight: FontWeight.bold),
+                    ),
+                  ]),
                   Text(
                     '($despachados recolectados)',
                     style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                   ),
-                  const Spacer(),
                   Text(
                     FlujoVentaRepuestoService.esperaGuiaFirmada(ticket)
                         ? 'Subir guía firmada >'

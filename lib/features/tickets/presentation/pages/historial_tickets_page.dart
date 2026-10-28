@@ -1,6 +1,7 @@
 // lib/features/tickets/presentation/pages/historial_tickets_page.dart
 
 import 'package:aquaspot_postventa/core/enum/segmento_operativo.dart';
+import '../widgets/resumen_mantenimiento_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/ticket_bloc.dart';
@@ -677,7 +678,9 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              '${ticket.equipo.name.toUpperCase()} • ${ticket.marca.toUpperCase()}',
+                              ticket.esMantenimientoInterno
+                                  ? 'MANTENIMIENTO INTERNO'
+                                  : '${ticket.equipo.name.toUpperCase()} • ${ticket.marca.toUpperCase()}',
                               style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
                             ),
 
@@ -702,52 +705,37 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
                             // un único gris azulado neutro (kTicketIcono) — antes cada
                             // línea tenía su propio tono, sumando ruido sin aportar
                             // significado.
-                            if (ticket.clienteId.trim().isNotEmpty) ...[
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Icon(Icons.apartment, size: 15, color: kTicketIcono),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      'Cliente: ${ticket.clienteId}',
-                                      style: const TextStyle(fontSize: 13, color: kTicketTextoPrincipal, fontWeight: FontWeight.w600),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                            // 🛠️ Mantenimiento interno: todos los datos de la creación (sin fotos).
+                            if (ticket.esMantenimientoInterno)
+                              DatosMantenimientoTarjetaWidget(ticket: ticket)
+                            else ...[
+                              if (ticket.clienteId.trim().isNotEmpty) ...[
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Icon(Icons.apartment, size: 15, color: kTicketIcono),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        'Cliente: ${ticket.clienteId}',
+                                        style: const TextStyle(fontSize: 13, color: kTicketTextoPrincipal, fontWeight: FontWeight.w600),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                            ],
-                            // Contacto y Falla, cada uno en su propia línea con ícono
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Icon(Icons.person_outline, size: 15, color: kTicketIcono),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    'Contacto: ${ticket.nombreContacto}',
-                                    style: const TextStyle(fontSize: 13, color: kTicketTextoPrincipal),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                                  ],
                                 ),
+                                const SizedBox(height: 4),
                               ],
-                            ),
-                            // 🆕 Proyecto (solo si el ticket tiene uno asignado) — se muestra
-                            // en Historial como lo pidió el usuario.
-                            if (ticket.codigoProyecto != null && ticket.codigoProyecto!.trim().isNotEmpty) ...[
-                              const SizedBox(height: 4),
+                              // Contacto y Falla, cada uno en su propia línea con ícono
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Icon(Icons.folder_outlined, size: 15, color: kTicketIcono),
+                                  const Icon(Icons.person_outline, size: 15, color: kTicketIcono),
                                   const SizedBox(width: 6),
                                   Expanded(
                                     child: Text(
-                                      'Proyecto: ${ticket.codigoProyecto}',
+                                      'Contacto: ${ticket.nombreContacto}',
                                       style: const TextStyle(fontSize: 13, color: kTicketTextoPrincipal),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -755,23 +743,43 @@ class _HistorialTicketsPageState extends State<HistorialTicketsPage> {
                                   ),
                                 ],
                               ),
-                            ],
-                            const SizedBox(height: 4),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Icon(Icons.report_problem_outlined, size: 15, color: kTicketAlerta),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    ticket.fallaReportada,
-                                    style: const TextStyle(fontSize: 13, color: kTicketTextoPrincipal),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                              // 🆕 Proyecto (solo si el ticket tiene uno asignado) — se muestra
+                              // en Historial como lo pidió el usuario.
+                              if (ticket.codigoProyecto != null && ticket.codigoProyecto!.trim().isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Icon(Icons.folder_outlined, size: 15, color: kTicketIcono),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        'Proyecto: ${ticket.codigoProyecto}',
+                                        style: const TextStyle(fontSize: 13, color: kTicketTextoPrincipal),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
-                            ),
+                              const SizedBox(height: 4),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(Icons.report_problem_outlined, size: 15, color: kTicketAlerta),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      ticket.fallaReportada,
+                                      style: const TextStyle(fontSize: 13, color: kTicketTextoPrincipal),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
 
                             // 🆕 TIEMPO EN EL ESTADO ACTUAL, EN VIVO — sube solo mientras la
                             // tarjeta está en pantalla (ver TiempoEnCursoWidget). No es un

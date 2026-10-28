@@ -1,6 +1,7 @@
 // lib/features/tickets/presentation/pages/detalle_ticket_page.dart
 
 import '../../domain/services/flujo_reportes_automaticos_service.dart';
+import '../widgets/resumen_mantenimiento_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart'; // ⚙️ LIBRERÍA DE VIDEO
 import '../../../../core/enum/ticket_enums.dart';
@@ -49,7 +50,12 @@ class DetalleTicketPage extends StatelessWidget {
             TarjetaNoRequiereComprasWidget(ticket: ticket),
             const Text("Datos del Requerimiento", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003366))),
             const SizedBox(height: 12),
-            _buildDataCard(context),
+            // 🛠️ Mantenimiento interno: datos de la creación con fotos y videos.
+            if (ticket.esMantenimientoInterno) ...[
+              ResumenMantenimientoWidget(ticket: ticket),
+              _buildDatosTrabajoMantenimiento(context),
+            ] else
+              _buildDataCard(context),
 
             // NUEVO: solo para equipo Caracol -- tabla de los repuestos
             // que este ticket tiene apartados (reservados) en bodega,
@@ -164,6 +170,31 @@ class DetalleTicketPage extends StatelessWidget {
                   ),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Mantenimiento interno: estado y datos del trabajo (sin cliente,
+  /// contacto ni proyecto; los de la creación van en el resumen).
+  Widget _buildDatosTrabajoMantenimiento(BuildContext context) {
+    final ev = ticket.evidenciaTrabajo;
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildDatoRow(context, 'Estado Actual:', ticket.estadoActual.nombreMayusculas),
+            if (ev?.nombreTecnico != null && ev!.nombreTecnico!.isNotEmpty) ...[
+              const Divider(),
+              _buildDatoRow(context, 'Técnico Ejecutor:', ev.nombreTecnico!),
+            ],
+            if (ev?.notasTecnicas != null && ev!.notasTecnicas!.isNotEmpty)
+              _buildDatoBloqueMultilinea(context, 'Notas Técnicas de Trabajo:', ev.notasTecnicas!),
           ],
         ),
       ),

@@ -79,7 +79,8 @@ class ResumenMantenimientoWidget extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 3),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   SizedBox(
-                    width: 170,
+                    // Etiqueta más angosta en el celular para que el valor no se parta.
+                    width: MediaQuery.sizeOf(context).width < 600 ? 120 : 170,
                     child: Text('$etiqueta:', style: const TextStyle(fontSize: 13, color: Colors.grey)),
                   ),
                   Expanded(child: Text(valor, style: const TextStyle(fontWeight: FontWeight.w600))),
@@ -143,5 +144,32 @@ class ResumenMantenimientoWidget extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// 🛠️ Para las TARJETAS de las bandejas: todos los datos con los que se creó
+/// el requerimiento (sin fotos ni videos), en líneas cortas que se acomodan
+/// a lo ancho (una columna en el celular, varias en pantallas anchas).
+class DatosMantenimientoTarjetaWidget extends StatelessWidget {
+  final TicketEntity ticket;
+
+  const DatosMantenimientoTarjetaWidget({super.key, required this.ticket});
+
+  @override
+  Widget build(BuildContext context) {
+    // Cada dato con su ancho natural; baja de línea solo si no cabe. Sin
+    // LayoutBuilder: la tarjeta del Historial vive en un IntrinsicHeight.
+    return Wrap(spacing: 16, runSpacing: 2, children: [
+      for (final (etiqueta, valor) in _R.filasTarjeta(ticket))
+        Text.rich(
+          TextSpan(children: [
+            TextSpan(text: '$etiqueta: ', style: TextStyle(color: Colors.grey.shade600)),
+            TextSpan(text: valor, style: const TextStyle(fontWeight: FontWeight.w600)),
+          ]),
+          style: const TextStyle(fontSize: 12.5),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+    ]);
   }
 }

@@ -67,8 +67,13 @@ arranque con la misma memoria, sin tener que repetir todo desde cero.
     con los que se creó (tipo de mantenimiento, máquina, marca,
     especificación, serie / placa, horómetro / km, fecha, detalle, quién lo
     creó y sus fotos / videos); **nunca** datos de cliente, contacto ni
-    proyecto. Se arman en `ResumenMantenimientoService` y se dibujan con
-    `ResumenMantenimientoWidget` (o `lineaCorta` en las tarjetas).
+    proyecto. Se arman en `ResumenMantenimientoService`. En las **tarjetas**
+    de las bandejas (Evaluaciones, Costos, Compras, Validación Bodega,
+    Despacho, Proceso de Trabajo, Historial) van **todos** los datos de la
+    creación **sin fotos** (`DatosMantenimientoTarjetaWidget`); en las
+    pantallas de detalle y en el detalle del Historial, **con** fotos y
+    videos (`ResumenMantenimientoWidget`). Marca y especificación solo
+    existen en aire acondicionado y herramientas.
 13. **"Usa flujo con generación de reportes automáticos"** (campo
     `usaFlujoReportesAutomaticos`, `FlujoReportesAutomaticosService`): se
     marca al guardar la Evaluación Técnica de todo mantenimiento interno y de

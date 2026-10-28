@@ -41,6 +41,19 @@ class ResumenMantenimientoService {
     ];
   }
 
+  /// Para las TARJETAS de las bandejas: todos los datos de la creación
+  /// (filas + detalle), sin fotos ni videos.
+  static List<(String, String)> filasTarjeta(TicketEntity t) => [
+        ...filas(t),
+        if (t.fallaReportada.trim().isNotEmpty)
+          (
+            t.mantenimientoInterno == null
+                ? 'Detalle'
+                : FormularioMantenimientoService.etiquetaDetalle(t.mantenimientoInterno!.tipoMantenimiento),
+            t.fallaReportada.trim(),
+          ),
+      ];
+
   /// Para las tarjetas de las bandejas: "MANTENIMIENTO CORRECTIVO · COSECHADORA
   /// · JOHN DEERE · AQ2".
   static String lineaCorta(TicketEntity t) {

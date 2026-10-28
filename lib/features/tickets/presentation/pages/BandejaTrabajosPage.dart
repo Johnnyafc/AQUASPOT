@@ -9,6 +9,7 @@ import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_bloc.dar
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.dart';
 import '../../domain/services/resumen_mantenimiento_service.dart';
 import '../../domain/services/flujo_reportes_automaticos_service.dart';
+import '../widgets/resumen_mantenimiento_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -435,7 +436,7 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
             // 🛠️ Mantenimiento interno: datos con los que se creó (sin
             // proyecto, cliente ni contacto).
             if (ticket.esMantenimientoInterno)
-              Text(ResumenMantenimientoService.lineaCorta(ticket), style: TextStyle(color: Colors.grey.shade800))
+              DatosMantenimientoTarjetaWidget(ticket: ticket)
             else ...[
               Row(
                 children: [
@@ -471,23 +472,26 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
                 ],
               ),
             ],
-            const SizedBox(height: 6),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.warning_amber_rounded, size: 16, color: kTicketAlerta),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    'Falla: ${ticket.fallaReportada}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: Colors.grey.shade700, fontSize: 12, fontWeight: FontWeight.w500),
+            // En mantenimiento el detalle ya va en los datos de la creación.
+            if (!ticket.esMantenimientoInterno) ...[
+              const SizedBox(height: 6),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.warning_amber_rounded, size: 16, color: kTicketAlerta),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      'Falla: ${ticket.fallaReportada}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.grey.shade700, fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
                   ),
-                ),
-                CopyIconButtonWidget(etiqueta: 'Falla', valor: ticket.fallaReportada),
-              ],
-            ),
+                  CopyIconButtonWidget(etiqueta: 'Falla', valor: ticket.fallaReportada),
+                ],
+              ),
+            ],
 
             // Tiempo en curso
             const SizedBox(height: 6),
@@ -611,7 +615,8 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              alignment: WrapAlignment.end,
+              // En el celular los botones quedan uno debajo de otro: centrados.
+              alignment: MediaQuery.sizeOf(context).width < 600 ? WrapAlignment.center : WrapAlignment.end,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 // 1. ACTUADOR DE INICIO (Se oculta o cambia si ya está activo)

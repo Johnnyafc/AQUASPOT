@@ -60,6 +60,15 @@ void main() {
     expect(a['Serie de máquina'], '—');
   });
 
+  test('Tarjetas: todos los datos de la creación más el detalle, sin fotos', () {
+    final filas = {for (final (k, v) in R.filasTarjeta(ticket(TipoActivoMantenimiento.cosechadora))) k: v};
+    expect(filas['Máquina'], 'Cosechadora');
+    expect(filas['Horómetro'], '1520 h');
+    expect(filas['Creado por'], 'Ana');
+    expect(filas['Detalles de la falla'], 'Ruido en el motor');
+    expect(filas.values.any((v) => v.startsWith('https://')), isFalse);
+  });
+
   test('Línea corta para las bandejas', () {
     expect(R.lineaCorta(ticket(TipoActivoMantenimiento.cosechadora)), 'MANTENIMIENTO CORRECTIVO · COSECHADORA · AQ2');
     expect(R.lineaCorta(ticket(TipoActivoMantenimiento.herramientas)), 'MANTENIMIENTO CORRECTIVO · HERRAMIENTAS · JOHN DEERE');

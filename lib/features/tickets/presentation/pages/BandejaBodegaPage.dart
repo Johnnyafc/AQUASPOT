@@ -2,7 +2,7 @@ import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_bloc.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/validacion_bodega_compras_page.dart';
-import 'package:aquaspot_postventa/features/tickets/domain/services/resumen_mantenimiento_service.dart';
+import 'package:aquaspot_postventa/features/tickets/presentation/widgets/resumen_mantenimiento_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/ticket_entity.dart';
@@ -126,7 +126,7 @@ class BandejaBodegaPage extends StatelessWidget {
                         const SizedBox(height: 4),
                         // 🛠️ Mantenimiento interno: datos con los que se creó (sin cliente).
                         if (ticket.esMantenimientoInterno)
-                          Text(ResumenMantenimientoService.lineaCorta(ticket))
+                          DatosMantenimientoTarjetaWidget(ticket: ticket)
                         else ...[
                           Text('Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}'),
                           if (ticket.clienteId.trim().isNotEmpty) Text('Cliente: ${ticket.clienteId}'),

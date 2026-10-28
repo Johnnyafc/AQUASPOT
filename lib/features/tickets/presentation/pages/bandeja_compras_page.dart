@@ -2,7 +2,7 @@
 
 import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/GestionComprasPage.dart';
-import '../../domain/services/resumen_mantenimiento_service.dart';
+import '../widgets/resumen_mantenimiento_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/ticket_bloc.dart';
@@ -102,7 +102,7 @@ class BandejaComprasPage extends StatelessWidget {
                       // 🛠️ Mantenimiento interno: datos con los que se creó (sin
                       // cliente ni proyecto).
                       if (ticket.esMantenimientoInterno)
-                        Text(ResumenMantenimientoService.lineaCorta(ticket))
+                        DatosMantenimientoTarjetaWidget(ticket: ticket)
                       else ...[
                         Text(
                           'Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}'

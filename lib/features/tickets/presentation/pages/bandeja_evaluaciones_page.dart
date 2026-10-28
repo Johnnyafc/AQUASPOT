@@ -3,6 +3,7 @@
 import 'package:aquaspot_postventa/core/enum/segmento_operativo.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.dart';
+import '../widgets/resumen_mantenimiento_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/ticket_bloc.dart';
@@ -28,7 +29,13 @@ class _BandejaEvaluacionesPageState extends State<BandejaEvaluacionesPage> {
   @override
   void initState() {
     super.initState(); // ⚙️ Corregido: Un solo ciclo de inicialización.
+    _recargar();
+  }
 
+  /// Carga (o recarga) los tickets del segmento del usuario. Se llama al
+  /// abrir y al volver de una evaluación: la de mantenimiento interno guarda
+  /// por su propio camino y sin recargar el ticket seguiría en la lista.
+  void _recargar() {
     // 1. EXTRAEMOS LA CONFIGURACIÓN DEL USUARIO (Auth Context)
     final authState = context.read<AuthBloc>().state;
     SegmentoOperativo segmentoActivo = SegmentoOperativo.ninguno;
@@ -112,11 +119,15 @@ class _BandejaEvaluacionesPageState extends State<BandejaEvaluacionesPage> {
                       children: [
                         // 🆕 Cliente (empresa/camaronera) y Contacto (persona) son
                         // datos distintos — se muestran ambos.
-                        Text(
-                          'Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}'
-                          '${ticket.clienteId.trim().isNotEmpty ? '\nCliente: ${ticket.clienteId}' : ''}'
-                          '\nContacto: ${ticket.nombreContacto}',
-                        ),
+                        // 🛠️ Mantenimiento interno: todos los datos de la creación (sin fotos).
+                        if (ticket.esMantenimientoInterno)
+                          DatosMantenimientoTarjetaWidget(ticket: ticket)
+                        else
+                          Text(
+                            'Equipo: ${ticket.equipo.name.toUpperCase()} • Marca: ${ticket.marca.toUpperCase()}'
+                            '${ticket.clienteId.trim().isNotEmpty ? '\nCliente: ${ticket.clienteId}' : ''}'
+                            '\nContacto: ${ticket.nombreContacto}',
+                          ),
                         const SizedBox(height: 4),
                         TiempoEnCursoWidget(
                           desde: ticket.fechaInicioEstadoActual,
@@ -132,13 +143,13 @@ class _BandejaEvaluacionesPageState extends State<BandejaEvaluacionesPage> {
                       ],
                     ),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onTap: () {
+                    onTap: () async {
                       // 🔧 Venta de Repuesto con líneas → evaluación de venta (supervisor).
                       // Ventas antiguas sin líneas siguen con la evaluación anterior.
                       // 🛠️ Mantenimiento interno → su propia evaluación técnica.
                       final esVentaConLineas = ticket.tipoRequerimiento == TipoRequerimiento.ventaRepuesto &&
                           ticket.lineasRepuestoVenta.isNotEmpty;
-                      Navigator.push(
+                      final guardada = await Navigator.push<bool>(
                         context,
                         MaterialPageRoute(
                           builder: (_) => ticket.esMantenimientoInterno
@@ -148,6 +159,7 @@ class _BandejaEvaluacionesPageState extends State<BandejaEvaluacionesPage> {
                                   : EvaluacionTecnicaPage(ticket: ticket),
                         ),
                       );
+                      if (guardada == true && context.mounted) _recargar();
                     },
                   ),
                 );
