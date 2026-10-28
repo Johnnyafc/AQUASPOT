@@ -165,6 +165,20 @@ export const enrutadorNotificacionesPush = onDocumentUpdated(
           );
           break;
         }
+        // 🛠️ Mantenimiento interno con todos sus repuestos SIN CÓDIGO: solo
+        // Costos (crear los códigos); Compras aún no tiene nada.
+        if (ticketAhora.tipoRequerimiento === "mantenimientoInterno") {
+          const n = pendientesCodigoMantenimiento(ticketAhora);
+          if (n > 0) {
+            await dispararAlarmaFiltroSegmento(
+              ["costos"],
+              segmentoDestino,
+              "🧾 Crear códigos de repuesto",
+              `Ticket #${ticketId} - Mantenimiento interno: cree ${n} código(s) de repuesto (ver la ficha de cada uno).`
+            );
+          }
+          break;
+        }
         // 🚀 DISPARO DUAL: Dos actuadores independientes para distintos departamentos
         await dispararAlarmaFiltroSegmento(
           ["costos"], 
@@ -180,14 +194,26 @@ export const enrutadorNotificacionesPush = onDocumentUpdated(
         );
         break;
 
-      case "compras":
+      case "compras": {
         await dispararAlarmaFiltroSegmento(
           ["compras"], 
           segmentoDestino, 
           "🛍️ Ejecutar Compra", 
           `Ticket #${ticketId}: Realice la compra y suba la Orden de Compra al sistema.`
         );
+        // 🛠️ Mantenimiento interno: los repuestos SIN CÓDIGO esperan en
+        // Costos en paralelo (solo al llegar desde la evaluación).
+        const nSinCodigo = pendientesCodigoMantenimiento(ticketAhora);
+        if (ticketAhora.tipoRequerimiento === "mantenimientoInterno" && ticketAntes.estadoActual !== "costos" && nSinCodigo > 0) {
+          await dispararAlarmaFiltroSegmento(
+            ["costos"],
+            segmentoDestino,
+            "🧾 Crear códigos de repuesto",
+            `Ticket #${ticketId} - Mantenimiento interno: cree ${nSinCodigo} código(s) de repuesto (ver la ficha de cada uno).`
+          );
+        }
         break;
+      }
 
       case "bodega": {
         // 📦 Requerimientos SIN ítems de despacho (antiguos / validación
@@ -347,6 +373,17 @@ export const notificarPickingListoParaRetiro = onDocumentUpdated(
 // ============================================================================
 // ⚙️ SUBRUTINA DE EJECUCIÓN (FILTRO LÓGICO Y BOMBA MULTICAST)
 // ============================================================================
+/**
+ * Repuestos SIN CÓDIGO de un mantenimiento interno que esperan que Costos
+ * cree su código (misma regla que CreacionCodigosMantenimientoService.indicesPendientes).
+ */
+function pendientesCodigoMantenimiento(ticket: any): number {
+  const lista = Array.isArray(ticket?.mantenimientoInterno?.repuestosPorCodificar)
+    ? ticket.mantenimientoInterno.repuestosPorCodificar
+    : [];
+  return lista.filter((r: any) => r && !(typeof r.codigoCreado === "string" && r.codigoCreado.trim() !== "")).length;
+}
+
 async function dispararAlarmaFiltroSegmento(
   rolesDestino: string[], 
   segmentoTicket: string, 
