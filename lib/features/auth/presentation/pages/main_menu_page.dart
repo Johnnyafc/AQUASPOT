@@ -37,6 +37,7 @@ import '../../../plan_preventivo/presentation/pages/plan_preventivo_page.dart';
 import '../../../tickets/presentation/pages/creacion_ticket_page.dart';
 import '../../../tickets/presentation/pages/historial_tickets_page.dart';
 import '../../../tickets/presentation/pages/bandeja_evaluaciones_page.dart';
+import '../../../tickets/domain/services/grupo_requerimiento_service.dart';
 import '../../../tickets/presentation/pages/bandeja_recepcion_page.dart';
 import '../../../tickets/presentation/pages/biblioteca_documentos_page.dart';
 import '../../../../core/enum/rol_usuario.dart';
@@ -206,9 +207,26 @@ const _azulOscuro = Color(0xFF003057);
         (icono: Icons.perm_media_outlined, color: Colors.indigo, pagina: () => const BibliotecaDocumentosPage()),
       OpcionMenu.recepcionGuabo =>
         (icono: Icons.car_rental, color: Colors.lightBlue, pagina: () => const BandejaRecepcionGuaboPage()),
-      OpcionMenu.evaluaciones => (icono: Icons.handyman, color: Colors.orange, pagina: () => const BandejaEvaluacionesPage()),
-      OpcionMenu.procesoTrabajo =>
-        (icono: Icons.engineering, color: Colors.deepOrange, pagina: () => const BandejaTrabajosPage()),
+      OpcionMenu.evaluaciones => (
+          icono: Icons.handyman,
+          color: Colors.orange,
+          pagina: () => const BandejaEvaluacionesPage(grupo: GrupoRequerimiento.requerimientos)
+        ),
+      OpcionMenu.evaluacionesOt => (
+          icono: Icons.build_circle_outlined,
+          color: Colors.teal,
+          pagina: () => const BandejaEvaluacionesPage(grupo: GrupoRequerimiento.ordenesTrabajo)
+        ),
+      OpcionMenu.procesoTrabajo => (
+          icono: Icons.engineering,
+          color: Colors.deepOrange,
+          pagina: () => const BandejaTrabajosPage(grupo: GrupoRequerimiento.requerimientos)
+        ),
+      OpcionMenu.procesoTrabajoOt => (
+          icono: Icons.precision_manufacturing_outlined,
+          color: Colors.teal.shade700,
+          pagina: () => const BandejaTrabajosPage(grupo: GrupoRequerimiento.ordenesTrabajo)
+        ),
       OpcionMenu.recepcionBodega => (
           icono: Icons.assignment_turned_in_outlined,
           color: const Color(0xFF00796B),

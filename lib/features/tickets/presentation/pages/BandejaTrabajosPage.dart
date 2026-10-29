@@ -9,6 +9,7 @@ import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_bloc.dar
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.dart';
 import '../../domain/services/resumen_mantenimiento_service.dart';
 import '../../domain/services/flujo_reportes_automaticos_service.dart';
+import '../../domain/services/grupo_requerimiento_service.dart';
 import '../widgets/resumen_mantenimiento_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -18,8 +19,12 @@ import '../widgets/copy_icon_button_widget.dart';
 import '../widgets/tiempo_en_curso_widget.dart';
 import '../../../../core/theme/ticket_visual_theme.dart';
 
+/// Proceso de trabajo de un grupo: requerimientos u OT
+/// (GrupoRequerimientoService), cada uno en su tarjeta del menú.
 class BandejaTrabajosPage extends StatefulWidget {
-  const BandejaTrabajosPage({super.key});
+  final GrupoRequerimiento grupo;
+
+  const BandejaTrabajosPage({super.key, required this.grupo});
 
   @override
   State<BandejaTrabajosPage> createState() => _BandejaTrabajosPageState();
@@ -49,7 +54,10 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
-        title: const Text('Línea de Trabajo - Operaciones', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          widget.grupo == GrupoRequerimiento.ordenesTrabajo ? 'Proceso de trabajo OT' : 'Línea de Trabajo - Operaciones',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.blueGrey.shade800,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -100,6 +108,7 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
             final listaAProcesar = state.historial.isNotEmpty ? state.historial : state.tickets;
 
             final ticketsTrabajo = listaAProcesar.where((t) {
+              if (!GrupoRequerimientoService.pertenece(widget.grupo, t)) return false;
               if (t.estadoActual == EstadoTicket.validacionFacturacion ||
                   t.estadoActual == EstadoTicket.entrega ||
                   t.estadoActual == EstadoTicket.finalizado ||

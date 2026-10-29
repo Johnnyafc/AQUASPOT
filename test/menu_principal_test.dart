@@ -34,7 +34,9 @@ void main() {
         OpcionMenu.tickets,
         OpcionMenu.recepcionGuabo,
         OpcionMenu.evaluaciones,
+        OpcionMenu.evaluacionesOt,
         OpcionMenu.procesoTrabajo,
+        OpcionMenu.procesoTrabajoOt,
         OpcionMenu.recepcionBodega,
         OpcionMenu.garantias,
         OpcionMenu.catalogoActividades,
@@ -96,6 +98,7 @@ void main() {
 
     test('Sin tildes ni mayúsculas', () {
       expect(M.buscar(todas, 'EVALUACION'), contains(OpcionMenu.evaluaciones));
+      expect(M.buscar(todas, 'orden de trabajo'), containsAll([OpcionMenu.evaluacionesOt, OpcionMenu.procesoTrabajoOt]));
       expect(M.buscar(todas, 'garantía'), contains(OpcionMenu.garantias));
     });
 

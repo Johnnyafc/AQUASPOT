@@ -11,6 +11,7 @@ import '../bloc/ticket_event.dart';
 import '../bloc/ticket_state.dart'; // ⚙️ Tu nuevo estado unificado
 import '../../../../core/enum/ticket_enums.dart';
 import '../../domain/entities/ticket_entity.dart'; // ⚙️ Necesario para el extension getter fechaInicioEstadoActual
+import '../../domain/services/grupo_requerimiento_service.dart';
 import '../widgets/tiempo_en_curso_widget.dart';
 import 'detalle_ticket_page.dart';
 import 'evaluacion_mantenimiento_page.dart';
@@ -18,8 +19,12 @@ import 'evaluacion_tecnica_page.dart';
 import 'evaluacion_venta_repuesto_page.dart';
 import '../../../../core/theme/ticket_visual_theme.dart';
 
+/// Evaluaciones técnicas pendientes de un grupo: requerimientos u OT
+/// (GrupoRequerimientoService), cada uno en su tarjeta del menú.
 class BandejaEvaluacionesPage extends StatefulWidget {
-  const BandejaEvaluacionesPage({super.key});
+  final GrupoRequerimiento grupo;
+
+  const BandejaEvaluacionesPage({super.key, required this.grupo});
 
   @override
   State<BandejaEvaluacionesPage> createState() => _BandejaEvaluacionesPageState();
@@ -54,7 +59,7 @@ class _BandejaEvaluacionesPageState extends State<BandejaEvaluacionesPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Bandeja de Pendientes"),
+        title: Text(widget.grupo == GrupoRequerimiento.ordenesTrabajo ? 'Evaluaciones de OT' : 'Evaluaciones técnicas'),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
       ),
@@ -90,7 +95,8 @@ class _BandejaEvaluacionesPageState extends State<BandejaEvaluacionesPage> {
             // ✅ FILTRO DE HARDWARE: Leemos de state.historial (la matriz que configuramos en el BLoC)
             final pendientes = state.historial.where((t) => 
               t.estadoActual == EstadoTicket.recepcionFisica && 
-              t.esRegistroCompleto == true
+              t.esRegistroCompleto == true &&
+              GrupoRequerimientoService.pertenece(widget.grupo, t)
             ).toList();
 
             if (pendientes.isEmpty) {

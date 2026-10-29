@@ -33,7 +33,9 @@ enum OpcionMenu {
   biblioteca,
   recepcionGuabo,
   evaluaciones,
+  evaluacionesOt,
   procesoTrabajo,
+  procesoTrabajoOt,
   recepcionBodega,
   garantias,
   fallasTicketsAntiguos,
@@ -77,10 +79,14 @@ class MenuPrincipalService {
         SeccionMenu.tickets, ['pdf', 'excel', 'fotos', 'videos', 'archivos', 'documentos', 'informe']),
     OpcionMenu.recepcionGuabo: DatosOpcionMenu('Recepción del Guabo', 'Equipos que llegan al taller del Guabo',
         SeccionMenu.taller, ['guabo', 'llegada', 'recepcion']),
-    OpcionMenu.evaluaciones: DatosOpcionMenu('Evaluaciones Técnicas', 'Diagnóstico, actividades y solicitud de materiales',
-        SeccionMenu.taller, ['evaluacion', 'diagnostico', 'tecnico', 'informe', 'mantenimiento']),
-    OpcionMenu.procesoTrabajo: DatosOpcionMenu('Proceso de trabajo', 'Trabajos en el taller y retiro de materiales',
-        SeccionMenu.taller, ['taller', 'trabajo', 'reparacion', 'retiro']),
+    OpcionMenu.evaluaciones: DatosOpcionMenu('Evaluaciones técnicas', 'Requerimientos: diagnóstico, actividades y solicitud de materiales',
+        SeccionMenu.taller, ['evaluacion', 'diagnostico', 'tecnico', 'informe', 'requerimiento', 'reparacion']),
+    OpcionMenu.evaluacionesOt: DatosOpcionMenu('Evaluaciones de OT', 'Mantenimiento interno: diagnóstico, actividades y materiales',
+        SeccionMenu.taller, ['evaluacion', 'ot', 'orden de trabajo', 'mantenimiento', 'interno']),
+    OpcionMenu.procesoTrabajo: DatosOpcionMenu('Proceso de trabajo', 'Requerimientos: trabajos en el taller y retiro de materiales',
+        SeccionMenu.taller, ['taller', 'trabajo', 'reparacion', 'retiro', 'requerimiento']),
+    OpcionMenu.procesoTrabajoOt: DatosOpcionMenu('Proceso de trabajo OT', 'Mantenimiento interno: trabajos y retiro de materiales',
+        SeccionMenu.taller, ['taller', 'trabajo', 'ot', 'orden de trabajo', 'mantenimiento', 'interno']),
     OpcionMenu.recepcionBodega: DatosOpcionMenu('Recepción Bodega', 'Recibir repuestos y materiales en el taller',
         SeccionMenu.taller, ['recibir', 'materiales', 'repuestos']),
     OpcionMenu.garantias: DatosOpcionMenu('Revisión de garantías', 'Dictamen de los reclamos de garantía',
@@ -136,7 +142,12 @@ class MenuPrincipalService {
       OpcionMenu.operarios => rol == RolUsuario.admin,
       OpcionMenu.crearTicket => es([RolUsuario.requerimiento, RolUsuario.supervisor, RolUsuario.comercial]),
       OpcionMenu.tickets => es([RolUsuario.supervisor, RolUsuario.recepcion]),
-      OpcionMenu.recepcionGuabo || OpcionMenu.evaluaciones || OpcionMenu.procesoTrabajo => es([RolUsuario.supervisor]),
+      OpcionMenu.recepcionGuabo ||
+      OpcionMenu.evaluaciones ||
+      OpcionMenu.evaluacionesOt ||
+      OpcionMenu.procesoTrabajo ||
+      OpcionMenu.procesoTrabajoOt =>
+        es([RolUsuario.supervisor]),
       OpcionMenu.recepcionBodega => es([RolUsuario.tecnico, RolUsuario.supervisor]),
       OpcionMenu.garantias ||
       OpcionMenu.catalogoActividades ||
