@@ -6,7 +6,8 @@
 //
 // - Tipo de mantenimiento: cualquier usuario elige Correctivo o Preventivo.
 // - Campos según el tipo de máquina:
-//     Cosechadora: serie, horómetro + foto del horómetro (obligatorios)
+//     Cosechadora / Bomba de transferencia: serie, horómetro + foto del
+//       horómetro (obligatorios)
 //     Contador / Caracol: serie, fecha y hora (de la falla; en preventivo,
 //       la programada)
 //     Vehículo: placa, kilometraje + foto del kilometraje (obligatorios)
@@ -111,6 +112,8 @@ class FormularioMantenimientoService {
   /// tiene la lista de ese tipo.
   static const CatalogoActivos catalogoPorDefecto = {
     TipoActivoMantenimiento.cosechadora: ['AQ2'],
+    // Sin series todavía: se agregan en Firestore (campo bombaTransferencia).
+    TipoActivoMantenimiento.bombaTransferencia: [],
     TipoActivoMantenimiento.contador: ['Contador AQUASPOT'],
     TipoActivoMantenimiento.caracol: ['AQ2'],
     TipoActivoMantenimiento.vehiculo: ['GTA1234'],
@@ -134,7 +137,8 @@ class FormularioMantenimientoService {
 
   // ------------------------------------------------------------ Campos
   static bool esVehiculo(TipoActivoMantenimiento? t) => t == TipoActivoMantenimiento.vehiculo;
-  static bool pideHorometro(TipoActivoMantenimiento? t) => t == TipoActivoMantenimiento.cosechadora;
+  static bool pideHorometro(TipoActivoMantenimiento? t) =>
+      t == TipoActivoMantenimiento.cosechadora || t == TipoActivoMantenimiento.bombaTransferencia;
   static bool pideFechaHora(TipoActivoMantenimiento? t) =>
       t == TipoActivoMantenimiento.contador || t == TipoActivoMantenimiento.caracol;
   static bool pideKilometraje(TipoActivoMantenimiento? t) => esVehiculo(t);
@@ -185,6 +189,7 @@ class FormularioMantenimientoService {
   /// Equipo del ticket (filtros por equipo del Dashboard).
   static TipoEquipo equipoDe(TipoActivoMantenimiento t) => switch (t) {
         TipoActivoMantenimiento.cosechadora => TipoEquipo.Cosechadora,
+        TipoActivoMantenimiento.bombaTransferencia => TipoEquipo.Otros,
         TipoActivoMantenimiento.contador => TipoEquipo.Contador,
         TipoActivoMantenimiento.caracol => TipoEquipo.Caracol,
         TipoActivoMantenimiento.vehiculo => TipoEquipo.Otros,
@@ -206,8 +211,9 @@ class FormularioMantenimientoService {
       tipoActivo: nuevo,
       serieOPlaca: opciones.length == 1 ? opciones.first : null,
       limpiarSerieOPlaca: opciones.length != 1,
-      limpiarHorometro: !pideHorometro(nuevo),
-      limpiarKilometraje: !pideKilometraje(nuevo),
+      // La lectura es de la máquina anterior (otra serie): siempre se vacía.
+      limpiarHorometro: true,
+      limpiarKilometraje: true,
       limpiarFechaHora: pideFecha(nuevo) != pideFecha(d.tipoActivo),
       // Si la nueva máquina no las pide, los campos se ocultan: se vacían
       // para no guardar una marca que ya no se ve.
@@ -238,6 +244,9 @@ class FormularioMantenimientoService {
     final valor = d.serieOPlaca?.trim() ?? '';
     if (serieManual(tipo)) {
       // Opcional y sin catálogo.
+    } else if (opcionesDe(tipo, catalogo).isEmpty) {
+      errores.add('No hay ${esVehiculo(tipo) ? 'placas' : 'series'} de ${tipo.etiqueta} en el catálogo: '
+          'agréguelas en Firestore (catalogos/activos_mantenimiento, campo ${tipo.name}).');
     } else if (valor.isEmpty) {
       errores.add('Seleccione la ${etiquetaSerieOPlaca(tipo).toLowerCase()}.');
     } else if (!opcionesDe(tipo, catalogo).contains(valor)) {

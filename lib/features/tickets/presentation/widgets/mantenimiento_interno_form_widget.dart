@@ -225,6 +225,7 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
                     avatar: Icon(
                       switch (t) {
                         TipoActivoMantenimiento.cosechadora => Icons.agriculture,
+                        TipoActivoMantenimiento.bombaTransferencia => Icons.water_damage_outlined,
                         TipoActivoMantenimiento.contador => Icons.calculate_outlined,
                         TipoActivoMantenimiento.caracol => Icons.water_outlined,
                         TipoActivoMantenimiento.vehiculo => Icons.local_shipping_outlined,
@@ -288,7 +289,9 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
                     initialValue: opciones.contains(d.serieOPlaca) ? d.serieOPlaca : null,
                     decoration: InputDecoration(
                       border: const OutlineInputBorder(),
-                      hintText: 'Seleccione la ${_F.etiquetaSerieOPlaca(tipo).toLowerCase()}',
+                      hintText: opciones.isEmpty
+                          ? 'Sin ${_F.esVehiculo(tipo) ? 'placas' : 'series'} en el catálogo: agréguelas en Firestore'
+                          : 'Seleccione la ${_F.etiquetaSerieOPlaca(tipo).toLowerCase()}',
                     ),
                     items: [for (final o in opciones) DropdownMenuItem(value: o, child: Text(o))],
                     onChanged: (v) {

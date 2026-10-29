@@ -81,6 +81,11 @@ arranque con la misma memoria, sin tener que repetir todo desde cero.
     que falte usa el catálogo por defecto). Mantenimiento interno **no lleva
     proyecto**: en Costos solo pasa por "Creación de códigos" si tiene
     repuestos sin código ("Creación de proyectos" es para el resto).
+    Evaluación Técnica y Proceso de Trabajo tienen tarjetas separadas de
+    requerimientos y de OT (`GrupoRequerimientoService`, por tipo, no por
+    código). **Bomba de transferencia**: mismos campos que la cosechadora
+    (serie del catálogo, horómetro + foto) y su Plan Maestro; Plan Preventivo
+    en horas; sus series van en el campo `bombaTransferencia` del catálogo.
 13. **"Usa flujo con generación de reportes automáticos"** (campo
     `usaFlujoReportesAutomaticos`, `FlujoReportesAutomaticosService`): se
     marca al guardar la Evaluación Técnica de todo mantenimiento interno y de

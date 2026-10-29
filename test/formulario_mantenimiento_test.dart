@@ -274,6 +274,44 @@ void main() {
     });
   });
 
+  group('Bomba de transferencia', () {
+    const bomba = TipoActivoMantenimiento.bombaTransferencia;
+
+    test('Mismos campos que la cosechadora: serie del catálogo, horómetro y su foto', () {
+      expect(bomba.etiqueta, 'Bomba de transferencia');
+      expect(F.pideHorometro(bomba), isTrue);
+      expect(F.pideFotoLectura(bomba), isTrue);
+      expect(F.etiquetaFotoLectura(bomba), 'Foto del horómetro');
+      expect(F.serieManual(bomba), isFalse);
+      expect(F.pideFechaHora(bomba), isFalse);
+      expect(F.equipoDe(bomba), TipoEquipo.Otros);
+    });
+
+    test('Al cambiar de cosechadora a bomba no se arrastra el horómetro de la otra máquina', () {
+      final d = F.cambiarTipoActivo(cosechadoraValida().copyWith(horometro: 1200), bomba);
+      expect(d.horometro, isNull);
+      expect(d.tieneFotoLectura, isFalse);
+    });
+
+    test('Sin series en el catálogo: avisa que hay que agregarlas en Firestore', () {
+      final d = F.cambiarTipoActivo(cosechadoraValida(), bomba);
+      expect(F.opcionesDe(bomba), isEmpty);
+      expect(F.validar(d, ahora: ahora).join(), contains('campo bombaTransferencia'));
+    });
+
+    test('Con series en Firestore se crea como una cosechadora', () {
+      final c = F.combinarCatalogo({'bombaTransferencia': ['BT-01']});
+      final d = F.cambiarTipoActivo(cosechadoraValida(), bomba, catalogo: c)
+          .copyWith(horometro: 300, tieneFotoLectura: true);
+      expect(d.serieOPlaca, 'BT-01', reason: 'única opción: se preselecciona');
+      expect(F.validar(d, ahora: ahora, catalogo: c), isEmpty);
+      final t = F.construirTicket(d, usuarioNombre: 'Ana', rol: RolUsuario.requerimiento, ahora: ahora);
+      expect(t.horometro, 300);
+      expect(t.numeroSerie, 'BT-01');
+      expect(t.mantenimientoInterno!.tipoActivo, bomba);
+    });
+  });
+
   group('Aire acondicionado y Herramientas', () {
     DatosMantenimientoInterno aire({String? serie, DateTime? fecha, TipoMantenimiento tipo = TipoMantenimiento.correctivo}) =>
         DatosMantenimientoInterno(

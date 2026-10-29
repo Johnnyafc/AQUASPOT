@@ -25,6 +25,7 @@ const _verde = Color(0xFF2E7D32);
 
 IconData iconoMaquina(TipoActivoMantenimiento t) => switch (t) {
       TipoActivoMantenimiento.cosechadora => Icons.agriculture,
+      TipoActivoMantenimiento.bombaTransferencia => Icons.water_damage_outlined,
       TipoActivoMantenimiento.contador => Icons.calculate_outlined,
       TipoActivoMantenimiento.caracol => Icons.water_outlined,
       TipoActivoMantenimiento.vehiculo => Icons.local_shipping_outlined,

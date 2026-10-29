@@ -54,8 +54,9 @@ class EvaluacionMantenimientoService {
   );
 
   /// Equipo del Plan Maestro para este ticket (null = sin plan: vehículo).
+  /// La bomba de transferencia usa el de la cosechadora.
   static String? equipoCatalogo(TicketEntity t) => switch (t.mantenimientoInterno?.tipoActivo) {
-        TipoActivoMantenimiento.cosechadora => 'cosechadora',
+        TipoActivoMantenimiento.cosechadora || TipoActivoMantenimiento.bombaTransferencia => 'cosechadora',
         TipoActivoMantenimiento.contador => 'contador',
         TipoActivoMantenimiento.caracol => 'caracol',
         _ => null,

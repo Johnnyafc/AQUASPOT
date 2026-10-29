@@ -1,8 +1,8 @@
 // lib/features/tickets/data/datasources/catalogo_activos_mantenimiento_remote_datasource.dart
 //
 // Lee catalogos/activos_mantenimiento: un campo por tipo de máquina
-// (cosechadora, contador, caracol, vehiculo), cada uno una lista de textos
-// con sus series o placas.
+// (cosechadora, bombaTransferencia, contador, caracol, vehiculo), cada uno
+// una lista de textos con sus series o placas.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/errors/exceptions.dart';

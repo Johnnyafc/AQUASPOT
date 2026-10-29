@@ -40,7 +40,7 @@ class PlanPreventivoService {
   static bool puedeAdministrar(RolUsuario rol) => rol == RolUsuario.admin || rol == RolUsuario.supervisor;
 
   static UnidadFrecuencia unidadDe(TipoActivoMantenimiento t) => switch (t) {
-        TipoActivoMantenimiento.cosechadora => UnidadFrecuencia.horas,
+        TipoActivoMantenimiento.cosechadora || TipoActivoMantenimiento.bombaTransferencia => UnidadFrecuencia.horas,
         TipoActivoMantenimiento.vehiculo => UnidadFrecuencia.km,
         _ => UnidadFrecuencia.dias,
       };

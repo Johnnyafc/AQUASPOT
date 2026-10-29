@@ -119,6 +119,8 @@ class _RepoFalso implements ITicketRepository {
 void main() {
   test('Equipo del Plan Maestro según la máquina (vehículo sin plan)', () {
     expect(S.equipoCatalogo(ticketDe(TipoActivoMantenimiento.cosechadora)), 'cosechadora');
+    expect(S.equipoCatalogo(ticketDe(TipoActivoMantenimiento.bombaTransferencia)), 'cosechadora',
+        reason: 'la bomba de transferencia usa el Plan Maestro de la cosechadora');
     expect(S.equipoCatalogo(ticketDe(TipoActivoMantenimiento.contador)), 'contador');
     expect(S.equipoCatalogo(ticketDe(TipoActivoMantenimiento.caracol)), 'caracol');
     expect(S.equipoCatalogo(ticketDe(TipoActivoMantenimiento.vehiculo)), isNull);

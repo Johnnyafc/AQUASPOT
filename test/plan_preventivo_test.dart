@@ -62,6 +62,7 @@ class _RepoFalso implements PlanPreventivoRepository {
 void main() {
   test('Frecuencia según la máquina: horas, km o días', () {
     expect(P.unidadDe(TipoActivoMantenimiento.cosechadora), UnidadFrecuencia.horas);
+    expect(P.unidadDe(TipoActivoMantenimiento.bombaTransferencia), UnidadFrecuencia.horas);
     expect(P.unidadDe(TipoActivoMantenimiento.vehiculo), UnidadFrecuencia.km);
     for (final t in [
       TipoActivoMantenimiento.contador,

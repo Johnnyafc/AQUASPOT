@@ -5,6 +5,7 @@ import 'package:aquaspot_postventa/core/services/borrador_storage_service.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:aquaspot_postventa/features/auth/presentation/bloc/auth_state.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/ticket_entity.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/entities/mantenimiento_interno_entity.dart';
 import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_bloc.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_event.dart';
@@ -88,6 +89,8 @@ class _SubirEvidenciaTrabajoPageState extends State<SubirEvidenciaTrabajoPage> {
     final detalle = (widget.ticket.equipoDetalle ?? '').toLowerCase();
     return eq == TipoEquipo.Contador ||
         eq == TipoEquipo.Cosechadora ||
+        // La bomba de transferencia se trabaja como una cosechadora.
+        widget.ticket.mantenimientoInterno?.tipoActivo == TipoActivoMantenimiento.bombaTransferencia ||
         detalle.contains('contador') ||
         detalle.contains('cosechadora');
   }

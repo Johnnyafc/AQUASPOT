@@ -12,7 +12,7 @@ import 'repuesto_por_codificar_entity.dart';
 
 enum TipoMantenimiento { correctivo, preventivo }
 
-enum TipoActivoMantenimiento { cosechadora, contador, caracol, vehiculo, aireAcondicionado, herramientas }
+enum TipoActivoMantenimiento { cosechadora, bombaTransferencia, contador, caracol, vehiculo, aireAcondicionado, herramientas }
 
 extension TipoMantenimientoX on TipoMantenimiento {
   String get etiqueta => switch (this) {
@@ -24,6 +24,7 @@ extension TipoMantenimientoX on TipoMantenimiento {
 extension TipoActivoMantenimientoX on TipoActivoMantenimiento {
   String get etiqueta => switch (this) {
         TipoActivoMantenimiento.cosechadora => 'Cosechadora',
+        TipoActivoMantenimiento.bombaTransferencia => 'Bomba de transferencia',
         TipoActivoMantenimiento.contador => 'Contador',
         TipoActivoMantenimiento.caracol => 'Caracol',
         TipoActivoMantenimiento.vehiculo => 'Vehículo',
