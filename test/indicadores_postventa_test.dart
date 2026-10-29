@@ -144,7 +144,7 @@ void main() {
       final f = r.fallas.single;
       expect(f.equipo, 'Cosechadora');
       expect(f.sistema, 'Eléctrico y Electrónico');
-      expect(f.razones, ['Deficiencias de mantenimiento', Svc.otrasRazones]);
+      expect(f.razones, ['Deficiencias de mantenimiento', 'Algo libre'], reason: 'la escrita a mano sale con su nombre');
     });
   });
 

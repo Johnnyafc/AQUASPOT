@@ -12,8 +12,12 @@
 // - Fallas guardadas sin parte (tickets anteriores) se agrupan como
 //   "Sin parte" dentro de su categoría.
 // - Fallas sin categoría se ignoran.
-// - Razones: las del catálogo estándar con su nombre; el resto como
-//   "Otras (texto libre)". Una falla puede tener varias razones.
+// - Razones: las del catálogo estándar con su nombre; las escritas a mano
+//   también con su nombre (etiquetaRazon: mayúscula inicial y sin espacios
+//   extra, así "se cayó" y "Se Cayó " se cuentan juntas). Si hay más de
+//   maxRazonesLibres distintas, las de una sola marca se juntan en "Otras
+//   razones" para que el pastel no se llene de porciones diminutas. Una
+//   falla puede tener varias razones.
 // - "Fallas más frecuentes": cada falla con la categoría y la parte de las
 //   que deriva (la misma falla en dos partes son dos filas).
 // - La categoría / parte elegidas en los pasteles también filtran Garantías
@@ -113,7 +117,22 @@ class ResumenFalla {
 
 class FallasPorParteService {
   static const String sinParte = 'Sin parte';
-  static const String otrasRazones = 'Otras (texto libre)';
+  static const String otrasRazones = 'Otras razones';
+  static const int maxRazonesLibres = 5;
+
+  /// Nombre con el que se muestra y se cuenta una razón: la del catálogo
+  /// estándar, o la escrita a mano con mayúscula inicial y sin espacios
+  /// extra ("" si está vacía).
+  static String etiquetaRazon(String razon) {
+    final texto = razon.trim().split(RegExp(r'\s+')).join(' ');
+    if (texto.isEmpty) return '';
+    for (final r in razonesProblemaEstandar) {
+      if (normalizar(r) == normalizar(texto)) return r;
+    }
+    return texto[0].toUpperCase() + texto.substring(1).toLowerCase();
+  }
+
+  static bool esRazonEstandar(String etiqueta) => razonesProblemaEstandar.contains(etiqueta);
   // Orden fijo de los pasteles por equipo; otro equipo con datos va al final.
   static const List<String> equiposBase = ['Cosechadora', 'Contador', 'Caracol'];
 
@@ -286,20 +305,33 @@ class FallasPorParteService {
     return resumen;
   }
 
-  /// Agrupa las razones del problema marcadas, de la más marcada a la menos.
-  /// La clave es el nombre del catálogo estándar u [otrasRazones].
+  /// Agrupa las razones del problema marcadas, de la más marcada a la menos
+  /// ("Otras razones" siempre al final). La clave es su etiqueta
+  /// ([etiquetaRazon]) u [otrasRazones]. Una razón repetida en la misma falla
+  /// (aunque esté escrita distinto) cuenta una sola vez.
   static List<ResumenGrupo> agruparRazones(Iterable<FallaParaParte> fallas) {
-    final estandar = {for (final r in razonesProblemaEstandar) normalizar(r): r};
+    final validas = fallas.where((f) => normalizar(f.categoria).isNotEmpty).toList();
+    // Razones escritas a mano: si son muchas, las de una sola marca se juntan.
+    final marcasLibres = <String, int>{};
+    for (final f in validas) {
+      for (final et in {for (final r in f.razones) etiquetaRazon(r)}) {
+        if (et.isNotEmpty && !esRazonEstandar(et)) marcasLibres[et] = (marcasLibres[et] ?? 0) + 1;
+      }
+    }
+    final juntar = marcasLibres.length > maxRazonesLibres
+        ? {for (final e in marcasLibres.entries) if (e.value == 1) e.key}
+        : const <String>{};
     final marcas = <String, int>{};
     final fallasConRazon = <String, int>{};
     final tickets = <String, Map<String, Set<String>>>{};
     final porCategoria = <String, Map<String, int>>{};
-    for (final f in fallas) {
-      if (normalizar(f.categoria).isEmpty) continue;
+    for (final f in validas) {
       final vistas = <String>{};
-      for (final razon in f.razones) {
-        if (razon.trim().isEmpty) continue;
-        final et = estandar[normalizar(razon)] ?? otrasRazones;
+      // Cada razón distinta de la falla es una marca (varias pueden caer en
+      // "Otras razones"; una repetida en la misma falla, no).
+      for (final propia in {for (final r in f.razones) etiquetaRazon(r)}) {
+        if (propia.isEmpty) continue;
+        final et = juntar.contains(propia) ? otrasRazones : propia;
         marcas[et] = (marcas[et] ?? 0) + 1;
         if (vistas.add(et)) {
           fallasConRazon[et] = (fallasConRazon[et] ?? 0) + 1;
@@ -322,6 +354,8 @@ class FallasPorParteService {
         ),
     ];
     resumen.sort((a, b) {
+      final otrasAlFinal = (a.clave == otrasRazones ? 1 : 0).compareTo(b.clave == otrasRazones ? 1 : 0);
+      if (otrasAlFinal != 0) return otrasAlFinal;
       final porCantidad = b.valor.compareTo(a.valor);
       return porCantidad != 0 ? porCantidad : a.etiqueta.toLowerCase().compareTo(b.etiqueta.toLowerCase());
     });

@@ -16,8 +16,8 @@
 
 import '../../../../core/enum/proceso_auditoria.dart';
 import '../../../../core/enum/ticket_enums.dart';
-import '../../../../core/utils/constants.dart' show razonesProblemaEstandar;
 import '../entities/ticket_entity.dart';
+import 'fallas_por_parte_service.dart';
 import 'tiempos_por_proceso_service.dart';
 
 class ServicioRealizado {
@@ -141,7 +141,6 @@ class IndicadoresPostventa {
 }
 
 class IndicadoresPostventaService {
-  static const String otrasRazones = 'Otras (texto libre)';
   static const String taller = 'Taller';
   static const String campo = 'Campo';
   static const String sinLugar = 'Sin definir';
@@ -230,16 +229,15 @@ class IndicadoresPostventaService {
     return ultimo;
   }
 
-  /// Razones de una falla como las agrupa el Dashboard: las del catálogo
-  /// estándar con su nombre, el resto como "Otras (texto libre)"; sin repetir.
+  /// Razones de una falla como las nombra el Dashboard (las estándar y las
+  /// escritas a mano, cada una con su nombre: FallasPorParteService
+  /// .etiquetaRazon); sin repetir.
   static List<String> normalizarRazones(List<String> razones) {
-    final estandar = {for (final r in razonesProblemaEstandar) r.trim().toLowerCase(): r};
     final vistas = <String>{};
     final resultado = <String>[];
     for (final r in razones) {
-      if (r.trim().isEmpty) continue;
-      final et = estandar[r.trim().toLowerCase()] ?? otrasRazones;
-      if (vistas.add(et)) resultado.add(et);
+      final et = FallasPorParteService.etiquetaRazon(r);
+      if (et.isNotEmpty && vistas.add(et)) resultado.add(et);
     }
     return resultado;
   }

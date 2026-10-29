@@ -58,6 +58,12 @@ const Color _warn = Color(0xFFD9A441);
 const Color _bad = Color(0xFFC85C46);
 const Color _slate = Color(0xFF2B5B86);
 
+// Razones escritas a mano en el pastel (distintos de los del catálogo).
+const List<Color> _coloresRazonesLibres = [
+  Color(0xFF6A8EAE), Color(0xFFD08C60), Color(0xFF9C6644), Color(0xFF5E9C76),
+  Color(0xFFB56576), Color(0xFF7D6BA0), Color(0xFF4F9DA6), Color(0xFFC9A227),
+];
+
 const List<Color> _seriesColors = [
   _teal, _aqua, _sand, _coral, _slate,
   Color(0xFF8BD3A0), Color(0xFFA9789A), Color(0xFFC4A35A),
@@ -1437,10 +1443,14 @@ class _DashboardViewState extends State<_DashboardView> {
     }
 
     // ---------------------------------------------------------------- Razones
-    // Color fijo por razón (mismo orden del catálogo) para que no cambie al filtrar.
+    // Color fijo por razón (mismo orden del catálogo) para que no cambie al
+    // filtrar; las escritas a mano, uno fijo según su nombre; "Otras", gris.
     Color colorRazon(String et) {
       final i = razonesProblemaEstandar.indexOf(et);
-      return i < 0 ? Colors.blueGrey.shade300 : _seriesColors[i % _seriesColors.length];
+      if (i >= 0) return _seriesColors[i % _seriesColors.length];
+      if (et == FallasPorParteService.otrasRazones) return Colors.blueGrey.shade300;
+      final h = et.codeUnits.fold<int>(0, (a, c) => (a * 31 + c) & 0x7fffffff);
+      return _coloresRazonesLibres[h % _coloresRazonesLibres.length];
     }
 
     List<_PorcionDona> porcionesRazon(String? equipo) {

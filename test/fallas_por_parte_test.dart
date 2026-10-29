@@ -111,18 +111,31 @@ void main() {
     expect(r.first.clave, 'mecánico');
   });
 
-  test('9. Razones: estándar con su nombre, el resto como "Otras" y sin contar dos veces por falla', () {
+  test('9. Razones: estándar y escritas a mano, cada una con su nombre; sin contar dos veces por falla', () {
     final r = S.agruparRazones([
       f('Mecánico', 'Motor', 'A', ticket: 'T1', razones: ['deficiencias de mantenimiento ', 'Operación incorrecta']),
       f('Mecánico', 'Motor', 'B', ticket: 'T2', razones: ['Deficiencias de mantenimiento']),
-      f('Hidráulico', 'Sistema', 'C', ticket: 'T3', razones: ['Se cayó', 'Lo golpearon']),
+      f('Hidráulico', 'Sistema', 'C', ticket: 'T3', razones: ['se cayó', 'Lo golpearon']),
+      f('Hidráulico', 'Sistema', 'E', ticket: 'T5', razones: ['  Se   Cayó ', 'se cayó']),
       f('Hidráulico', 'Sistema', 'D', ticket: 'T4'),
     ]);
-    expect(r.map((x) => x.etiqueta), ['Deficiencias de mantenimiento', S.otrasRazones, 'Operación incorrecta']);
-    final otras = r[1];
-    expect(otras.valor, 2); // dos marcas…
-    expect(otras.fallas, 1); // …en una sola falla
+    // De la más marcada a la menos (empates por nombre).
+    expect(r.map((x) => x.etiqueta), ['Deficiencias de mantenimiento', 'Se cayó', 'Lo golpearon', 'Operación incorrecta']);
+    final seCayo = r[1];
+    expect(seCayo.valor, 2); // escrita distinto en C y E; repetida en E cuenta una vez
+    expect(seCayo.fallas, 2);
     expect(r.first.conteoDetalle, {'Mecánico': 2});
+  });
+
+  test('9b. Muchas razones escritas a mano: las de una sola marca se juntan en "Otras razones"', () {
+    final r = S.agruparRazones([
+      f('Mecánico', 'Motor', 'A', razones: ['Golpe', 'Óxido', 'Arena', 'Sal', 'Calor', 'Lluvia']),
+      f('Mecánico', 'Motor', 'B', razones: ['Golpe']),
+    ]);
+    expect(r.map((x) => x.etiqueta), ['Golpe', 'Otras razones'], reason: '"Otras razones" siempre al final');
+    expect(r.last.valor, 5);
+    expect(S.etiquetaRazon('  OPERACIÓN   incorrecta '), 'Operación incorrecta');
+    expect(S.etiquetaRazon('   '), '');
   });
 
   test('10. Filtrar por equipo, categoría y parte', () {
