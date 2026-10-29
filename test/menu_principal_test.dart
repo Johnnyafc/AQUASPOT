@@ -59,7 +59,7 @@ void main() {
     });
 
     test('Costos, Compras y Bodega', () {
-      expect(ve(RolUsuario.costos), {OpcionMenu.biblioteca, OpcionMenu.crearProyecto});
+      expect(ve(RolUsuario.costos), {OpcionMenu.biblioteca, OpcionMenu.crearProyecto, OpcionMenu.creacionCodigos});
       expect(ve(RolUsuario.compras),
           {OpcionMenu.biblioteca, OpcionMenu.compras, OpcionMenu.validacionBodegaCompras, OpcionMenu.inventario});
       expect(ve(RolUsuario.bodega), {OpcionMenu.biblioteca, OpcionMenu.despachoBodega, OpcionMenu.inventario});

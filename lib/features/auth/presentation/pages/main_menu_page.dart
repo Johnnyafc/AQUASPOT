@@ -7,6 +7,7 @@ import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_blo
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_event.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaBodegaPage.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaCostosPage.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/services/bandeja_costos_service.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaProformasEnviadasPage.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaRecepcionGuaboPage.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/BandejaTrabajosPage.dart';
@@ -228,8 +229,13 @@ const _azulOscuro = Color(0xFF003057);
         (icono: Icons.fact_check, color: Colors.indigo, pagina: () => const BandejaValidacionFacturacionPage()),
       OpcionMenu.entregaFacturacion =>
         (icono: Icons.receipt_long, color: Colors.purple, pagina: () => const BandejaEntregasPage()),
-      OpcionMenu.crearProyecto =>
-        (icono: Icons.account_balance_wallet, color: Colors.orange.shade800, pagina: () => const BandejaCostosPage()),
+      OpcionMenu.crearProyecto => (
+          icono: Icons.account_balance_wallet,
+          color: Colors.orange.shade800,
+          pagina: () => const BandejaCostosPage(tarjeta: TarjetaCostos.creacionProyectos)
+        ),
+      OpcionMenu.creacionCodigos =>
+        (icono: Icons.qr_code_2, color: Colors.teal, pagina: () => const BandejaCostosPage(tarjeta: TarjetaCostos.creacionCodigos)),
       OpcionMenu.compras => (icono: Icons.shopping_cart_outlined, color: Colors.orange.shade800, pagina: () => const BandejaComprasPage()),
       OpcionMenu.validacionBodegaCompras =>
         (icono: Icons.factory, color: Colors.blue.shade800, pagina: () => const BandejaBodegaPage()),

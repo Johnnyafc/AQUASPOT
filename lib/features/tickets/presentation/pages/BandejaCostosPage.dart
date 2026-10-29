@@ -1,5 +1,4 @@
 import 'package:aquaspot_postventa/core/enum/segmento_operativo.dart';
-import 'package:aquaspot_postventa/core/enum/ticket_enums.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_bloc.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_event.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/bloc/ticket_state.dart';
@@ -7,6 +6,7 @@ import 'package:aquaspot_postventa/features/tickets/presentation/pages/Asignacio
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/creacion_codigos_venta_page.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/services/creacion_codigos_venta_service.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/services/creacion_codigos_mantenimiento_service.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/services/bandeja_costos_service.dart';
 import 'package:aquaspot_postventa/features/tickets/presentation/pages/creacion_codigos_mantenimiento_page.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/entities/ticket_entity.dart'; // ⚙️ Necesario para el extension getter fechaInicioEstadoActual
 import 'package:aquaspot_postventa/features/tickets/presentation/widgets/tiempo_en_curso_widget.dart';
@@ -15,8 +15,12 @@ import 'package:aquaspot_postventa/features/tickets/presentation/widgets/resumen
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+/// Bandeja de una de las dos tarjetas de Costos (Creación de proyectos /
+/// Creación de códigos): qué va a cada una está en BandejaCostosService.
 class BandejaCostosPage extends StatefulWidget {
-  const BandejaCostosPage({super.key});
+  final TarjetaCostos tarjeta;
+
+  const BandejaCostosPage({super.key, required this.tarjeta});
 
   @override
   State<BandejaCostosPage> createState() => _BandejaCostosPageState();
@@ -37,7 +41,7 @@ class _BandejaCostosPageState extends State<BandejaCostosPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Bandeja de Costos')),
+      appBar: AppBar(title: Text(BandejaCostosService.titulo(widget.tarjeta))),
       body: BlocBuilder<TicketBloc, TicketState>(
         builder: (context, state) {
           // 1. Diagnóstico de estado y campos
@@ -55,13 +59,9 @@ class _BandejaCostosPageState extends State<BandejaCostosPage> {
             return const Center(child: Text('Lista vacía: Ni tickets ni historial llegaron.'));
           }
 
-          // 3. Filtro industrial
-          // 🛠️ Mantenimiento interno con repuestos sin código: aparece aquí
-          // aunque sus otros repuestos ya estén en Compras / Bodega.
-          final ticketsPendientes = listaAProcesar.where((t) {
-            final esCostos = t.estadoActual == EstadoTicket.costos;
-            return esCostos || CreacionCodigosMantenimientoService.requiereCreacionCodigos(t);
-          }).toList();
+          // 3. Filtro de la tarjeta (proyectos o códigos).
+          final ticketsPendientes =
+              listaAProcesar.where((t) => BandejaCostosService.corresponde(widget.tarjeta, t)).toList();
 
           if (ticketsPendientes.isEmpty) {
             return const Center(child: Text('Datos cargados, pero el filtro no encontró nada.'));
