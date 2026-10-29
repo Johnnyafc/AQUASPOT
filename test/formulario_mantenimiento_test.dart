@@ -60,19 +60,10 @@ class _RepoFalso implements ITicketRepository {
 }
 
 void main() {
-  group('Tipo de mantenimiento por rol', () {
-    test('Supervisor y admin eligen; el resto, solo Correctivo', () {
-      expect(F.tiposPermitidos(RolUsuario.supervisor), TipoMantenimiento.values);
-      expect(F.tiposPermitidos(RolUsuario.admin), TipoMantenimiento.values);
-      for (final rol in [RolUsuario.requerimiento, RolUsuario.comercial, RolUsuario.tecnico, RolUsuario.bodega]) {
-        expect(F.tiposPermitidos(rol), [TipoMantenimiento.correctivo], reason: rol.name);
-      }
-    });
-
-    test('Un operador no puede crear un preventivo (se valida al crear)', () {
+  group('Tipo de mantenimiento', () {
+    test('Cualquier usuario puede crear un preventivo', () {
       final d = cosechadoraValida(tipo: TipoMantenimiento.preventivo);
-      expect(F.validar(d, rol: RolUsuario.requerimiento, ahora: ahora), isNotEmpty);
-      expect(F.validar(d, rol: RolUsuario.supervisor, ahora: ahora), isEmpty);
+      expect(F.validar(d, ahora: ahora), isEmpty);
     });
   });
 
@@ -85,6 +76,30 @@ void main() {
       expect(F.etiquetaSerieOPlaca(TipoActivoMantenimiento.vehiculo), 'Placa');
       expect(F.pideHorometro(TipoActivoMantenimiento.vehiculo), isFalse);
       expect(F.pideFechaHora(TipoActivoMantenimiento.cosechadora), isFalse);
+    });
+
+    test('Aire acondicionado pide la ubicación del equipo; herramientas, la especificación', () {
+      expect(F.etiquetaEspecificacion(TipoActivoMantenimiento.aireAcondicionado), 'Ubicación del equipo');
+      expect(F.etiquetaEspecificacion(TipoActivoMantenimiento.herramientas), 'Especificación del equipo');
+    });
+
+    test('Catálogo de Firestore: el tipo que no viene usa el de por defecto; limpia vacíos y repetidos', () {
+      final c = F.combinarCatalogo({
+        'cosechadora': ['AQ2', ' AQ3 ', 'AQ3', ''],
+        'vehiculo': [],
+      });
+      expect(F.opcionesDe(TipoActivoMantenimiento.cosechadora, c), ['AQ2', 'AQ3']);
+      expect(F.opcionesDe(TipoActivoMantenimiento.vehiculo, c), isEmpty, reason: 'lista vacía en Firestore: sin opciones');
+      expect(F.opcionesDe(TipoActivoMantenimiento.contador, c), ['Contador AQUASPOT']);
+      expect(F.opcionesDe(TipoActivoMantenimiento.aireAcondicionado, c), isEmpty);
+    });
+
+    test('Se valida contra el catálogo leído', () {
+      final c = F.combinarCatalogo({'cosechadora': ['AQ9']});
+      final d = cosechadoraValida();
+      expect(F.validar(d.copyWith(serieOPlaca: 'AQ9'), ahora: ahora, catalogo: c), isEmpty);
+      expect(F.validar(d, ahora: ahora, catalogo: c), isNotEmpty, reason: 'AQ2 ya no está en el catálogo leído');
+      expect(F.cambiarTipoActivo(const DatosMantenimientoInterno(), TipoActivoMantenimiento.cosechadora, catalogo: c).serieOPlaca, 'AQ9');
     });
 
     test('Catálogo inicial', () {
@@ -105,7 +120,7 @@ void main() {
 
   group('Validaciones', () {
     test('Formulario vacío: pide el tipo de máquina', () {
-      expect(F.validar(const DatosMantenimientoInterno(), rol: RolUsuario.requerimiento, ahora: ahora),
+      expect(F.validar(const DatosMantenimientoInterno(), ahora: ahora),
           ['Seleccione el tipo de máquina.']);
     });
 
@@ -115,15 +130,15 @@ void main() {
       expect(F.pideMarcaYEspecificacion(TipoActivoMantenimiento.cosechadora), isFalse);
       expect(F.pideMarcaYEspecificacion(TipoActivoMantenimiento.vehiculo), isFalse);
       final cosechadora = cosechadoraValida().copyWith(marca: ' ', especificacion: '');
-      expect(F.validar(cosechadora, rol: RolUsuario.requerimiento, ahora: ahora), isEmpty, reason: 'la cosechadora no las pide');
+      expect(F.validar(cosechadora, ahora: ahora), isEmpty, reason: 'la cosechadora no las pide');
       final aire = DatosMantenimientoInterno(
         tipoActivo: TipoActivoMantenimiento.aireAcondicionado,
         fechaHora: DateTime(2026, 10, 20),
         detalle: 'No enfría la oficina',
         cantidadFotos: 1,
       );
-      expect(F.validar(aire, rol: RolUsuario.requerimiento, ahora: ahora),
-          containsAll(['Ingrese la marca.', 'Ingrese la especificación del equipo.']));
+      expect(F.validar(aire, ahora: ahora),
+          containsAll(['Ingrese la marca.', 'Ingrese la ubicación del equipo.']));
       final t = F.construirTicket(aire.copyWith(marca: ' lg ', especificacion: 'split 12000 btu'),
           usuarioNombre: 'Ana', rol: RolUsuario.requerimiento, ahora: ahora);
       expect(t.marca, 'LG');
@@ -135,14 +150,15 @@ void main() {
       final cambiado = F.cambiarTipoActivo(escrito, TipoActivoMantenimiento.cosechadora);
       expect(cambiado.marca, isEmpty);
       expect(cambiado.especificacion, isEmpty);
-      expect(F.cambiarTipoActivo(escrito, TipoActivoMantenimiento.herramientas).marca, 'LG',
-          reason: 'entre aire y herramientas los campos siguen a la vista');
+      final herramienta = F.cambiarTipoActivo(escrito, TipoActivoMantenimiento.herramientas);
+      expect(herramienta.marca, 'LG', reason: 'entre aire y herramientas la marca sigue a la vista');
+      expect(herramienta.especificacion, isEmpty, reason: 'la ubicación del aire no es la especificación de una herramienta');
       final json = TicketModel.fromEntity(t.copyWith(id: 'REQ-3')).toJson()..['id'] = 'REQ-3';
       expect(TicketModel.fromJson(json).mantenimientoInterno!.especificacion, 'SPLIT 12000 BTU');
     });
 
     test('Cosechadora válida no tiene errores', () {
-      expect(F.validar(cosechadoraValida(), rol: RolUsuario.requerimiento, ahora: ahora), isEmpty);
+      expect(F.validar(cosechadoraValida(), ahora: ahora), isEmpty);
     });
 
     test('Faltantes: horómetro y su foto, detalle corto, sin evidencias, serie fuera del catálogo', () {
@@ -153,7 +169,7 @@ void main() {
         serieOPlaca: 'XX9',
         detalle: 'falla',
       );
-      final e = F.validar(d, rol: RolUsuario.requerimiento, ahora: ahora);
+      final e = F.validar(d, ahora: ahora);
       expect(e.length, 5);
       expect(e.any((x) => x.contains('catálogo')), isTrue);
       expect(e, contains('Ingrese el horómetro.'));
@@ -172,10 +188,10 @@ void main() {
         detalle: 'Rodamiento con ruido',
         cantidadFotos: 2,
       );
-      expect(F.validar(futura, rol: RolUsuario.supervisor, ahora: ahora).single, contains('futura'));
+      expect(F.validar(futura, ahora: ahora).single, contains('futura'));
       expect(
           F.validar(futura.copyWith(tipoMantenimiento: TipoMantenimiento.preventivo),
-              rol: RolUsuario.supervisor, ahora: ahora),
+              ahora: ahora),
           isEmpty);
     });
 
@@ -190,7 +206,7 @@ void main() {
         cantidadFotos: 1,
         tieneFotoLectura: true,
       );
-      expect(F.validar(d, rol: RolUsuario.requerimiento, ahora: ahora).single, contains('negativo'));
+      expect(F.validar(d, ahora: ahora).single, contains('negativo'));
     });
 
     test('Vehículo: kilometraje y su foto son obligatorios', () {
@@ -202,7 +218,7 @@ void main() {
         detalle: 'Frenos desgastados',
         cantidadFotos: 1,
       );
-      expect(F.validar(d, rol: RolUsuario.requerimiento, ahora: ahora),
+      expect(F.validar(d, ahora: ahora),
           ['Ingrese el kilometraje.', 'Agregue la foto del kilometraje.']);
     });
 
@@ -215,9 +231,9 @@ void main() {
 
     test('Un video sirve como evidencia; más de 3 videos no', () {
       final soloVideo = cosechadoraValida().copyWith(cantidadFotos: 0, cantidadVideos: 1);
-      expect(F.validar(soloVideo, rol: RolUsuario.requerimiento, ahora: ahora), isEmpty);
+      expect(F.validar(soloVideo, ahora: ahora), isEmpty);
       final muchos = cosechadoraValida().copyWith(cantidadVideos: 4);
-      expect(F.validar(muchos, rol: RolUsuario.requerimiento, ahora: ahora).single, contains('Máximo 3 videos'));
+      expect(F.validar(muchos, ahora: ahora).single, contains('Máximo 3 videos'));
     });
   });
 
@@ -289,13 +305,13 @@ void main() {
     });
 
     test('Válido sin serie; la fecha es obligatoria y no puede ser futura en correctivo', () {
-      expect(F.validar(aire(fecha: DateTime(2026, 10, 26)), rol: RolUsuario.requerimiento, ahora: ahora), isEmpty);
-      expect(F.validar(aire(), rol: RolUsuario.requerimiento, ahora: ahora), contains('Seleccione la fecha.'));
-      expect(F.validar(aire(fecha: DateTime(2026, 10, 27)), rol: RolUsuario.requerimiento, ahora: ahora),
+      expect(F.validar(aire(fecha: DateTime(2026, 10, 26)), ahora: ahora), isEmpty);
+      expect(F.validar(aire(), ahora: ahora), contains('Seleccione la fecha.'));
+      expect(F.validar(aire(fecha: DateTime(2026, 10, 27)), ahora: ahora),
           contains('La fecha de la falla no puede ser futura.'));
       expect(
           F.validar(aire(fecha: DateTime(2026, 12, 1), tipo: TipoMantenimiento.preventivo),
-              rol: RolUsuario.supervisor, ahora: ahora),
+              ahora: ahora),
           isEmpty);
     });
 
@@ -367,13 +383,14 @@ void main() {
   });
 
   group('Use case', () {
-    test('Rechaza un preventivo creado por un operador, sin escribir nada', () async {
+    test('Rechaza una serie que no está en el catálogo leído, sin escribir nada', () async {
       final repo = _RepoFalso();
       final r = await CrearMantenimientoInternoUseCase(repo)(
         cosechadoraValida(tipo: TipoMantenimiento.preventivo),
         usuarioNombre: 'Ana',
         rol: RolUsuario.comercial,
         ahora: ahora,
+        catalogo: F.combinarCatalogo({'cosechadora': ['AQ9']}),
       );
       expect(r.isLeft(), isTrue);
       expect(r.fold((f) => f, (_) => null), isA<ValidationFailure>());

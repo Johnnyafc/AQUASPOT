@@ -56,8 +56,11 @@ void main() {
     final a = {for (final (k, x) in R.filas(ticket(TipoActivoMantenimiento.aireAcondicionado))) k: x};
     expect(a['Fecha de la falla'], '28/10/2026');
     expect(a['Marca'], 'JOHN DEERE');
-    expect(a['Especificación'], 'S700 2020');
+    expect(a['Ubicación'], 'S700 2020', reason: 'en aire acondicionado la especificación es la ubicación');
+    expect(a.containsKey('Especificación'), isFalse);
     expect(a['Serie de máquina'], '—');
+    final h = {for (final (k, x) in R.filas(ticket(TipoActivoMantenimiento.herramientas))) k: x};
+    expect(h['Especificación'], 'S700 2020');
   });
 
   test('Tarjetas: todos los datos de la creación más el detalle, sin fotos', () {

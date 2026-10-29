@@ -4,9 +4,7 @@
 // "Mantenimiento Interno"). Solo reglas puras, sin Flutter ni Firebase;
 // probado en test/formulario_mantenimiento_test.dart.
 //
-// - Tipo de mantenimiento: supervisor y admin eligen Correctivo o
-//   Preventivo; el resto de roles queda fijo en Correctivo (se valida
-//   también al crear, no solo en la pantalla).
+// - Tipo de mantenimiento: cualquier usuario elige Correctivo o Preventivo.
 // - Campos según el tipo de máquina:
 //     Cosechadora: serie, horómetro + foto del horómetro (obligatorios)
 //     Contador / Caracol: serie, fecha y hora (de la falla; en preventivo,
@@ -15,12 +13,15 @@
 //     Aire acondicionado / Herramientas: fecha (solo fecha; de la falla o
 //       la programada) y serie OPCIONAL escrita a mano (en MAYÚSCULAS)
 //   Aire acondicionado / Herramientas además: marca y especificación del
-//   equipo (obligatorias, en MAYÚSCULAS);
+//   equipo (obligatorias, en MAYÚSCULAS; en aire acondicionado la
+//   especificación es la UBICACIÓN del equipo);
 //   y en todos: detalle de la falla (o del trabajo, si es preventivo) y al
 //   menos una evidencia, foto o video (máximo 3 videos de 60 s).
-// - La serie y la placa salen de un catálogo fijo (catalogo); para agregar
-//   una máquina se agrega aquí. Aire acondicionado y Herramientas no tienen
-//   catálogo: la serie se escribe a mano y puede quedar vacía.
+// - La serie y la placa salen del catálogo de Firestore
+//   (catalogos/activos_mantenimiento, una lista por tipo); el tipo que no
+//   esté allí usa catalogoPorDefecto (combinarCatalogo). Aire acondicionado
+//   y Herramientas no tienen catálogo: la serie se escribe a mano y puede
+//   quedar vacía.
 // - El ticket se crea directo en Evaluación Técnica (recepcionFisica: la
 //   máquina es nuestra, no hay recepción física), sin cliente ("AQUASPOT
 //   (interno)") ni contacto, así no dispara correos a clientes.
@@ -97,27 +98,39 @@ class DatosMantenimientoInterno {
   }
 }
 
+/// Series / placas disponibles por tipo de máquina.
+typedef CatalogoActivos = Map<TipoActivoMantenimiento, List<String>>;
+
 class FormularioMantenimientoService {
   static const String clienteInterno = 'AQUASPOT (interno)';
   static const int minimoCaracteresDetalle = 10;
   static const int maximoVideos = 3;
   static const Duration duracionMaximaVideo = Duration(seconds: 60);
 
-  /// Series (máquinas) y placas (vehículos) disponibles por tipo.
-  static const Map<TipoActivoMantenimiento, List<String>> catalogo = {
+  /// Series (máquinas) y placas (vehículos) por tipo, si Firestore no
+  /// tiene la lista de ese tipo.
+  static const CatalogoActivos catalogoPorDefecto = {
     TipoActivoMantenimiento.cosechadora: ['AQ2'],
     TipoActivoMantenimiento.contador: ['Contador AQUASPOT'],
     TipoActivoMantenimiento.caracol: ['AQ2'],
     TipoActivoMantenimiento.vehiculo: ['GTA1234'],
   };
 
-  static List<String> opcionesDe(TipoActivoMantenimiento tipo) => catalogo[tipo] ?? const [];
+  /// Tipos con serie / placa de catálogo (el resto se escribe a mano).
+  static List<TipoActivoMantenimiento> get tiposConCatalogo => catalogoPorDefecto.keys.toList();
 
-  // ------------------------------------------------------------ Por rol
-  static bool puedeElegirTipo(RolUsuario rol) => rol == RolUsuario.supervisor || rol == RolUsuario.admin;
+  /// Catálogo leído de Firestore ([leido]: nombre del tipo → series /
+  /// placas). Se quitan vacíos y repetidos; el tipo que no venga usa el
+  /// catálogo por defecto (una lista vacía sí cuenta: sin opciones).
+  static CatalogoActivos combinarCatalogo(Map<String, List<String>> leido) => {
+        for (final t in tiposConCatalogo)
+          t: leido.containsKey(t.name)
+              ? [...{for (final v in leido[t.name]!) if (v.trim().isNotEmpty) v.trim()}]
+              : catalogoPorDefecto[t]!,
+      };
 
-  static List<TipoMantenimiento> tiposPermitidos(RolUsuario rol) =>
-      puedeElegirTipo(rol) ? TipoMantenimiento.values : const [TipoMantenimiento.correctivo];
+  static List<String> opcionesDe(TipoActivoMantenimiento tipo, [CatalogoActivos catalogo = catalogoPorDefecto]) =>
+      catalogo[tipo] ?? const [];
 
   // ------------------------------------------------------------ Campos
   static bool esVehiculo(TipoActivoMantenimiento? t) => t == TipoActivoMantenimiento.vehiculo;
@@ -142,6 +155,10 @@ class FormularioMantenimientoService {
   static bool pideFotoLectura(TipoActivoMantenimiento? t) => pideHorometro(t) || pideKilometraje(t);
   static String etiquetaFotoLectura(TipoActivoMantenimiento? t) =>
       esVehiculo(t) ? 'Foto del kilometraje' : 'Foto del horómetro';
+
+  /// En aire acondicionado la especificación es dónde está el equipo.
+  static String etiquetaEspecificacion(TipoActivoMantenimiento? t) =>
+      t == TipoActivoMantenimiento.aireAcondicionado ? 'Ubicación del equipo' : 'Especificación del equipo';
 
   static String etiquetaSerieOPlaca(TipoActivoMantenimiento? t) => esVehiculo(t) ? 'Placa' : 'Serie de máquina';
 
@@ -178,9 +195,13 @@ class FormularioMantenimientoService {
   /// Al cambiar de tipo de máquina se borran los campos que ya no aplican
   /// (serie/placa, horómetro, kilometraje y su foto; la fecha si cambia
   /// entre "fecha y hora" y "solo fecha") para no guardar datos cruzados.
-  static DatosMantenimientoInterno cambiarTipoActivo(DatosMantenimientoInterno d, TipoActivoMantenimiento nuevo) {
+  static DatosMantenimientoInterno cambiarTipoActivo(
+    DatosMantenimientoInterno d,
+    TipoActivoMantenimiento nuevo, {
+    CatalogoActivos catalogo = catalogoPorDefecto,
+  }) {
     if (d.tipoActivo == nuevo) return d;
-    final opciones = opcionesDe(nuevo);
+    final opciones = opcionesDe(nuevo, catalogo);
     return d.copyWith(
       tipoActivo: nuevo,
       serieOPlaca: opciones.length == 1 ? opciones.first : null,
@@ -191,18 +212,24 @@ class FormularioMantenimientoService {
       // Si la nueva máquina no las pide, los campos se ocultan: se vacían
       // para no guardar una marca que ya no se ve.
       marca: pideMarcaYEspecificacion(nuevo) ? null : '',
-      especificacion: pideMarcaYEspecificacion(nuevo) ? null : '',
+      // Entre aire (ubicación) y herramientas (especificación) el campo
+      // significa otra cosa: se vacía.
+      especificacion: !pideMarcaYEspecificacion(nuevo) ||
+              (d.tipoActivo != null && etiquetaEspecificacion(nuevo) != etiquetaEspecificacion(d.tipoActivo))
+          ? ''
+          : null,
       tieneFotoLectura: false,
     );
   }
 
   // ------------------------------------------------------------ Validación
   /// Errores del formulario (vacío = se puede crear).
-  static List<String> validar(DatosMantenimientoInterno d, {required RolUsuario rol, required DateTime ahora}) {
+  static List<String> validar(
+    DatosMantenimientoInterno d, {
+    required DateTime ahora,
+    CatalogoActivos catalogo = catalogoPorDefecto,
+  }) {
     final errores = <String>[];
-    if (!tiposPermitidos(rol).contains(d.tipoMantenimiento)) {
-      errores.add('Solo un supervisor puede crear un mantenimiento ${d.tipoMantenimiento.etiqueta.toLowerCase()}.');
-    }
     final tipo = d.tipoActivo;
     if (tipo == null) {
       errores.add('Seleccione el tipo de máquina.');
@@ -213,7 +240,7 @@ class FormularioMantenimientoService {
       // Opcional y sin catálogo.
     } else if (valor.isEmpty) {
       errores.add('Seleccione la ${etiquetaSerieOPlaca(tipo).toLowerCase()}.');
-    } else if (!opcionesDe(tipo).contains(valor)) {
+    } else if (!opcionesDe(tipo, catalogo).contains(valor)) {
       errores.add('La ${etiquetaSerieOPlaca(tipo).toLowerCase()} "$valor" no está en el catálogo de ${tipo.etiqueta}.');
     }
     if (pideHorometro(tipo)) {
@@ -251,7 +278,7 @@ class FormularioMantenimientoService {
     }
     if (pideMarcaYEspecificacion(tipo)) {
       if (d.marca.trim().isEmpty) errores.add('Ingrese la marca.');
-      if (d.especificacion.trim().isEmpty) errores.add('Ingrese la especificación del equipo.');
+      if (d.especificacion.trim().isEmpty) errores.add('Ingrese la ${etiquetaEspecificacion(tipo).toLowerCase()}.');
     }
     if (d.detalle.trim().length < minimoCaracteresDetalle) {
       errores.add('${etiquetaDetalle(d.tipoMantenimiento)}: escriba al menos $minimoCaracteresDetalle caracteres.');

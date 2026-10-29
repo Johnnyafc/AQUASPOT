@@ -27,7 +27,8 @@ class ResumenMantenimientoService {
       ('Máquina', tipo?.etiqueta ?? t.equipo.name),
       if (FormularioMantenimientoService.pideMarcaYEspecificacion(tipo)) ...[
         ('Marca', _texto(t.marca)),
-        ('Especificación', _texto(m?.especificacion)),
+        // En aire acondicionado la especificación es la ubicación del equipo.
+        (tipo == TipoActivoMantenimiento.aireAcondicionado ? 'Ubicación' : 'Especificación', _texto(m?.especificacion)),
       ],
       (FormularioMantenimientoService.etiquetaSerieOPlaca(tipo), _texto(m?.placa ?? t.numeroSerie)),
       if (t.horometro != null) ('Horómetro', '${_numero(t.horometro!)} h'),

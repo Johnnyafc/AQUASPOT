@@ -130,6 +130,21 @@ service cloud.firestore {
     }
 
     // =====================================================================
+    // 🗂️ 6.3 CATÁLOGOS (series y placas de mantenimiento interno:
+    // catalogos/activos_mantenimiento, se llena desde la consola)
+    // =====================================================================
+    match /catalogos/{catalogoId} {
+      // Cualquier operario autenticado lo consulta al crear un requerimiento.
+      allow read: if request.auth != null;
+
+      // Solo Supervisores y Administradores lo cambian desde la app.
+      allow create, update: if request.auth != null && (
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol in ['supervisor', 'admin', 'SUPERVISOR', 'ADMIN']
+      );
+      allow delete: if false;
+    }
+
+    // =====================================================================
     // 📦 7. INVENTARIO Y STOCK DE BODEGA
     // =====================================================================
     match /inventario_bodega/{itemId} {

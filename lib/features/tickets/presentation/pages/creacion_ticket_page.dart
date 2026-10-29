@@ -656,7 +656,7 @@ class _CreacionTicketPageState extends State<CreacionTicketPage> {
                       child: state.tipoSeleccionado == TipoRequerimiento.mantenimientoInterno
                           // 🛠️ Mantenimiento interno: formulario y estado propios (cubit).
                           ? BlocProvider(
-                              create: (_) => di.sl<MantenimientoInternoCubit>(),
+                              create: (_) => di.sl<MantenimientoInternoCubit>()..cargarCatalogo(),
                               child: const MantenimientoInternoFormWidget(),
                             )
                           : state.tipoSeleccionado == TipoRequerimiento.ventaRepuesto

@@ -196,7 +196,7 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
         final d = s.datos;
         final tipo = d.tipoActivo;
         final enviando = s.envio == EstadoEnvioMantenimiento.enviando;
-        final opciones = tipo == null ? const <String>[] : _F.opcionesDe(tipo);
+        final opciones = tipo == null ? const <String>[] : _F.opcionesDe(tipo, s.catalogo);
 
         return AbsorbPointer(
           absorbing: enviando,
@@ -206,29 +206,16 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
               const SelectorRequerimientoWidget(),
               const Divider(height: 32),
 
-              // 1. Tipo de mantenimiento (supervisor / admin eligen; el resto, Correctivo).
+              // 1. Tipo de mantenimiento (cualquier usuario elige).
               _titulo('Tipo de mantenimiento'),
-              if (_F.puedeElegirTipo(usuario.rol))
-                Wrap(spacing: 8, children: [
-                  for (final t in TipoMantenimiento.values)
-                    ChoiceChip(
-                      label: Text(t.etiqueta),
-                      selected: d.tipoMantenimiento == t,
-                      onSelected: (_) => cubit.elegirTipoMantenimiento(t),
-                    ),
-                ])
-              else
-                Row(children: [
-                  Chip(
-                    avatar: const Icon(Icons.lock_outline, size: 16),
-                    label: Text(TipoMantenimiento.correctivo.etiqueta),
+              Wrap(spacing: 8, children: [
+                for (final t in TipoMantenimiento.values)
+                  ChoiceChip(
+                    label: Text(t.etiqueta),
+                    selected: d.tipoMantenimiento == t,
+                    onSelected: (_) => cubit.elegirTipoMantenimiento(t),
                   ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text('Solo un supervisor puede crear un mantenimiento preventivo.',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                  ),
-                ]),
+              ]),
 
               // 2. Tipo de máquina.
               _titulo('Tipo de máquina'),
@@ -267,13 +254,18 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
                     decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Ej.: JOHN DEERE, TOYOTA, LG'),
                     onChanged: cubit.cambiarMarca,
                   ),
-                  _titulo('Especificación del equipo'),
+                  // En aire acondicionado: dónde se encuentra el equipo.
+                  _titulo(_F.etiquetaEspecificacion(tipo)),
                   TextField(
-                    key: const ValueKey('especificacion_mantenimiento'),
+                    // Clave por máquina: entre aire (ubicación) y herramientas
+                    // (especificación) el campo empieza vacío, igual que el estado.
+                    key: ValueKey('especificacion_mantenimiento_${tipo.name}'),
                     textCapitalization: TextCapitalization.characters,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: 'Modelo, capacidad, año… Ej.: MOTOR YANMAR 3TNV88, 2019',
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      hintText: tipo == TipoActivoMantenimiento.aireAcondicionado
+                          ? 'Dónde se encuentra… Ej.: OFICINA DE BODEGA, 2.º PISO'
+                          : 'Modelo, capacidad, año… Ej.: MOTOR YANMAR 3TNV88, 2019',
                     ),
                     onChanged: cubit.cambiarEspecificacion,
                   ),
@@ -291,7 +283,8 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
                   )
                 else
                   DropdownButtonFormField<String>(
-                    key: ValueKey('serie_${tipo.name}'),
+                    // Se rehace si llega el catálogo de Firestore.
+                    key: ValueKey('serie_${tipo.name}_${opciones.join('|')}'),
                     initialValue: opciones.contains(d.serieOPlaca) ? d.serieOPlaca : null,
                     decoration: InputDecoration(
                       border: const OutlineInputBorder(),
@@ -301,6 +294,11 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
                     onChanged: (v) {
                       if (v != null) cubit.elegirSerieOPlaca(v);
                     },
+                  ),
+                if (!_F.serieManual(tipo) && s.avisoCatalogo.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(s.avisoCatalogo, style: TextStyle(fontSize: 12, color: Colors.orange.shade900)),
                   ),
                 if (_F.pideHorometro(tipo)) ...[
                   _titulo('Horómetro'),

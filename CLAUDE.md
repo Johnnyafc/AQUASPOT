@@ -73,7 +73,14 @@ arranque con la misma memoria, sin tener que repetir todo desde cero.
     creación **sin fotos** (`DatosMantenimientoTarjetaWidget`); en las
     pantallas de detalle y en el detalle del Historial, **con** fotos y
     videos (`ResumenMantenimientoWidget`). Marca y especificación solo
-    existen en aire acondicionado y herramientas.
+    existen en aire acondicionado y herramientas (en aire acondicionado la
+    especificación es la **ubicación del equipo**). Desde 2026-10-29: código
+    propio **OT-00001** (contador `ot_count`, `CodigoRequerimientoService`);
+    cualquier usuario elige Correctivo o Preventivo; series y placas en
+    Firestore `catalogos/activos_mantenimiento` (una lista por tipo; el tipo
+    que falte usa el catálogo por defecto). Mantenimiento interno **no lleva
+    proyecto**: en Costos solo pasa por "Creación de códigos" si tiene
+    repuestos sin código ("Creación de proyectos" es para el resto).
 13. **"Usa flujo con generación de reportes automáticos"** (campo
     `usaFlujoReportesAutomaticos`, `FlujoReportesAutomaticosService`): se
     marca al guardar la Evaluación Técnica de todo mantenimiento interno y de

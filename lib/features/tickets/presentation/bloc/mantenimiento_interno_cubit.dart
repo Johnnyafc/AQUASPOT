@@ -1,7 +1,7 @@
 // lib/features/tickets/presentation/bloc/mantenimiento_interno_cubit.dart
 //
 // Estado del formulario de MANTENIMIENTO INTERNO (Crear Ticket). Las reglas
-// (campos por máquina, tipo de mantenimiento por rol, validaciones) están
+// (campos por máquina, catálogo de series / placas, validaciones) están
 // en FormularioMantenimientoService; aquí solo se guarda lo que el usuario
 // llena y se orquesta el envío: crear el ticket → subir la foto del
 // horómetro / kilometraje, las fotos y los videos → adjuntarlos.
@@ -14,6 +14,7 @@ import '../../domain/entities/mantenimiento_interno_entity.dart';
 import '../../domain/services/formulario_mantenimiento_service.dart';
 import '../../domain/usecases/adjuntar_evidencias_mantenimiento_usecase.dart';
 import '../../domain/usecases/crear_mantenimiento_interno_usecase.dart';
+import '../../domain/usecases/obtener_catalogo_activos_mantenimiento_usecase.dart';
 import '../../domain/usecases/subir_evidencia_usecase.dart';
 
 enum EstadoEnvioMantenimiento { editando, enviando, creado, error }
@@ -27,6 +28,9 @@ class MantenimientoInternoState extends Equatable {
   final String mensaje;
   final List<String> errores;
   final String? ticketCreadoId;
+  // Series / placas por tipo (de Firestore; por defecto mientras carga).
+  final CatalogoActivos catalogo;
+  final String avisoCatalogo; // si no se pudo leer el catálogo
 
   const MantenimientoInternoState({
     this.datos = const DatosMantenimientoInterno(),
@@ -37,6 +41,8 @@ class MantenimientoInternoState extends Equatable {
     this.mensaje = '',
     this.errores = const [],
     this.ticketCreadoId,
+    this.catalogo = FormularioMantenimientoService.catalogoPorDefecto,
+    this.avisoCatalogo = '',
   });
 
   MantenimientoInternoState copyWith({
@@ -49,6 +55,8 @@ class MantenimientoInternoState extends Equatable {
     String? mensaje,
     List<String>? errores,
     String? ticketCreadoId,
+    CatalogoActivos? catalogo,
+    String? avisoCatalogo,
   }) {
     return MantenimientoInternoState(
       datos: datos ?? this.datos,
@@ -59,25 +67,50 @@ class MantenimientoInternoState extends Equatable {
       mensaje: mensaje ?? this.mensaje,
       errores: errores ?? this.errores,
       ticketCreadoId: ticketCreadoId ?? this.ticketCreadoId,
+      catalogo: catalogo ?? this.catalogo,
+      avisoCatalogo: avisoCatalogo ?? this.avisoCatalogo,
     );
   }
 
   @override
   List<Object?> get props => [datos.tipoMantenimiento, datos.tipoActivo, datos.serieOPlaca, datos.horometro,
         datos.kilometraje, datos.fechaHora, datos.marca, datos.especificacion, datos.detalle, fotos, videos, fotoLectura, envio, mensaje, errores,
-        ticketCreadoId];
+        ticketCreadoId, catalogo, avisoCatalogo];
 }
 
 class MantenimientoInternoCubit extends Cubit<MantenimientoInternoState> {
   final CrearMantenimientoInternoUseCase crearMantenimiento;
   final SubirEvidenciaUseCase subirEvidencia;
   final AdjuntarEvidenciasMantenimientoUseCase adjuntarEvidencias;
+  final ObtenerCatalogoActivosMantenimientoUseCase obtenerCatalogo;
 
   MantenimientoInternoCubit({
     required this.crearMantenimiento,
     required this.subirEvidencia,
     required this.adjuntarEvidencias,
+    required this.obtenerCatalogo,
   }) : super(MantenimientoInternoState(datos: DatosMantenimientoInterno(fechaHora: DateTime.now())));
+
+  /// Series y placas de Firestore. Si no se pueden leer, se queda el
+  /// catálogo por defecto y se avisa en el formulario.
+  Future<void> cargarCatalogo() async {
+    final r = await obtenerCatalogo();
+    if (isClosed) return;
+    r.fold(
+      (f) => emit(state.copyWith(avisoCatalogo: 'No se pudo leer el catálogo de series y placas (${f.message}); se muestran las de siempre.')),
+      (c) => emit(state.copyWith(catalogo: c, avisoCatalogo: '', datos: _serieSegun(state.datos, c))),
+    );
+  }
+
+  /// Si la máquina ya estaba elegida cuando llegó el catálogo, su serie /
+  /// placa se vuelve a elegir con las opciones nuevas.
+  static DatosMantenimientoInterno _serieSegun(DatosMantenimientoInterno d, CatalogoActivos c) {
+    final tipo = d.tipoActivo;
+    if (tipo == null || FormularioMantenimientoService.serieManual(tipo)) return d;
+    final opciones = FormularioMantenimientoService.opcionesDe(tipo, c);
+    if (opciones.contains(d.serieOPlaca)) return d;
+    return opciones.length == 1 ? d.copyWith(serieOPlaca: opciones.first) : d.copyWith(limpiarSerieOPlaca: true);
+  }
 
   void _datos(DatosMantenimientoInterno d) => emit(state.copyWith(datos: d, errores: const []));
 
@@ -85,7 +118,7 @@ class MantenimientoInternoCubit extends Cubit<MantenimientoInternoState> {
   void elegirTipoActivo(TipoActivoMantenimiento t) {
     if (state.datos.tipoActivo == t) return;
     emit(state.copyWith(
-      datos: FormularioMantenimientoService.cambiarTipoActivo(state.datos, t),
+      datos: FormularioMantenimientoService.cambiarTipoActivo(state.datos, t, catalogo: state.catalogo),
       limpiarFotoLectura: true,
       errores: const [],
     ));
@@ -129,14 +162,14 @@ class MantenimientoInternoCubit extends Cubit<MantenimientoInternoState> {
   /// Crea el ticket, sube las evidencias y las adjunta. Si un archivo falla,
   /// el ticket ya quedó creado: se avisa cuál y con qué número.
   Future<void> enviar({required String usuarioNombre, required RolUsuario rol}) async {
-    final errores = FormularioMantenimientoService.validar(state.datos, rol: rol, ahora: DateTime.now());
+    final errores = FormularioMantenimientoService.validar(state.datos, ahora: DateTime.now(), catalogo: state.catalogo);
     if (errores.isNotEmpty) {
       emit(state.copyWith(errores: errores, envio: EstadoEnvioMantenimiento.editando));
       return;
     }
     emit(state.copyWith(envio: EstadoEnvioMantenimiento.enviando, mensaje: 'Creando requerimiento...', errores: const []));
 
-    final creado = await crearMantenimiento(state.datos, usuarioNombre: usuarioNombre, rol: rol);
+    final creado = await crearMantenimiento(state.datos, usuarioNombre: usuarioNombre, rol: rol, catalogo: state.catalogo);
     final ticket = creado.fold((_) => null, (t) => t);
     if (ticket == null) {
       final msg = creado.fold((f) => f.message, (_) => '');
