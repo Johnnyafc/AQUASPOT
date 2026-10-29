@@ -14,6 +14,7 @@ import '../../../../core/enum/segmento_operativo.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:typed_data'; // <-- Ruta de tu nuevo Enum       // <-- Ruta de tu Enum de máquinas
 import '../datasources/ticket_remote_datasource.dart';
+import '../../domain/services/codigo_requerimiento_service.dart';
 
 class TicketRemoteDataSourceImpl implements TicketRemoteDataSource {
   final FirebaseFirestore firestore;
@@ -208,15 +209,18 @@ Stream<String?> escucharEstadoExcel(String ticketId) {
         
         final snapshot = await transaction.get(counterRef);
         int currentCount = 0;
-        
-        if (snapshot.exists && snapshot.data() != null && snapshot.data()!.containsKey('ticket_count')) {
-          currentCount = snapshot.data()!['ticket_count'] as int;
+        // Mantenimiento interno: numeración propia OT-00001 (ot_count); el
+        // resto, REQ-00001 (ticket_count). CodigoRequerimientoService.
+        final campoContador = CodigoRequerimientoService.campoContador(ticket.tipoRequerimiento);
+
+        if (snapshot.exists && snapshot.data() != null && snapshot.data()!.containsKey(campoContador)) {
+          currentCount = snapshot.data()![campoContador] as int;
         }
 
         final nextCount = currentCount + 1;
 
         // ⚙️ TROQUELADO LÓGICO
-        final nuevoId = 'REQ-${nextCount.toString().padLeft(5, '0')}';
+        final nuevoId = CodigoRequerimientoService.codigo(ticket.tipoRequerimiento, nextCount);
         
         // 🔌 LA LÍNEA CRÍTICA: Apuntamos al nuevo ID, NO a ticket.id
         final docRef = firestore.collection('tickets').doc(nuevoId); 
@@ -226,7 +230,7 @@ Stream<String?> escucharEstadoExcel(String ticketId) {
         ticketJson['id'] = nuevoId; 
 
         // Escritura síncrona
-        transaction.set(counterRef, {'ticket_count': nextCount}, SetOptions(merge: true));
+        transaction.set(counterRef, {campoContador: nextCount}, SetOptions(merge: true));
         transaction.set(docRef, ticketJson);
 
         return TicketModel.fromJson(ticketJson);
