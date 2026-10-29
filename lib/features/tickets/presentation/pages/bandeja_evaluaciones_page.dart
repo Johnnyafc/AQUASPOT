@@ -59,7 +59,7 @@ class _BandejaEvaluacionesPageState extends State<BandejaEvaluacionesPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.grupo == GrupoRequerimiento.ordenesTrabajo ? 'Evaluaciones de OT' : 'Evaluaciones técnicas'),
+        title: Text(widget.grupo == GrupoRequerimiento.ordenesTrabajo ? 'Evaluaciones técnicas de Mantenimiento interno' : 'Evaluaciones técnicas'),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
       ),

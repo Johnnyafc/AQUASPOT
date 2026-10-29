@@ -55,7 +55,7 @@ class _BandejaTrabajosPageState extends State<BandejaTrabajosPage> {
       backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
         title: Text(
-          widget.grupo == GrupoRequerimiento.ordenesTrabajo ? 'Proceso de trabajo OT' : 'Línea de Trabajo - Operaciones',
+          widget.grupo == GrupoRequerimiento.ordenesTrabajo ? 'Proceso de trabajo de Mantenimiento interno' : 'Línea de Trabajo - Operaciones',
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.blueGrey.shade800,
