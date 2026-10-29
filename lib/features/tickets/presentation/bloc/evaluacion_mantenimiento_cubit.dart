@@ -7,6 +7,7 @@
 // sin código) y se orquesta el envío (desde la revisión del informe):
 // subir fotos → subir informe PDF y Solicitud de materiales → guardar.
 
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:equatable/equatable.dart';
@@ -23,8 +24,10 @@ import '../../domain/entities/actividad_mantenimiento.dart';
 import '../../domain/entities/archivo_adjunto.dart';
 import '../../domain/entities/ficha_creacion_repuesto_entity.dart';
 import '../../domain/entities/ticket_entity.dart';
+import '../../domain/services/borrador_mantenimiento_service.dart';
 import '../../domain/services/creacion_codigos_mantenimiento_service.dart';
 import '../../domain/services/evaluacion_mantenimiento_service.dart';
+import '../../domain/usecases/borrador_usecases.dart';
 import '../../domain/usecases/guardar_evaluacion_mantenimiento_usecase.dart';
 import '../../domain/usecases/subir_archivo_adjunto_usecase.dart';
 
@@ -49,6 +52,10 @@ class EvaluacionMantenimientoState extends Equatable {
   final EnvioEvaluacionMantenimiento envio;
   final String mensaje;
   final List<String> errores;
+  // Sube cuando la evaluación se reemplaza entera (borrador recuperado o
+  // descartado): la pantalla vuelve a dibujar sus campos de texto.
+  final int versionFormulario;
+  final bool borradorRecuperado;
 
   const EvaluacionMantenimientoState({
     this.ticket,
@@ -63,6 +70,8 @@ class EvaluacionMantenimientoState extends Equatable {
     this.envio = EnvioEvaluacionMantenimiento.editando,
     this.mensaje = '',
     this.errores = const [],
+    this.versionFormulario = 0,
+    this.borradorRecuperado = false,
   });
 
   EvaluacionMantenimientoState copyWith({
@@ -78,6 +87,8 @@ class EvaluacionMantenimientoState extends Equatable {
     EnvioEvaluacionMantenimiento? envio,
     String? mensaje,
     List<String>? errores,
+    int? versionFormulario,
+    bool? borradorRecuperado,
   }) {
     return EvaluacionMantenimientoState(
       ticket: ticket ?? this.ticket,
@@ -92,12 +103,14 @@ class EvaluacionMantenimientoState extends Equatable {
       envio: envio ?? this.envio,
       mensaje: mensaje ?? this.mensaje,
       errores: errores ?? this.errores,
+      versionFormulario: versionFormulario ?? this.versionFormulario,
+      borradorRecuperado: borradorRecuperado ?? this.borradorRecuperado,
     );
   }
 
   @override
   List<Object?> get props => [ticket?.id, carga, catalogo, planPreventivo, inventario.length, actividades, fichas, necesitaCompras,
-        motivoNoCompras, envio, mensaje, errores];
+        motivoNoCompras, envio, mensaje, errores, versionFormulario, borradorRecuperado];
 }
 
 class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
@@ -106,6 +119,17 @@ class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
   final SubirArchivoAdjuntoUseCase subirArchivo;
   final GuardarEvaluacionMantenimientoUseCase guardarEvaluacion;
   final ObtenerPlanPreventivoUseCase obtenerPlanPreventivo;
+  final GuardarBorradorUseCase guardarBorrador;
+  final ObtenerBorradorUseCase obtenerBorrador;
+  final EliminarBorradorUseCase eliminarBorrador;
+
+  /// Pausa antes de guardar el borrador (se guarda una vez, no en cada tecla).
+  static const Duration pausaBorrador = Duration(seconds: 2);
+
+  Timer? _timerBorrador;
+  // Guardados en fila: uno espera al anterior, y borrar espera a ambos.
+  Future<void> _guardando = Future.value();
+  bool _borradorActivo = true; // false desde que se guarda la evaluación
 
   EvaluacionMantenimientoCubit({
     required this.obtenerActividades,
@@ -113,7 +137,87 @@ class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
     required this.subirArchivo,
     required this.guardarEvaluacion,
     required this.obtenerPlanPreventivo,
+    required this.guardarBorrador,
+    required this.obtenerBorrador,
+    required this.eliminarBorrador,
   }) : super(const EvaluacionMantenimientoState());
+
+  // ------------------------------------------------------------ Borrador
+  String? get _clave => state.ticket == null ? null : BorradorMantenimientoService.claveEvaluacion(state.ticket!.id);
+
+  @override
+  void onChange(Change<EvaluacionMantenimientoState> change) {
+    super.onChange(change);
+    final a = change.currentState, b = change.nextState;
+    final cambio = a.actividades != b.actividades ||
+        a.fichas != b.fichas ||
+        a.necesitaCompras != b.necesitaCompras ||
+        a.motivoNoCompras != b.motivoNoCompras;
+    final editando = b.carga != CargaEvaluacionMantenimiento.cargando &&
+        b.envio != EnvioEvaluacionMantenimiento.enviando &&
+        b.envio != EnvioEvaluacionMantenimiento.guardada;
+    if (cambio && editando) {
+      _timerBorrador?.cancel();
+      _timerBorrador = Timer(pausaBorrador, guardarBorradorAhora);
+    }
+  }
+
+  /// Guarda lo avanzado (o borra el borrador si no hay nada).
+  Future<void> guardarBorradorAhora() {
+    _timerBorrador?.cancel();
+    return _guardando = _guardando.then((_) => _guardar()).catchError((_) {});
+  }
+
+  Future<void> _guardar() async {
+    final clave = _clave;
+    final s = state;
+    if (clave == null || !_borradorActivo) return;
+    if (BorradorMantenimientoService.evaluacionVacia(
+      actividades: s.actividades,
+      fichas: s.fichas,
+      necesitaCompras: s.necesitaCompras,
+      motivoNoCompras: s.motivoNoCompras,
+    )) {
+      await eliminarBorrador(clave);
+      return;
+    }
+    await guardarBorrador(
+      clave,
+      BorradorMantenimientoService.evaluacionABorrador(
+        actividades: s.actividades,
+        fichas: s.fichas,
+        necesitaCompras: s.necesitaCompras,
+        motivoNoCompras: s.motivoNoCompras,
+      ),
+    );
+  }
+
+  /// Empieza de cero: borra el borrador y quita lo recuperado.
+  Future<void> descartarBorrador() async {
+    _timerBorrador?.cancel();
+    await _guardando;
+    final clave = _clave;
+    if (clave != null) await eliminarBorrador(clave);
+    if (isClosed) return;
+    emit(state.copyWith(
+      actividades: const [],
+      fichas: const {},
+      necesitaCompras: true,
+      motivoNoCompras: '',
+      errores: const [],
+      borradorRecuperado: false,
+      versionFormulario: state.versionFormulario + 1,
+    ));
+  }
+
+  /// Al salir se guarda lo de los últimos segundos (si había un guardado
+  /// pendiente).
+  @override
+  Future<void> close() {
+    if (_timerBorrador?.isActive ?? false) guardarBorradorAhora();
+    _timerBorrador?.cancel();
+    return super.close();
+  }
 
   /// Carga el Plan Maestro del equipo, el Plan Preventivo de la máquina y
   /// el inventario registrado.
@@ -124,6 +228,9 @@ class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
     final catalogo = equipo == null ? null : await obtenerActividades(equipo);
     final preventivo = tipo == null ? null : await obtenerPlanPreventivo(tipo);
     final inventario = await obtenerInventario();
+    // Lo avanzado la última vez en esta OT (si quedó algo sin enviar).
+    final guardado = await obtenerBorrador(BorradorMantenimientoService.claveEvaluacion(ticket.id));
+    final borrador = guardado == null ? null : BorradorMantenimientoService.evaluacionDesdeBorrador(guardado);
     final fallo = [
       if (catalogo != null) catalogo.fold((f) => 'Plan Maestro: ${f.message}', (_) => null),
       if (preventivo != null) preventivo.fold((f) => 'Plan Preventivo: ${f.message}', (_) => null),
@@ -135,6 +242,12 @@ class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
       catalogo: catalogo?.getOrElse(() => const []) ?? const [],
       planPreventivo: preventivo?.getOrElse(() => const []) ?? const [],
       inventario: inventario.getOrElse(() => const []),
+      actividades: borrador?.actividades,
+      fichas: borrador?.fichas,
+      necesitaCompras: borrador?.necesitaCompras,
+      motivoNoCompras: borrador?.motivoNoCompras,
+      borradorRecuperado: borrador != null,
+      versionFormulario: borrador == null ? null : state.versionFormulario + 1,
     ));
   }
 
@@ -190,7 +303,25 @@ class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
 
   /// Desde la revisión del informe: sube las fotos que faltan, el informe
   /// PDF y la Solicitud de materiales, y guarda la evaluación.
+  bool _confirmando = false;
+
+  /// Un solo envío a la vez: un doble toque no guarda la evaluación dos veces.
   Future<void> confirmar({
+    required Uint8List informePdf,
+    required Uint8List solicitudExcel,
+    required String usuarioNombre,
+    required RolUsuario rol,
+  }) async {
+    if (_confirmando) return;
+    _confirmando = true;
+    try {
+      await _confirmar(informePdf: informePdf, solicitudExcel: solicitudExcel, usuarioNombre: usuarioNombre, rol: rol);
+    } finally {
+      _confirmando = false;
+    }
+  }
+
+  Future<void> _confirmar({
     required Uint8List informePdf,
     required Uint8List solicitudExcel,
     required String usuarioNombre,
@@ -198,6 +329,8 @@ class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
   }) async {
     final ticket = state.ticket;
     if (ticket == null || !validarParaInforme()) return;
+    // Lo último editado queda en el borrador (si la subida falla, no se pierde).
+    await guardarBorradorAhora();
     emit(state.copyWith(envio: EnvioEvaluacionMantenimiento.enviando, mensaje: 'Guardando evaluación...'));
 
     // Cada foto subida queda en "fotosUrls" (mismo orden que "fotos"): si
@@ -247,16 +380,26 @@ class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
       urlInformePdf: urlPdf,
       urlSolicitudExcel: urlExcel,
     );
-    r.fold(
-      (f) => emit(state.copyWith(
+    final guardado = r.fold((_) => null, (t) => t);
+    if (guardado == null) {
+      emit(state.copyWith(
         envio: EnvioEvaluacionMantenimiento.error,
-        mensaje: 'No se pudo guardar la evaluación: ${f.message}',
-      )),
-      (t) => emit(state.copyWith(
-        envio: EnvioEvaluacionMantenimiento.guardada,
-        mensaje: 'Evaluación de ${ticket.id} guardada. ${_destino(t)}',
-      )),
-    );
+        mensaje: 'No se pudo guardar la evaluación: ${r.fold((f) => f.message, (_) => '')}',
+      ));
+      guardarBorradorAhora(); // conserva las fotos ya subidas (no se vuelven a subir)
+      return;
+    }
+    // Evaluación enviada: el borrador ya no sirve. Se borra después del
+    // guardado en curso, para que no reviva.
+    _borradorActivo = false;
+    _timerBorrador?.cancel();
+    await _guardando;
+    await eliminarBorrador(BorradorMantenimientoService.claveEvaluacion(ticket.id));
+    if (isClosed) return;
+    emit(state.copyWith(
+      envio: EnvioEvaluacionMantenimiento.guardada,
+      mensaje: 'Evaluación de ${ticket.id} guardada. ${_destino(guardado)}',
+    ));
   }
 
   static String _destino(TicketEntity t) {
@@ -276,6 +419,7 @@ class EvaluacionMantenimientoCubit extends Cubit<EvaluacionMantenimientoState> {
         envio: EnvioEvaluacionMantenimiento.error,
         mensaje: 'No se pudo subir "${archivo.nombre}": ${f.message}',
       ));
+      guardarBorradorAhora(); // conserva las fotos ya subidas (no se vuelven a subir)
       return null;
     }, (u) => u);
   }

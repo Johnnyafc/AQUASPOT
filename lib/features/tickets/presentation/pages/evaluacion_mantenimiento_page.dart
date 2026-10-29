@@ -102,7 +102,17 @@ class _VistaEvaluacionMantenimientoState extends State<_VistaEvaluacionMantenimi
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<EvaluacionMantenimientoCubit, EvaluacionMantenimientoState>(
+    return BlocConsumer<EvaluacionMantenimientoCubit, EvaluacionMantenimientoState>(
+      // Borrador recuperado: aviso con opción de empezar de cero.
+      listenWhen: (a, b) => a.versionFormulario != b.versionFormulario && b.borradorRecuperado,
+      listener: (context, s) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('Se recuperó lo avanzado en esta evaluación.'),
+        duration: const Duration(seconds: 8),
+        action: SnackBarAction(
+          label: 'DESCARTAR',
+          onPressed: context.read<EvaluacionMantenimientoCubit>().descartarBorrador,
+        ),
+      )),
       builder: (context, s) {
         final ticket = s.ticket;
         final enviando = s.envio == EnvioEvaluacionMantenimiento.enviando || _generando;
@@ -233,7 +243,7 @@ class _SeccionActividades extends StatelessWidget {
           ),
         for (var i = 0; i < estado.actividades.length; i++)
           _TarjetaActividad(
-            key: ValueKey('act_${estado.actividades[i].codigo}'),
+            key: ValueKey('act_${estado.actividades[i].codigo}_${estado.versionFormulario}'),
             indice: i,
             actividad: estado.actividades[i],
             inventario: estado.inventario,
@@ -833,6 +843,7 @@ class _TarjetaCompras extends StatelessWidget {
           ),
           if (!necesita)
             TextFormField(
+              key: ValueKey('motivo_no_compras_${estado.versionFormulario}'),
               initialValue: estado.motivoNoCompras,
               decoration: const InputDecoration(
                 labelText: 'Motivo por el cual NO requiere compras (opcional)',

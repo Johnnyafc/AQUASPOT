@@ -5,12 +5,19 @@
 // en FormularioMantenimientoService; aquí solo se guarda lo que el usuario
 // llena y se orquesta el envío: crear el ticket → subir la foto del
 // horómetro / kilometraje, las fotos y los videos → adjuntarlos.
+// Borrador: lo llenado se guarda solo (unos segundos después de cada cambio)
+// y se recupera al volver a abrir; se borra al crear la OT
+// (BorradorMantenimientoService).
 
+import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/enum/rol_usuario.dart';
+import '../../domain/entities/archivo_adjunto.dart';
 import '../../domain/entities/mantenimiento_interno_entity.dart';
+import '../../domain/services/borrador_mantenimiento_service.dart';
+import '../../domain/usecases/borrador_usecases.dart';
 import '../../domain/services/formulario_mantenimiento_service.dart';
 import '../../domain/usecases/adjuntar_evidencias_mantenimiento_usecase.dart';
 import '../../domain/usecases/crear_mantenimiento_interno_usecase.dart';
@@ -31,6 +38,10 @@ class MantenimientoInternoState extends Equatable {
   // Series / placas por tipo (de Firestore; por defecto mientras carga).
   final CatalogoActivos catalogo;
   final String avisoCatalogo; // si no se pudo leer el catálogo
+  // Sube cada vez que el formulario se reemplaza entero (borrador recuperado
+  // o descartado): la pantalla vuelve a llenar sus campos de texto.
+  final int versionFormulario;
+  final bool borradorRecuperado;
 
   const MantenimientoInternoState({
     this.datos = const DatosMantenimientoInterno(),
@@ -43,6 +54,8 @@ class MantenimientoInternoState extends Equatable {
     this.ticketCreadoId,
     this.catalogo = FormularioMantenimientoService.catalogoPorDefecto,
     this.avisoCatalogo = '',
+    this.versionFormulario = 0,
+    this.borradorRecuperado = false,
   });
 
   MantenimientoInternoState copyWith({
@@ -57,6 +70,8 @@ class MantenimientoInternoState extends Equatable {
     String? ticketCreadoId,
     CatalogoActivos? catalogo,
     String? avisoCatalogo,
+    int? versionFormulario,
+    bool? borradorRecuperado,
   }) {
     return MantenimientoInternoState(
       datos: datos ?? this.datos,
@@ -69,13 +84,15 @@ class MantenimientoInternoState extends Equatable {
       ticketCreadoId: ticketCreadoId ?? this.ticketCreadoId,
       catalogo: catalogo ?? this.catalogo,
       avisoCatalogo: avisoCatalogo ?? this.avisoCatalogo,
+      versionFormulario: versionFormulario ?? this.versionFormulario,
+      borradorRecuperado: borradorRecuperado ?? this.borradorRecuperado,
     );
   }
 
   @override
   List<Object?> get props => [datos.tipoMantenimiento, datos.tipoActivo, datos.serieOPlaca, datos.horometro,
         datos.kilometraje, datos.fechaHora, datos.marca, datos.especificacion, datos.detalle, fotos, videos, fotoLectura, envio, mensaje, errores,
-        ticketCreadoId, catalogo, avisoCatalogo];
+        ticketCreadoId, catalogo, avisoCatalogo, versionFormulario, borradorRecuperado];
 }
 
 class MantenimientoInternoCubit extends Cubit<MantenimientoInternoState> {
@@ -83,13 +100,133 @@ class MantenimientoInternoCubit extends Cubit<MantenimientoInternoState> {
   final SubirEvidenciaUseCase subirEvidencia;
   final AdjuntarEvidenciasMantenimientoUseCase adjuntarEvidencias;
   final ObtenerCatalogoActivosMantenimientoUseCase obtenerCatalogo;
+  final GuardarBorradorUseCase guardarBorrador;
+  final ObtenerBorradorUseCase obtenerBorrador;
+  final EliminarBorradorUseCase eliminarBorrador;
+
+  /// Pausa antes de guardar el borrador (se guarda una vez, no en cada tecla).
+  static const Duration pausaBorrador = Duration(seconds: 2);
+  // Un borrador por usuario (PC compartida del taller): se fija al restaurar.
+  String _clave = BorradorMantenimientoService.claveCreacion('');
+
+  Timer? _timerBorrador;
+  // Guardados en fila: uno espera al anterior, y borrar espera a ambos.
+  Future<void> _guardando = Future.value();
+  bool _borradorActivo = true; // false desde que se crea la OT
+  // Bytes de cada archivo ya leído: se leen una sola vez, no en cada guardado.
+  final Map<XFile, ArchivoAdjunto> _archivos = {};
 
   MantenimientoInternoCubit({
     required this.crearMantenimiento,
     required this.subirEvidencia,
     required this.adjuntarEvidencias,
     required this.obtenerCatalogo,
+    required this.guardarBorrador,
+    required this.obtenerBorrador,
+    required this.eliminarBorrador,
   }) : super(MantenimientoInternoState(datos: DatosMantenimientoInterno(fechaHora: DateTime.now())));
+
+  // ------------------------------------------------------------ Borrador
+  @override
+  void onChange(Change<MantenimientoInternoState> change) {
+    super.onChange(change);
+    final a = change.currentState, b = change.nextState;
+    final cambioFormulario = a.datos != b.datos || a.fotos != b.fotos || a.videos != b.videos || a.fotoLectura != b.fotoLectura;
+    if (_borradorActivo && cambioFormulario && b.envio != EstadoEnvioMantenimiento.enviando) {
+      _timerBorrador?.cancel();
+      _timerBorrador = Timer(pausaBorrador, guardarBorradorAhora);
+    }
+  }
+
+  Future<ArchivoAdjunto> _adjunto(XFile f) async =>
+      _archivos[f] ??= ArchivoAdjunto(bytes: await f.readAsBytes(), nombre: f.name, tipoContenido: f.mimeType);
+
+  /// Guarda lo llenado (o borra el borrador si el formulario está vacío).
+  Future<void> guardarBorradorAhora() {
+    _timerBorrador?.cancel();
+    return _guardando = _guardando.then((_) => _guardar()).catchError((_) {});
+  }
+
+  Future<void> _guardar() async {
+    if (!_borradorActivo) return;
+    final s = state;
+    final n = s.fotos.length + s.videos.length + (s.fotoLectura == null ? 0 : 1);
+    if (BorradorMantenimientoService.creacionVacia(s.datos, archivos: n)) {
+      await eliminarBorrador(_clave);
+      return;
+    }
+    final borrador = BorradorMantenimientoService.creacionABorrador(
+      s.datos,
+      fotos: [for (final f in s.fotos) await _adjunto(f)],
+      videos: [for (final v in s.videos) await _adjunto(v)],
+      fotoLectura: s.fotoLectura == null ? null : await _adjunto(s.fotoLectura!),
+    );
+    if (_borradorActivo) await guardarBorrador(_clave, borrador);
+  }
+
+  /// Deja de guardar y borra el borrador, después del guardado en curso.
+  Future<void> _terminarBorrador() async {
+    _borradorActivo = false;
+    _timerBorrador?.cancel();
+    await _guardando;
+    await eliminarBorrador(_clave);
+  }
+
+  XFile _xfile(ArchivoAdjunto a) {
+    // path: en el celular el nombre sale de la ruta; en web se ignora.
+    final f = XFile.fromData(a.bytes, name: a.nombre, path: a.nombre, mimeType: a.tipoContenido, length: a.bytes.length);
+    _archivos[f] = a;
+    return f;
+  }
+
+  /// Recupera lo que [usuario] dejó llenado la última vez (si hay algo).
+  /// Si mientras se leía ya empezó a llenar el formulario, no se pisa.
+  Future<void> restaurarBorrador({required String usuario}) async {
+    _clave = BorradorMantenimientoService.claveCreacion(usuario);
+    final antes = state;
+    final guardado = await obtenerBorrador(_clave);
+    if (isClosed || guardado == null) return;
+    final b = BorradorMantenimientoService.creacionDesdeBorrador(guardado);
+    final tocado = !identical(state.datos, antes.datos) ||
+        state.fotos != antes.fotos ||
+        state.videos != antes.videos ||
+        state.fotoLectura != antes.fotoLectura;
+    if (b == null || tocado || state.envio != EstadoEnvioMantenimiento.editando) return;
+    emit(state.copyWith(
+      datos: b.datos.fechaHora == null ? b.datos.copyWith(fechaHora: state.datos.fechaHora) : b.datos,
+      fotos: [for (final a in b.fotos) _xfile(a)],
+      videos: [for (final a in b.videos) _xfile(a)],
+      fotoLectura: b.fotoLectura == null ? null : _xfile(b.fotoLectura!),
+      limpiarFotoLectura: b.fotoLectura == null,
+      versionFormulario: state.versionFormulario + 1,
+      borradorRecuperado: true,
+      errores: const [],
+    ));
+  }
+
+  /// Empieza de cero: borra el borrador y vacía el formulario.
+  Future<void> descartarBorrador() async {
+    _timerBorrador?.cancel();
+    await _guardando;
+    await eliminarBorrador(_clave);
+    if (isClosed) return;
+    _archivos.clear();
+    emit(MantenimientoInternoState(
+      datos: DatosMantenimientoInterno(fechaHora: DateTime.now()),
+      catalogo: state.catalogo,
+      avisoCatalogo: state.avisoCatalogo,
+      versionFormulario: state.versionFormulario + 1,
+    ));
+  }
+
+  /// Al salir se guarda lo de los últimos segundos (si había un guardado
+  /// pendiente).
+  @override
+  Future<void> close() {
+    if (_timerBorrador?.isActive ?? false) guardarBorradorAhora();
+    _timerBorrador?.cancel();
+    return super.close();
+  }
 
   /// Series y placas de Firestore. Si no se pueden leer, se queda el
   /// catálogo por defecto y se avisa en el formulario.
@@ -161,7 +298,22 @@ class MantenimientoInternoCubit extends Cubit<MantenimientoInternoState> {
 
   /// Crea el ticket, sube las evidencias y las adjunta. Si un archivo falla,
   /// el ticket ya quedó creado: se avisa cuál y con qué número.
+  bool _enviando = false;
+
+  /// Un solo envío a la vez: un doble toque no crea dos OT.
   Future<void> enviar({required String usuarioNombre, required RolUsuario rol}) async {
+    if (_enviando) return;
+    _enviando = true;
+    try {
+      await _enviar(usuarioNombre: usuarioNombre, rol: rol);
+    } finally {
+      _enviando = false;
+    }
+  }
+
+  Future<void> _enviar({required String usuarioNombre, required RolUsuario rol}) async {
+    // Lo último escrito queda en el borrador (si algo falla, no se pierde).
+    await guardarBorradorAhora();
     final errores = FormularioMantenimientoService.validar(state.datos, ahora: DateTime.now(), catalogo: state.catalogo);
     if (errores.isNotEmpty) {
       emit(state.copyWith(errores: errores, envio: EstadoEnvioMantenimiento.editando));
@@ -176,6 +328,8 @@ class MantenimientoInternoCubit extends Cubit<MantenimientoInternoState> {
       emit(state.copyWith(envio: EstadoEnvioMantenimiento.error, mensaje: 'No se pudo crear el requerimiento: $msg'));
       return;
     }
+    // La OT ya existe: el borrador no debe volver a crearla.
+    await _terminarBorrador();
 
     // Foto de la lectura primero, luego fotos y videos, en ese orden.
     final archivos = [if (state.fotoLectura != null) state.fotoLectura!, ...state.fotos, ...state.videos];

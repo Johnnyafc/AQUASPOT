@@ -33,6 +33,29 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
 
   static const _azul = Color(0xFF005A9C);
 
+  // Última versión del formulario ya pasada a los campos de texto.
+  int _versionVista = 0;
+
+  String _texto(double? v) => v == null ? '' : (v % 1 == 0 ? v.toInt().toString() : v.toString());
+
+  /// Formulario reemplazado entero (borrador recuperado o descartado): los
+  /// campos con controlador muestran lo del estado y se avisa al usuario.
+  void _alCambiarFormulario(MantenimientoInternoState s) {
+    _versionVista = s.versionFormulario;
+    final d = s.datos;
+    _horometroCtrl.text = _texto(d.horometro);
+    _kilometrajeCtrl.text = _texto(d.kilometraje);
+    _serieCtrl.text = _F.serieManual(d.tipoActivo) ? (d.serieOPlaca ?? '') : '';
+    _detalleCtrl.text = d.detalle;
+    if (!s.borradorRecuperado) return;
+    final cubit = context.read<MantenimientoInternoCubit>();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: const Text('Se recuperó el borrador de este formulario.'),
+      duration: const Duration(seconds: 8),
+      action: SnackBarAction(label: 'DESCARTAR', onPressed: cubit.descartarBorrador),
+    ));
+  }
+
   @override
   void dispose() {
     _horometroCtrl.dispose();
@@ -178,8 +201,12 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
   Widget build(BuildContext context) {
     final usuario = _usuario();
     return BlocConsumer<MantenimientoInternoCubit, MantenimientoInternoState>(
-      listenWhen: (a, b) => a.envio != b.envio,
+      listenWhen: (a, b) => a.envio != b.envio || a.versionFormulario != b.versionFormulario,
       listener: (context, s) {
+        if (s.versionFormulario != _versionVista) {
+          _alCambiarFormulario(s);
+          return;
+        }
         if (s.envio == EstadoEnvioMantenimiento.creado) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('✅ ${s.mensaje}'), backgroundColor: Colors.green),
@@ -249,18 +276,20 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
               if (tipo != null) ...[
                 if (_F.pideMarcaYEspecificacion(tipo)) ...[
                   _titulo('Marca'),
-                  TextField(
-                    key: const ValueKey('marca_mantenimiento'),
+                  TextFormField(
+                    key: ValueKey('marca_mantenimiento_${s.versionFormulario}'),
+                    initialValue: d.marca,
                     textCapitalization: TextCapitalization.characters,
                     decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Ej.: JOHN DEERE, TOYOTA, LG'),
                     onChanged: cubit.cambiarMarca,
                   ),
                   // En aire acondicionado: dónde se encuentra el equipo.
                   _titulo(_F.etiquetaEspecificacion(tipo)),
-                  TextField(
+                  TextFormField(
                     // Clave por máquina: entre aire (ubicación) y herramientas
                     // (especificación) el campo empieza vacío, igual que el estado.
-                    key: ValueKey('especificacion_mantenimiento_${tipo.name}'),
+                    key: ValueKey('especificacion_mantenimiento_${tipo.name}_${s.versionFormulario}'),
+                    initialValue: d.especificacion,
                     textCapitalization: TextCapitalization.characters,
                     decoration: InputDecoration(
                       border: const OutlineInputBorder(),
@@ -285,7 +314,7 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
                 else
                   DropdownButtonFormField<String>(
                     // Se rehace si llega el catálogo de Firestore.
-                    key: ValueKey('serie_${tipo.name}_${opciones.join('|')}'),
+                    key: ValueKey('serie_${tipo.name}_${opciones.join('|')}_${s.versionFormulario}'),
                     initialValue: opciones.contains(d.serieOPlaca) ? d.serieOPlaca : null,
                     decoration: InputDecoration(
                       border: const OutlineInputBorder(),
@@ -441,7 +470,7 @@ class _MantenimientoInternoFormWidgetState extends State<MantenimientoInternoFor
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.build_circle_outlined),
                 label: Text(enviando ? s.mensaje : 'Crear requerimiento de mantenimiento'),
-                onPressed: () => cubit.enviar(usuarioNombre: usuario.nombre, rol: usuario.rol),
+                onPressed: enviando ? null : () => cubit.enviar(usuarioNombre: usuario.nombre, rol: usuario.rol),
               ),
             ],
           ),

@@ -90,7 +90,11 @@ arranque con la misma memoria, sin tener que repetir todo desde cero.
     misma regla en `segmentosDelTicket` de `functions/src/index.ts`): OT de
     contador → Contador; de cosechadora → Cosechadora **y** Caracol; el resto
     (caracol, bomba, vehículo, aire, herramientas) → Caracol. Los
-    requerimientos siguen por su equipo.
+    requerimientos siguen por su equipo. **Borradores** de la creación y de
+    la Evaluación Técnica de OT (`BorradorMantenimientoService` +
+    `IBorradorRepository`; claves `draft_ot_creacion` y
+    `draft_ot_evaluacion_<id>`): se guardan solos, se recuperan con aviso
+    "Descartar" y se borran al crear la OT / enviar la evaluación.
 13. **"Usa flujo con generación de reportes automáticos"** (campo
     `usaFlujoReportesAutomaticos`, `FlujoReportesAutomaticosService`): se
     marca al guardar la Evaluación Técnica de todo mantenimiento interno y de

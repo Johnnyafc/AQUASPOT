@@ -22,6 +22,9 @@ import 'package:aquaspot_postventa/features/tickets/domain/usecases/registrar_co
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/cerrar_entrega_venta_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/crear_mantenimiento_interno_usecase.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/usecases/obtener_catalogo_activos_mantenimiento_usecase.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/usecases/borrador_usecases.dart';
+import 'package:aquaspot_postventa/features/tickets/domain/repositories/borrador_repository.dart';
+import 'package:aquaspot_postventa/features/tickets/data/repositories/borrador_repository_impl.dart';
 import 'package:aquaspot_postventa/features/tickets/domain/repositories/catalogo_activos_mantenimiento_repository.dart';
 import 'package:aquaspot_postventa/features/tickets/data/datasources/catalogo_activos_mantenimiento_remote_datasource.dart';
 import 'package:aquaspot_postventa/features/tickets/data/repositories/catalogo_activos_mantenimiento_repository_impl.dart';
@@ -131,6 +134,7 @@ Future<void> init() async {
     () => StorageRemoteDataSourceImpl(storage: sl<FirebaseStorage>()),
   );
   sl.registerLazySingleton(() => CatalogoActivosMantenimientoRemoteDataSource(firestore: sl()));
+  sl.registerLazySingleton<IBorradorRepository>(() => BorradorRepositoryImpl());
   sl.registerLazySingleton<ICatalogoActivosMantenimientoRepository>(
     () => CatalogoActivosMantenimientoRepositoryImpl(dataSource: sl()),
   );
@@ -240,6 +244,9 @@ sl.registerLazySingleton(() => SubirOrdenCompraUseCase(sl()));
   sl.registerLazySingleton(() => CerrarEntregaVentaUseCase(sl()));
   sl.registerLazySingleton(() => CrearMantenimientoInternoUseCase(sl()));
   sl.registerLazySingleton(() => ObtenerCatalogoActivosMantenimientoUseCase(sl()));
+  sl.registerLazySingleton(() => GuardarBorradorUseCase(sl()));
+  sl.registerLazySingleton(() => ObtenerBorradorUseCase(sl()));
+  sl.registerLazySingleton(() => EliminarBorradorUseCase(sl()));
   sl.registerLazySingleton(() => AdjuntarEvidenciasMantenimientoUseCase(sl()));
   sl.registerLazySingleton(() => SubirArchivoAdjuntoUseCase(sl()));
   sl.registerLazySingleton(() => GuardarEvaluacionMantenimientoUseCase(sl()));
@@ -254,6 +261,9 @@ sl.registerLazySingleton(() => EscucharEstadoExcelUseCase(sl()));
         subirEvidencia: sl(),
         adjuntarEvidencias: sl(),
         obtenerCatalogo: sl(),
+        guardarBorrador: sl(),
+        obtenerBorrador: sl(),
+        eliminarBorrador: sl(),
       ));
   sl.registerFactory(() => EvaluacionMantenimientoCubit(
         obtenerActividades: sl(),
@@ -261,6 +271,9 @@ sl.registerLazySingleton(() => EscucharEstadoExcelUseCase(sl()));
         subirArchivo: sl(),
         guardarEvaluacion: sl(),
         obtenerPlanPreventivo: sl(),
+        guardarBorrador: sl(),
+        obtenerBorrador: sl(),
+        eliminarBorrador: sl(),
       ));
   sl.registerFactory(() => CreacionCodigosMantenimientoCubit(registrar: sl()));
   sl.registerFactory(() => TicketBloc(
