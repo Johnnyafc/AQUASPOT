@@ -86,6 +86,11 @@ arranque con la misma memoria, sin tener que repetir todo desde cero.
     código). **Bomba de transferencia**: mismos campos que la cosechadora
     (serie del catálogo, horómetro + foto) y su Plan Maestro; Plan Preventivo
     en horas; sus series van en el campo `bombaTransferencia` del catálogo.
+    **Reparto de OT por supervisor** (`VisibilidadSegmentoService`, y la
+    misma regla en `segmentosDelTicket` de `functions/src/index.ts`): OT de
+    contador → Contador; de cosechadora → Cosechadora **y** Caracol; el resto
+    (caracol, bomba, vehículo, aire, herramientas) → Caracol. Los
+    requerimientos siguen por su equipo.
 13. **"Usa flujo con generación de reportes automáticos"** (campo
     `usaFlujoReportesAutomaticos`, `FlujoReportesAutomaticosService`): se
     marca al guardar la Evaluación Técnica de todo mantenimiento interno y de

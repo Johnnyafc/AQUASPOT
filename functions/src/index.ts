@@ -31,8 +31,7 @@ export const notificarNuevoTicket = onDocumentCreated(
     const ticket = snap.data();
     
     // ⚙️ EXTRACCIÓN Y NORMALIZACIÓN: El "equipo" define el "segmento"
-    const equipo = ticket.equipo || "indefinido";
-    const segmentoDestino = equipo.toLowerCase().trim();
+    const segmentoDestino = segmentosDelTicket(ticket);
 
     await dispararAlarmaFiltroSegmento(
       ["supervisor"], // ⚙️ CALIBRADO A MINÚSCULAS EXACTAS
@@ -64,7 +63,7 @@ export const enrutadorNotificacionesPush = onDocumentUpdated(
     
     // ⚙️ EXTRACCIÓN Y NORMALIZACIÓN: El "equipo" define el "segmento"
     const equipo = ticketAhora.equipo || "indefinido";
-    const segmentoDestino = equipo.toLowerCase().trim(); 
+    const segmentoDestino = segmentosDelTicket(ticketAhora);
 
     // ⚙️ MATRIZ DE CONMUTACIÓN LÓGICA (Routing Avanzado)
     switch (estadoNuevo) {
@@ -331,7 +330,7 @@ export const notificarRepuestosDisponiblesBodega = onDocumentUpdated(
     if (nuevos.length === 0) return; // Guardado sin validaciones nuevas: sin aviso.
 
     const ticketId = event.params.ticketId;
-    const segmentoDestino = (ahora.equipo || "indefinido").toLowerCase().trim();
+    const segmentoDestino = segmentosDelTicket(ahora);
     const codigos = nuevos.map((i) => i.codigo).filter((c) => !!c).join(", ");
 
     await dispararAlarmaFiltroSegmento(
@@ -367,7 +366,7 @@ export const notificarPickingListoParaRetiro = onDocumentUpdated(
     if (nuevos.length === 0) return; // Sin pickings nuevos: sin aviso.
 
     const ticketId = event.params.ticketId;
-    const segmentoDestino = (ahora.equipo || "indefinido").toLowerCase().trim();
+    const segmentoDestino = segmentosDelTicket(ahora);
 
     for (const picking of nuevos) {
       const items: any[] = Array.isArray(picking?.items) ? picking.items : [];
@@ -396,9 +395,27 @@ function pendientesCodigoMantenimiento(ticket: any): number {
   return lista.filter((r: any) => r && !(typeof r.codigoCreado === "string" && r.codigoCreado.trim() !== "")).length;
 }
 
+// ============================================================================
+// 👥 SEGMENTOS QUE RECIBEN EL AVISO DE UN TICKET
+// Misma regla que lib/features/tickets/domain/services/
+// visibilidad_segmento_service.dart (si cambia allá, cambia aquí):
+// - Requerimientos: el segmento de su equipo.
+// - OT (mantenimiento interno): contador → contador; cosechadora →
+//   cosechadora y caracol; el resto (caracol, bomba de transferencia,
+//   vehículo, aire acondicionado, herramientas) → caracol.
+// ============================================================================
+function segmentosDelTicket(ticket: any): string[] {
+  const equipo = String(ticket?.equipo || "indefinido").toLowerCase().trim();
+  if (ticket?.tipoRequerimiento !== "mantenimientoInterno") return [equipo];
+  const tipo = ticket?.mantenimientoInterno?.tipoActivo;
+  if (tipo === "contador") return ["contador"];
+  if (tipo === "cosechadora") return ["cosechadora", "caracol"];
+  return ["caracol"];
+}
+
 async function dispararAlarmaFiltroSegmento(
   rolesDestino: string[], 
-  segmentoTicket: string, 
+  segmentosTicket: string[], 
   titulo: string, 
   cuerpo: string
 ) {
@@ -430,7 +447,7 @@ async function dispararAlarmaFiltroSegmento(
         rolUsuario === "admin" || 
         segmentoUsuario === "general" || 
         segmentoUsuario === "ninguno" || 
-        segmentoUsuario === segmentoTicket
+        segmentosTicket.includes(segmentoUsuario)
       );
 
       if (tieneAccesoAlSegmento && usuario.fcmTokens && Array.isArray(usuario.fcmTokens)) {
@@ -474,7 +491,7 @@ async function dispararAlarmaFiltroSegmento(
         });
       }
     } else {
-      logger.warn(`⚠️ No se encontraron tokens activos para Rol: ${rolesConAdmin} | Seg: ${segmentoTicket}`);
+      logger.warn(`⚠️ No se encontraron tokens activos para Rol: ${rolesConAdmin} | Seg: ${segmentosTicket.join(", ")}`);
     }
   } catch (error) {
     logger.error("💥 Falla crítica en la subrutina Multicast FCM:", error);

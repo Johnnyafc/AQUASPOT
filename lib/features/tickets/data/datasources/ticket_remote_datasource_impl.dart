@@ -15,6 +15,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:typed_data'; // <-- Ruta de tu nuevo Enum       // <-- Ruta de tu Enum de máquinas
 import '../datasources/ticket_remote_datasource.dart';
 import '../../domain/services/codigo_requerimiento_service.dart';
+import '../../domain/services/visibilidad_segmento_service.dart';
 
 class TicketRemoteDataSourceImpl implements TicketRemoteDataSource {
   final FirebaseFirestore firestore;
@@ -861,24 +862,9 @@ Stream<String?> escucharEstadoExcel(String ticketId) {
       if (segmentoUsuario != null && segmentoUsuario != SegmentoOperativo.general && segmentoUsuario != SegmentoOperativo.ninguno ) {
         print('Entramos al if si tenemos algo en segmento');
         print(segmentoUsuario);
-        List<String> maquinasPermitidas = [];
-
-        switch (segmentoUsuario) {
-          case SegmentoOperativo.caracol:
-            maquinasPermitidas = [TipoEquipo.Caracol.name];
-            break;
-          case SegmentoOperativo.cosechadora:
-            // Ruteo múltiple: El supervisor de cosechadoras ve toda la familia
-            maquinasPermitidas = [
-              TipoEquipo.Cosechadora.name,
-            ];
-            break;
-          case SegmentoOperativo.contador:
-            maquinasPermitidas = [TipoEquipo.Contador.name];
-            break;
-          default:
-            maquinasPermitidas = [];
-        }
+        // Equipos del segmento (VisibilidadSegmentoService).
+        final List<String> maquinasPermitidas =
+            VisibilidadSegmentoService.equiposDe(segmentoUsuario).map((e) => e.name).toList();
 
 
         if (maquinasPermitidas.isNotEmpty) {
@@ -897,15 +883,29 @@ final snapshot = await query
     .orderBy(FieldPath.documentId, descending: true) 
     .get();
 
+// OT de otras máquinas que también le llegan a este segmento (Caracol:
+// cosechadora, bomba, vehículo…): se traen los mantenimientos internos y la
+// regla de VisibilidadSegmentoService decide cuáles ve.
+final docs = [...snapshot.docs];
+if (VisibilidadSegmentoService.consultaMantenimientos(segmentoUsuario)) {
+  final mantenimientos = await firestore
+      .collection('tickets')
+      .where('tipoRequerimiento', isEqualTo: TipoRequerimiento.mantenimientoInterno.name)
+      .get();
+  final ya = {for (final d in docs) d.id};
+  docs.addAll(mantenimientos.docs.where((d) => !ya.contains(d.id)));
+  docs.sort((a, b) => b.id.compareTo(a.id));
+}
+
 // --- [DEBUG] PUNTO DE INSPECCIÓN ---
-print("🔍 [DEBUG] Consulta ejecutada. Total de documentos recibidos: ${snapshot.docs.length}");
+print("🔍 [DEBUG] Consulta ejecutada. Total de documentos recibidos: ${docs.length}");
 
 // Si este número es 0, el problema es el filtro de la query (el .where)
-if (snapshot.docs.isEmpty) {
+if (docs.isEmpty) {
   print("⚠️ [DEBUG] La consulta no trajo nada. Revisa tus filtros o el nombre de la colección.");
 }
       // 4. Mapeo seguro
-return snapshot.docs.map((doc) {
+return docs.map((doc) {
   final data = doc.data() as Map<String, dynamic>;
   data['id'] = doc.id;
   
@@ -919,7 +919,7 @@ return snapshot.docs.map((doc) {
     print("Stacktrace: $stackTrace");
     rethrow; // Esto detiene la ejecución para que veas el error en la consola
   }
-}).toList();
+}).where((t) => VisibilidadSegmentoService.ve(segmentoUsuario, t)).toList();
       
     } catch (e) {
       print("🚨 ERROR CRUDO DE FIREBASE (LECTURA HISTORIAL): $e");
