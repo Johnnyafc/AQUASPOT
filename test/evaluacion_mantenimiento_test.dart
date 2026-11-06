@@ -317,6 +317,18 @@ void main() {
       );
       expect(String.fromCharCodes(pdf.sublist(0, 4)), '%PDF');
     });
+
+    test('El PDF se genera aunque una actividad tenga muchas fotos (se reparten en varias páginas)', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final foto = ArchivoAdjunto(bytes: File('assets/images/logo.png').readAsBytesSync(), nombre: 'foto.png');
+      final conFotos = lista().copyWith(observacion: 'Muchas fotos', fotos: List.filled(12, foto));
+      final pdf = await GeneradorPdfMantenimiento.generar(
+        ticket: ticketDe(TipoActivoMantenimiento.caracol),
+        actividades: [conFotos],
+        nombreTecnico: 'Tyrone',
+      ).timeout(const Duration(seconds: 30));
+      expect(String.fromCharCodes(pdf.sublist(0, 4)), '%PDF');
+    });
   });
 
   group('Use case', () {

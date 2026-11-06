@@ -1,9 +1,10 @@
 // lib/features/tickets/presentation/services/generador_pdf_mantenimiento.dart
 //
 // 📄 Orden de trabajo (informe técnico) de un MANTENIMIENTO INTERNO (mismo estilo que el de
-// reparación, sin datos de cliente y sin la NOTA de daños ocultos). Solo da
-// formato: los datos, hallazgos, "Incluye" y firma salen de
-// EvaluacionMantenimientoService.
+// reparación, sin datos de cliente y sin la NOTA de daños ocultos): datos
+// del mantenimiento, ACTIVIDADES A REALIZAR (cada una con su "Incluye", su
+// observación y sus fotos) y firma. Solo da formato: los datos, el "Incluye"
+// y la firma salen de EvaluacionMantenimientoService.
 
 import 'dart:typed_data';
 import 'package:flutter/services.dart' show rootBundle;
@@ -72,60 +73,10 @@ class GeneradorPdfMantenimiento {
           ),
           pw.SizedBox(height: 16),
 
-          // Hallazgos con fotos
-          _titulo('HALLAZGOS'),
-          for (var i = 0; i < actividades.length; i++)
-            pw.Padding(
-              padding: const pw.EdgeInsets.only(bottom: 16),
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text('${i + 1}. ${_S.hallazgo(actividades[i])}', style: const pw.TextStyle(fontSize: 11, lineSpacing: 2)),
-                  if (actividades[i].fotos.isNotEmpty) ...[
-                    pw.SizedBox(height: 8),
-                    pw.Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: [
-                        for (final foto in actividades[i].fotos)
-                          pw.Container(
-                            width: 220,
-                            height: 150,
-                            decoration: pw.BoxDecoration(
-                              border: pw.Border.all(color: PdfColors.grey300),
-                              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-                            ),
-                            child: pw.Center(child: pw.Image(pw.MemoryImage(foto.bytes), fit: pw.BoxFit.contain)),
-                          ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          pw.SizedBox(height: 8),
-          pw.Divider(thickness: 1, color: PdfColors.grey400),
-          pw.SizedBox(height: 8),
-
-          // Actividades a realizar con todos sus repuestos
+          // Actividades a realizar: cada una con sus repuestos, la observación
+          // del técnico y las fotos que subió en esa actividad.
           _titulo('ACTIVIDADES A REALIZAR'),
-          for (var i = 0; i < actividades.length; i++)
-            pw.Padding(
-              padding: const pw.EdgeInsets.only(bottom: 10),
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text('${i + 1}  ${actividades[i].nombre.toUpperCase()}',
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
-                  if (_S.textoIncluye(actividades[i]).isNotEmpty)
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.only(top: 2, left: 16),
-                      child: pw.Text(_S.textoIncluye(actividades[i]),
-                          style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey800)),
-                    ),
-                ],
-              ),
-            ),
+          for (var i = 0; i < actividades.length; i++) ..._actividad(i + 1, actividades[i]),
           pw.SizedBox(height: 30),
 
           // Firma (sin la NOTA de daños ocultos: no hay cliente ni presupuesto)
@@ -137,6 +88,60 @@ class GeneradorPdfMantenimiento {
       ),
     );
     return pdf.save();
+  }
+
+  /// Una actividad como varios bloques (nombre e "Incluye", observación y
+  /// una fila de 2 fotos por bloque): así el PDF puede pasar a la página
+  /// siguiente entre filas, aunque la actividad tenga muchas fotos.
+  static List<pw.Widget> _actividad(int numero, ActividadMantenimiento a) {
+    final incluye = _S.textoIncluye(a);
+    final observacion = a.observacion.trim();
+    return [
+      pw.Padding(
+        padding: const pw.EdgeInsets.only(top: 4),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text('$numero  ${a.nombre.toUpperCase()}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+            if (incluye.isNotEmpty)
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(top: 2, left: 16),
+                child: pw.Text(incluye, style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey800)),
+              ),
+            if (observacion.isNotEmpty)
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(top: 3, left: 16),
+                child: pw.RichText(
+                  text: pw.TextSpan(children: [
+                    pw.TextSpan(text: 'Observación: ', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                    pw.TextSpan(text: observacion, style: const pw.TextStyle(fontSize: 10)),
+                  ]),
+                ),
+              ),
+          ],
+        ),
+      ),
+      for (var j = 0; j < a.fotos.length; j += 2)
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(top: 8, left: 16),
+          child: pw.Row(children: [
+            for (final foto in a.fotos.skip(j).take(2))
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(right: 12),
+                child: pw.Container(
+                  width: 220,
+                  height: 150,
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey300),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                  ),
+                  child: pw.Center(child: pw.Image(pw.MemoryImage(foto.bytes), fit: pw.BoxFit.contain)),
+                ),
+              ),
+          ]),
+        ),
+      pw.SizedBox(height: 14),
+    ];
   }
 
   static pw.Widget _titulo(String texto) => pw.Padding(
